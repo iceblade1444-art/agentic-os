@@ -40,9 +40,7 @@ done
 echo
 echo "──────────────────────────────────────────────"
 echo " Agentic OS is up on host port ${HOST_PORT}"
-echo " Your login password (AUTH_TOKEN):"
-grep '^AUTH_TOKEN=' .env | cut -d= -f2
-echo
+echo " Login secret remains in the server-side .env (not printed)."
 echo " Next:"
 echo "  • Add OPENAI_API_KEY to .env then: docker compose up -d   (unlocks real missions + chat)"
 echo "  • Put nginx + TLS in front, and set SECURE_COOKIE=true — see DEPLOY.md"
