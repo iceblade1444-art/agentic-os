@@ -24,9 +24,13 @@ docker compose up -d --build
 # 4) health check
 HOST_PORT="$(sed -n 's/^HOST_PORT=//p' .env | tail -n1)"
 HOST_PORT="${HOST_PORT:-8787}"
+BIND_ADDRESS="$(sed -n 's/^BIND_ADDRESS=//p' .env | tail -n1)"
+HEALTH_HOST="${BIND_ADDRESS:-127.0.0.1}"
+# Wildcard listen addresses are not valid health-check destinations.
+[ "$HEALTH_HOST" = "0.0.0.0" ] && HEALTH_HOST="127.0.0.1"
 echo -n "· health: "
 for _ in $(seq 1 15); do
-  if curl -fsS "http://127.0.0.1:${HOST_PORT}/api/health"; then
+  if curl -fsS "http://${HEALTH_HOST}:${HOST_PORT}/api/health"; then
     READY=1
     break
   fi
