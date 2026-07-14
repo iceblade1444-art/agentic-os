@@ -227,6 +227,20 @@ You can also add it to Agentic OS's own MCP page as the **`agentic-os-hub`** ser
 
 ## 🔌 Connect a live LLM (Chat)
 
+### MILA Voice integration
+
+Agentic OS can manage the separate MILA voice backend from **Integrations →
+MILA Voice**. Configure its internal URL (for example
+`http://172.16.10.6:8791`) and server-side `ADMIN_TOKEN`. Once connected, the
+dashboard can check Gemini Live readiness and create a 10-minute, one-time code
+for the mobile app. The same operations are exposed to missions and Hermes as
+`agentic_mila_status` and `agentic_mila_connection_code` tools.
+
+The production mobile endpoint is served under
+`https://agent.milanapremium.uz/mila/`; nginx strips the `/mila/` prefix before
+forwarding to the isolated Mila container. Long-lived Gemini credentials remain
+only in Mila's `.env` and are never returned to Agentic OS or the phone.
+
 1. Open **Settings → Model**.
 2. Pick a provider and fill in **Base URL**, **API Key**, **Model**:
    - **OpenAI**: `https://api.openai.com/v1` · e.g. `gpt-4o-mini`
