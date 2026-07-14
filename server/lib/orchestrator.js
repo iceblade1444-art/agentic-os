@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { db } from "../store.js";
 import * as mgr from "../mcp/manager.js";
 import { slackSend } from "./connectors.js";
+import { milaConnectionCode, milaStatus } from "./mila.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const safeParse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -19,6 +20,7 @@ function aggregateTools() {
   return out;
 }
 function openaiKey() { return config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey || ""; }
+function milaConfig() { return db.integrations.byProvider("mila")?.config || {}; }
 
 async function llmComplete(system, input, model) {
   const key = openaiKey();
@@ -48,6 +50,10 @@ async function cap(name, args) {
     case "agentic_send_slack":
       await slackSend(db.integrations.byProvider("slack")?.config || {}, args.text);
       return { sent: true };
+    case "agentic_mila_status":
+      return milaStatus(milaConfig());
+    case "agentic_mila_connection_code":
+      return milaConnectionCode(milaConfig(), args.label || "MILA user");
     case "agentic_run_llm":
       return { text: await llmComplete(args.instructions, args.input, args.model) };
     default:
@@ -60,6 +66,8 @@ const TOOL_SPECS = [
   { type: "function", function: { name: "agentic_call_tool", description: "Call a tool on a connected Agentic OS MCP server.", parameters: { type: "object", properties: { server: { type: "string", description: "server id or name" }, tool: { type: "string" }, args: { type: "object" } }, required: ["server", "tool"] } } },
   { type: "function", function: { name: "agentic_list_integrations", description: "List integration connections and status.", parameters: { type: "object", properties: {} } } },
   { type: "function", function: { name: "agentic_send_slack", description: "Send a message to Slack (if the integration is connected).", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } } },
+  { type: "function", function: { name: "agentic_mila_status", description: "Check whether the connected MILA voice backend and Gemini Live are ready.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "agentic_mila_connection_code", description: "Create a 10-minute one-time code for connecting the MILA mobile app.", parameters: { type: "object", properties: { label: { type: "string", description: "User name or email" } } } } },
   { type: "function", function: { name: "agentic_run_llm", description: "Run a one-shot sub-LLM completion for a subtask.", parameters: { type: "object", properties: { instructions: { type: "string" }, input: { type: "string" } }, required: ["input"] } } },
   { type: "function", function: { name: "finish", description: "Finish the mission with a summary of what was accomplished.", parameters: { type: "object", properties: { summary: { type: "string" } }, required: ["summary"] } } },
 ];

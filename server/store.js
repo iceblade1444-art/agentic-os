@@ -19,7 +19,7 @@ function seed() {
       { id: "mcp_hub", name: "agentic-os-hub", kind: "agentic", status: "stopped", tools: [], desc: "Agentic OS itself as MCP tools — what an orchestrator like Hermes connects to" },
       { id: "mcp_obsidian", name: "obsidian", kind: "obsidian", status: "stopped", tools: [], desc: "Read / search / write notes in your Obsidian vault" },
     ],
-    integrations: ["openai", "anthropic", "github", "notion", "slack", "postgres"].map((p) => ({
+    integrations: ["openai", "anthropic", "github", "notion", "slack", "postgres", "mila"].map((p) => ({
       id: "int_" + p, provider: p, connected: false, config: {}, testedAt: null, lastResult: null,
     })),
     missions: [],
@@ -36,6 +36,9 @@ function readOrSeed() {
       for (const k of Object.keys(s)) if (loaded[k] === undefined) loaded[k] = s[k];
       if (Array.isArray(loaded.mcpServers)) {
         for (const def of s.mcpServers) if (!loaded.mcpServers.some((x) => x.id === def.id)) loaded.mcpServers.push(def);
+      }
+      if (Array.isArray(loaded.integrations)) {
+        for (const def of s.integrations) if (!loaded.integrations.some((x) => x.id === def.id)) loaded.integrations.push(def);
       }
       return loaded;
     }

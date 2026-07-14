@@ -1,5 +1,6 @@
 // Integration connectors — real credential-based checks against each provider.
 import { config } from "../config.js";
+import { milaStatus } from "./mila.js";
 
 export const PROVIDERS = {
   openai: { name: "OpenAI", desc: "GPT-4o, GPT-4o mini, embeddings", icon: "sparkles", color: "green",
@@ -14,6 +15,8 @@ export const PROVIDERS = {
     fields: [{ key: "webhookUrl", label: "Incoming Webhook URL", secret: true }] },
   postgres: { name: "Postgres", desc: "SQL database connector", icon: "database", color: "blue",
     fields: [{ key: "connectionString", label: "Connection string", secret: true }] },
+  mila: { name: "MILA Voice", desc: "Gemini Live voice agent, mobile sessions & releases", icon: "mic", color: "violet",
+    fields: [{ key: "baseUrl", label: "MILA backend URL" }, { key: "adminToken", label: "Admin Token", secret: true }] },
 };
 
 const ok = (detail) => ({ ok: true, detail });
@@ -69,6 +72,11 @@ export async function testConnection(provider, cfg = {}) {
         if (!cs) return fail("Missing connection string");
         if (!/^postgres(ql)?:\/\//.test(cs)) return fail("Invalid connection string");
         return ok("Stored (add the 'pg' driver for a live connection check)");
+      }
+      case "mila": {
+        const status = await milaStatus(cfg);
+        const voice = status.voiceConfigured ? "voice ready" : "voice key missing";
+        return ok(`MILA reachable · ${voice}`);
       }
       default: return fail("Unknown provider");
     }

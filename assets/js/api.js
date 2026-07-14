@@ -52,6 +52,10 @@ export const api = {
     disconnect: (provider) => j(`/api/integrations/${provider}/disconnect`, { method: "POST" }),
     test: (provider) => j(`/api/integrations/${provider}/test`, { method: "POST" }),
     slackSend: (text) => j("/api/integrations/slack/send", { method: "POST", body: { text } }),
+    milaStatus: () => j("/api/integrations/mila/status"),
+    milaConnectionCode: (label) => j("/api/integrations/mila/connection-code", { method: "POST", body: { label } }),
+    milaSubscription: (body) => j("/api/integrations/mila/subscription", { method: "POST", body }),
+    milaAppUpdate: (body) => j("/api/integrations/mila/app-update", { method: "POST", body }),
   },
   missions: {
     list: () => j("/api/missions"),

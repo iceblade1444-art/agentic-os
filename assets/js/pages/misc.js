@@ -376,7 +376,7 @@ function intCardReal(i) {
   return `<div class="card tile" data-intcard="${i.provider}"><div class="row between"><div class="row gap-3"><div class="aico" style="background:${store.colors[i.color] || store.colors.violet}">${icon(i.icon)}</div><div class="stack"><span class="fw-700">${esc(i.name)}</span><span class="hint">${esc(i.desc)}</span></div></div></div>
     ${i.lastResult ? `<div class="hint mt-2">${i.lastResult.ok ? "✓" : "✕"} ${esc(i.lastResult.detail || "")}</div>` : ""}
     <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>Connected</span>` : `<span class="badge neutral">Not connected</span>`}
-      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">Send test</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${i.connected ? "Disconnect" : "Connect"}</button></div>
+      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">Send test</button>` : ""}${i.connected && i.provider === "mila" ? `<button class="btn sm btn-ghost" data-intstatus="mila">Status</button><button class="btn sm btn-primary" data-intcode="mila">New code</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${i.connected ? "Disconnect" : "Connect"}</button></div>
     </div></div>`;
 }
 async function intMountReal(root) {
@@ -389,6 +389,30 @@ async function intMountReal(root) {
     card.querySelector("[data-intbtn]").onclick = () => (i.connected ? intDisconnect(i) : intConnect(i));
     const send = card.querySelector("[data-intsend]");
     if (send) send.onclick = async () => { try { await api.integrations.slackSend("Test message from Agentic OS ✅"); toast("success", "Sent to Slack"); } catch (e) { toast("error", "Send failed", e.message); } };
+    const status = card.querySelector("[data-intstatus]");
+    if (status) status.onclick = async () => {
+      try {
+        const s = await api.integrations.milaStatus();
+        toast(s.voiceConfigured ? "success" : "info", "MILA Voice", s.voiceConfigured ? `Ready · ${s.liveModel}` : "Backend online · Gemini key missing");
+      } catch (e) { toast("error", "MILA status failed", e.message); }
+    };
+    const code = card.querySelector("[data-intcode]");
+    if (code) code.onclick = () => openMilaCode();
+  });
+}
+function openMilaCode() {
+  openModal({
+    title: "Connect MILA mobile app", width: 460,
+    body: `<div class="field"><label class="label">Account label</label><input class="input" id="milaLabel" placeholder="Name or email"/></div><div id="milaCodeResult" class="mt-3"></div>`,
+    footer: `<button class="btn btn-secondary" data-close>Close</button><button class="btn btn-primary" id="milaCreateCode">Create one-time code</button>`,
+    onMount: (m) => (m.querySelector("#milaCreateCode").onclick = async () => {
+      const btn = m.querySelector("#milaCreateCode"); btn.classList.add("loading");
+      try {
+        const result = await api.integrations.milaConnectionCode(m.querySelector("#milaLabel").value.trim() || "MILA user");
+        m.querySelector("#milaCodeResult").innerHTML = `<div class="alert success"><span class="a-ico">${icon("key")}</span><div class="a-body"><div class="a-title mono" style="font-size:22px;letter-spacing:3px">${esc(result.code)}</div><div class="a-desc">Enter in MILA → Settings → AI Providers. Expires in 10 minutes.</div></div></div>`;
+      } catch (e) { m.querySelector("#milaCodeResult").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Could not create code</div><div class="a-desc">${esc(e.message)}</div></div></div>`; }
+      btn.classList.remove("loading");
+    }),
   });
 }
 function intConnect(i) {

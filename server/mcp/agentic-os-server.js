@@ -57,6 +57,14 @@ server.registerTool("agentic_send_slack",
   { description: "Send a message to Slack via the connected Agentic OS integration.", inputSchema: { text: z.string() } },
   async ({ text: t }) => { await api("/api/integrations/slack/send", { method: "POST", body: { text: t } }); return text("sent"); });
 
+server.registerTool("agentic_mila_status",
+  { description: "Check the connected MILA voice backend and Gemini Live readiness.", inputSchema: {} },
+  async () => text(await api("/api/integrations/mila/status")));
+
+server.registerTool("agentic_mila_connection_code",
+  { description: "Create a 10-minute one-time code for connecting the MILA mobile app.", inputSchema: { label: z.string().optional() } },
+  async ({ label }) => text(await api("/api/integrations/mila/connection-code", { method: "POST", body: { label: label || "MILA user" } })));
+
 server.registerTool("agentic_run_llm",
   { description: "Run a one-shot LLM completion (sub-agent) through the Agentic OS model proxy.", inputSchema: { instructions: z.string().optional(), input: z.string(), model: z.string().optional() } },
   async ({ instructions, input, model }) => { const r = await api("/api/llm/complete", { method: "POST", body: { system: instructions, prompt: input, model } }); return text(r.text || r); });

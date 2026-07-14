@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
+import { milaConnectionCode, milaSetAppUpdate, milaSetSubscription, milaStatus } from "../lib/mila.js";
 
 const r = Router();
 
@@ -49,5 +50,16 @@ r.post("/slack/send", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+const milaConfig = () => db.integrations.byProvider("mila")?.config || {};
+const milaAction = (handler) => async (req, res) => {
+  try { res.json(await handler(milaConfig(), req.body || {})); }
+  catch (e) { res.status(502).json({ error: e.message }); }
+};
+
+r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
+r.post("/mila/connection-code", milaAction((cfg, body) => milaConnectionCode(cfg, body.label)));
+r.post("/mila/subscription", milaAction((cfg, body) => milaSetSubscription(cfg, body)));
+r.post("/mila/app-update", milaAction((cfg, body) => milaSetAppUpdate(cfg, body)));
 
 export default r;
