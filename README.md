@@ -3,13 +3,14 @@
 ## Production architecture
 
 The repository contains the public Agentic OS visual and the private Python
-runtime used by Mila:
+runtime used by Hermes and Mila:
 
 ```text
 index.html + server/       public visual and Node API on port 8787
 agentos-runtime/           Python orchestration runtime on port 8765
 vault/                     shared Obsidian Markdown vault
-Hermes Agent               installed for the Linux deploy user
+Hermes Agent               primary orchestrator, installed for the Linux deploy user
+Mila + Gemini Live         voice and conversation assistant
 ```
 
 Start or update both services with:
@@ -18,6 +19,7 @@ Start or update both services with:
 docker compose up -d --build
 docker compose ps
 curl -fsS http://127.0.0.1:8765/api/mila/status
+curl -fsS http://127.0.0.1:8765/api/orchestrator/status
 ```
 
 The root domain must continue to point to the Node service on port `8787`.
@@ -46,9 +48,9 @@ It runs in **two modes**:
 - **16 pages / routes** — Home dashboard, **Missions**, Agents (full CRUD), Chat, Workflow Builder,
   Tools, Knowledge, Memory, MCP Servers, Integrations, Evaluations, Observability, Guardrails,
   Secrets, Settings, plus a Component Library showcase.
-- **Missions & orchestration** — submit a natural-language mission and watch an OpenAI-driven
-  orchestrator (or external **Hermes**) execute it with real MCP tools, streaming every step to a
-  live feed.
+- **Missions & orchestration** — submit a natural-language mission and watch **Hermes** plan it
+  through the private AgentOS runtime. AgentOS validates the plan, persists task cards, executes
+  the safe queue, and streams progress or approval waits to the existing live feed.
 - **Real interactivity** — create/edit/delete agents, drag-and-connect workflow nodes,
   filter/search tables, modals, drawers, dropdowns, toasts, tabs.
 - **⌘K command palette** — fuzzy search across pages, agents and quick actions with full
@@ -194,15 +196,10 @@ location / {
 
 **Missions** are natural-language goals that an orchestrator turns into real actions using
 Agentic OS's tools. Create one on the **Missions** page (or `POST /api/missions`); a live event
-feed shows every step. Two orchestrators are supported:
-
-- **Built-in (OpenAI brain)** — an in-app tool-calling loop (`server/lib/orchestrator.js`). It
-  discovers the tools of every connected MCP server and calls them to accomplish the mission,
-  streaming steps to the feed. Set `OPENAI_API_KEY` for full autonomy; without a key it runs a
-  scripted demo that still executes real tools.
-- **Hermes (external agent)** — [Hermes](https://hermes-agent.nousresearch.com/) by Nous Research,
-  configured with an OpenAI brain, connects to Agentic OS **over MCP**, pulls missions, executes
-  them, and reports progress back into the dashboard feed.
+feed shows every step. **Hermes is the primary orchestrator.** `server/lib/orchestrator.js`
+bridges the public Node mission API to `AGENTOS_RUNTIME_URL`. The Python runtime calls Hermes in
+bounded JSON-only planning mode, validates the plan, then executes only through AgentOS queues and
+approval gates. Mila/Gemini Live remains the voice assistant.
 
 ### The bridge: Agentic OS as an MCP server
 
@@ -220,18 +217,21 @@ feed shows every step. Two orchestrators are supported:
 
 You can also add it to Agentic OS's own MCP page as the **`agentic-os-hub`** server to inspect it.
 
-### Wire up Hermes (OpenAI brain → Agentic OS)
+### Hermes runtime configuration
 
 1. **Install Hermes** — see its [installation docs](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
-2. **Use OpenAI as the brain** — `~/.hermes/config.yaml`:
+2. **Configure the planning model** — the deployed profile currently uses:
    ```yaml
    model:
-     provider: openai
-     default: gpt-4o
+     provider: openai-codex
+     default: gpt-5.5
    ```
-   Put the key in `~/.hermes/.env`: `OPENAI_API_KEY=sk-...` (or run `hermes model`).
-3. **Register Agentic OS as an MCP server** — in `~/.hermes/config.yaml` (make sure Agentic OS is
-   running with `npm start` first):
+   Complete provider login with Hermes' setup/auth flow. Do not put credentials in this repository.
+3. **Keep the runtime private** — Docker sets
+   `AGENTOS_RUNTIME_URL=http://agentos-runtime:8765`. The public Node container calls the runtime
+   over the internal Compose network; host port `8765` remains bound to localhost.
+4. **Optional MCP access** — register Agentic OS in `~/.hermes/config.yaml` only when Hermes needs
+   the wider MCP tool surface:
    ```yaml
    mcp_servers:
      agentic-os:
@@ -241,9 +241,8 @@ You can also add it to Agentic OS's own MCP page as the **`agentic-os-hub`** ser
          AGENTIC_OS_URL: "http://localhost:8787"
    ```
    Then reload/test: `hermes mcp test agentic-os` (or `/reload-mcp` in a session).
-4. **Give Hermes a mission.** Either tell Hermes directly, or create a mission in the dashboard
-   (Orchestrator → *Hermes*) and have Hermes `list_missions`, act via `agentic_call_tool`, and
-   `mission_report` — the **Missions feed updates live**.
+5. **Give Hermes a mission.** Create it in the dashboard. Node forwards it to
+   `/api/orchestrator/create-and-run` on the private runtime and the **Missions feed updates live**.
 
 > The `agentic-os` MCP server is a thin stdio bridge over the REST API, so Hermes can run on the
 > same box or anywhere that can reach `AGENTIC_OS_URL`.
@@ -315,13 +314,13 @@ server/                    Node/Express backend (optional — enables the real f
   routes/llm.js            OpenAI-compatible streaming proxy + /complete (OpenAI / Anthropic)
   routes/mcp.js            MCP CRUD + connect / disconnect / call
   routes/integrations.js   Connection CRUD + real credential tests
-  routes/missions.js       Missions CRUD + event feed + run (built-in orchestrator, SSE)
+  routes/missions.js       Missions CRUD + Hermes runtime event feed (SSE)
   mcp/manager.js           Spawns MCP servers over stdio (SDK client), lists/calls tools
   mcp/sample-server.js     Bundled demo MCP server (echo / add / time / facts)
   mcp/agentic-os-server.js MCP bridge: exposes Agentic OS as tools for Hermes/orchestrators
   mcp/obsidian-server.js   MCP server: read/search/write notes in an Obsidian vault
   lib/connectors.js        Real provider checks (OpenAI / Anthropic / GitHub / Notion / Slack)
-  lib/orchestrator.js      Built-in OpenAI tool-calling mission loop (Hermes-style)
+  lib/orchestrator.js      Bridge from public Missions to Hermes AgentOS runtime
 Dockerfile · .env.example · package.json
 ```
 

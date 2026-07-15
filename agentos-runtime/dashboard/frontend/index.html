@@ -650,7 +650,7 @@ body{min-height:100dvh}
             </div>
           </div>
           <div class="opus-agent-dock">
-            <div class="opus-agent-card" data-opus-agent="orchestrator"><strong>Orchestrator</strong><br><span class="sub">routes work</span></div>
+            <div class="opus-agent-card" data-opus-agent="orchestrator"><strong>Hermes</strong><br><span class="sub">primary orchestrator</span></div>
             <div class="opus-agent-card" data-opus-agent="builder"><strong>Builder</strong><br><span class="sub">plans apps</span></div>
             <div class="opus-agent-card" data-opus-agent="qa"><strong>QA Judge</strong><br><span class="sub">keeps tests green</span></div>
             <div class="opus-agent-card" data-opus-agent="guard"><strong>Approval Guard</strong><br><span class="sub">blocks risky actions</span></div>
@@ -665,7 +665,7 @@ body{min-height:100dvh}
         <aside class="opus-right-stack">
           <div class="opus-side-card"><div class="opus-kicker">Live system</div><h2 data-opus-metric="projects">— projects</h2><p class="sub">workspace, tasks, reports and memory are live.</p></div>
           <div class="opus-side-card"><div class="opus-kicker">Safety</div><h2 data-opus-metric="approvals">— approvals</h2><p class="sub">actions stay behind approval gates; no secrets surface in UI.</p></div>
-          <div class="opus-side-card"><div class="opus-kicker">Preview stage</div><p class="sub" id="opusStatusLine">Mila is ready for voice-first command and build loops.</p></div>
+          <div class="opus-side-card"><div class="opus-kicker">Preview stage</div><p class="sub" id="opusStatusLine">Hermes orchestrates. Mila is ready for voice-first control.</p></div>
         </aside>
       </div>
     </section>
@@ -699,7 +699,7 @@ body{min-height:100dvh}
     <section class="milaJarvisWorkspace" id="milaJarvisWorkspace" aria-label="Mila Jarvis focused command center">
       <div class="jarvis-focus-strip">
         <div class="jarvis-live-signal"><strong>Voice-first</strong><br><span class="sub">Gemini Live + browser voice + command bridge</span></div>
-        <div class="jarvis-live-signal"><strong>Agents online</strong><br><span class="sub">dock, queue, QA, approvals</span></div>
+        <div class="jarvis-live-signal"><strong>Hermes online</strong><br><span class="sub">orchestration, queue, QA, approvals</span></div>
         <div class="jarvis-live-signal"><strong>Memory galaxy</strong><br><span class="sub">projects, reports, events, transcripts</span></div>
         <div class="jarvis-live-signal"><strong>Model hub</strong><br><span class="sub">providers ready without secret surfaces</span></div>
       </div>
@@ -745,12 +745,12 @@ body{min-height:100dvh}
             <button onclick="loadMilaAgentDock()">Refresh agent dock</button>
             <div class="item" id="milaAgentDockSummary">Loading live worker state...</div>
             <div class="agent-card-grid" id="milaAgentDockLive">
-              <div class="agent-pill" data-mila-agent-role="orchestrator"><strong>Orchestrator</strong><br><span class="sub">Plans and routes work.</span></div>
+              <div class="agent-pill" data-mila-agent-role="hermes"><strong>Hermes</strong><br><span class="sub">Primary orchestrator. Plans and routes work.</span></div>
               <div class="agent-pill" data-mila-agent-role="coding-agent"><strong>Coding Agent</strong><br><span class="sub">Builds features through TDD.</span></div>
               <div class="agent-pill" data-mila-agent-role="qa-agent"><strong>QA Judge</strong><br><span class="sub">Checks outputs and keeps iterating.</span></div>
               <div class="agent-pill" data-mila-agent-role="research-agent"><strong>Research Agent</strong><br><span class="sub">Reads docs, video transcripts, and sources.</span></div>
               <div class="agent-pill" data-mila-agent-role="approval-guard"><strong>Approval Guard</strong><br><span class="sub">Protects risky actions.</span></div>
-              <div class="agent-pill" data-mila-agent-role="voice-agent"><strong>Mila Voice Agent</strong><br><span class="sub">Realtime voice control.</span></div>
+              <div class="agent-pill" data-mila-agent-role="mila"><strong>Mila Voice Assistant</strong><br><span class="sub">Gemini Live realtime voice interface.</span></div>
             </div>
           </article>
           <article class="agentic-tab-panel" data-agentic-panel="memory" id="milaMemoryGalaxy">
@@ -2827,7 +2827,8 @@ body{min-height:100dvh}
 /* ===================== AGENTIC OS — wiring (live) ===================== */
 (function(){
   const AGENTS=[
-    {id:'mila',name:'Mila',cls:'gemini',ico:'M',rom:'I.',desc:'Single AgentOS orchestrator. Gemini Live voice with GPT/OpenAI reasoning when OPENAI_API_KEY is configured.',tabs:['chat','workspace']},
+    {id:'hermes',name:'Hermes',cls:'fusion',ico:'H',rom:'I.',desc:'Primary AgentOS orchestrator. Plans and routes work through the approval-gated queue.',tabs:['chat','workspace']},
+    {id:'mila',name:'Mila',cls:'gemini',ico:'M',rom:'II.',desc:'Gemini Live voice assistant. Captures goals and speaks Hermes and AgentOS results.',tabs:['chat','workspace']},
   ];
   const ROM={mission:'I.',paperclip:'II.',mastermind:'IX.',builder:'XIV.',memory:'XV.',approvals:'III.',kanban:'V.',models:'VI.',pipeline:'X.',seo:'X.',video:'I.',music:'I.',game:'XI.',thumbnails:'XII.',notebook:'XIII.',advanced:'IX.'};
   const SEC={mission:'MISSION CONTROL',paperclip:'WORKSPACE · PAPERCLIP',mastermind:'SELF · MASTERMIND',builder:'SELF · APP BUILDER',memory:'SELF · MEMORY',approvals:'SAFETY · APPROVALS',kanban:'SELF · KANBAN',models:'MODEL · HUB',pipeline:'SELF · PIPELINE',seo:'SELF · SEO PIPELINE',video:'MISSION CONTROL',music:'MISSION CONTROL',game:'WORKFLOW · GAME AGENT',thumbnails:'SELF · THUMBNAILS',notebook:'SELF · NOTEBOOK',advanced:'RUNTIME · CONTROL'};
@@ -2951,9 +2952,9 @@ body{min-height:100dvh}
     const c=dock.counts||{};
     const reg=dock.registry_counts||{};
     const stats=[
-      {lab:'MILA',val:'Online',foot:'single orchestrator',gl:'rgba(255,157,107,.16)'},
+      {lab:'HERMES',val:'Primary',foot:'orchestrator',gl:'rgba(255,157,107,.16)'},
       {lab:'VOICE',val:'Gemini',foot:'speech-to-speech layer',gl:'rgba(217,79,176,.16)'},
-      {lab:'GPT',val:'OpenAI',foot:'ready when OPENAI_API_KEY exists',gl:'rgba(79,107,255,.16)'},
+      {lab:'MILA',val:'Online',foot:'Gemini voice assistant',gl:'rgba(79,107,255,.16)'},
       {lab:'RUNS',val:c.queue_runs??'0',foot:'agent queue executions',led:'warn',gl:'rgba(240,180,84,.16)'},
       {lab:'QUEUE',val:c.queue_items??'0',foot:'combined p50',gl:'rgba(73,197,232,.16)'},
       {lab:'APPROVALS',val:st.pending_approvals??'0',foot:`${st.approvals||0} total`,led:st.pending_approvals?'warn':'',gl:'rgba(70,211,154,.16)'},
@@ -3529,7 +3530,7 @@ body{min-height:100dvh}
       <div style="height:360px;margin:0 -18px -18px"><iframe sandbox="allow-scripts allow-same-origin" style="width:100%;height:100%;border:0;background:#fff"></iframe></div>`;
     $('#bRight').querySelector('iframe').srcdoc=html;
     $('#bOpenWs').onclick=()=>openWS(created.slug);
-        toast('✓ Оркестр создан: '+created.slug+' · 14 cards · прогнан до human gate','ok');
+        toast('Оркестр Hermes создан: '+created.slug+' · '+(created.tasks||0)+' cards','ok');
   }
 
   /* ---------------- MEMORY ---------------- */
@@ -3566,7 +3567,8 @@ body{min-height:100dvh}
   }
   async function refreshOrchestratorAndApprovals(){await Promise.all([loadOrchestratorOverview(),loadApprovals()]);}
   async function loadOrchestratorOverview(){const o=await api('/api/orchestrator');const lanes=o.lanes||{};const q=(o.queue&&o.queue.items)||[];const gates=o.pending_human_gates||[];
-    $('#orchHost').innerHTML=`<h4>⌘ Agentic Orchestrator</h4><div class="ph-sub">Video workflow: Kanban is the durable shared state · agents claim cards · human gate unlocks fulfillment.</div>
+    const hs=o.orchestrator||{};
+    $('#orchHost').innerHTML=`<h4>⌘ Hermes · Primary Orchestrator</h4><div class="ph-sub">Hermes ${hs.ready?'is ready':'needs attention'} · ${esc(hs.model||'configured model')} · AgentOS validates plans, persists Kanban state, and gates risky actions.</div>
       <div class="stat-row" style="margin-top:12px">${[['QUEUE',q.length,'ready cards'],['GATES',gates.length,'pending human approvals'],['PROJECTS',(o.projects||[]).length,'orchestrated goals']].map(([a,b,c])=>`<div class="stat"><div class="stat-top"><span>${a}</span><span class="led"></span></div><div class="stat-val">${b}</div><div class="stat-foot">${c}</div></div>`).join('')}</div>
       <div class="chips-wrap" style="margin-top:12px">${Object.entries(lanes).map(([lane,v])=>`<span class="chip">${esc(lane)} · ${v.done||0}/${v.total||0}</span>`).join('')||'<span class="chip">no lanes yet</span>'}</div>
       <div style="margin-top:14px">${q.slice(0,5).map(item=>`<div class="item"><b>${esc(item.owner||'agent')}</b> <span class="status pending">${esc(item.lane||'lane')}</span><br><span class="sub">${esc(item.project||'')}/${esc(item.task_id||'')} · ${esc(item.objective||'')}</span></div>`).join('')||'<div class="sub">No ready cards. If a human gate is pending, approve it below to unlock builder/tester/video agents.</div>'}</div>`;

@@ -1,8 +1,6 @@
-// Built-in mission orchestrator — an OpenAI tool-calling loop over Agentic OS's
-// real capabilities (connected MCP tools + integrations + sub-LLM). This is the
-// in-app alternative to driving missions with an external Hermes agent; both use
-// the same capability surface. Falls back to a scripted (still real) demo run when
-// no OpenAI key is configured.
+// Public mission bridge. Hermes is the primary orchestrator in the Python
+// AgentOS runtime; this module streams its validated plan and queue result into
+// the GitHub dashboard's existing mission feed.
 import { config } from "../config.js";
 import { db } from "../store.js";
 import * as mgr from "../mcp/manager.js";
@@ -81,8 +79,64 @@ async function openaiChat(key, messages) {
   return up.json();
 }
 
+async function runtimeJson(path, options = {}) {
+  const response = await fetch(config.agentosRuntimeUrl + path, {
+    method: options.method || "GET",
+    headers: { "Content-Type": "application/json" },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.error || `AgentOS runtime HTTP ${response.status}`);
+  return data;
+}
+
 export async function runMission(mission, emit) {
-  emit({ type: "status", message: "Mission started", status: "running" });
+  emit({ type: "status", message: "Mission accepted by Hermes", status: "running" });
+  emit({ type: "think", message: "Hermes is preparing an approval-gated AgentOS plan." });
+  const hermes = await runtimeJson("/api/orchestrator/status");
+  if (!hermes.ready) throw new Error(`Hermes is not ready: ${hermes.error || "unknown status"}`);
+  emit({
+    type: "tool_result",
+    message: `Hermes ${hermes.version || "ready"} · ${hermes.model || "configured model"}`,
+    data: { orchestrator: "hermes", profile: hermes.profile, provider: hermes.provider, model: hermes.model },
+  });
+  const result = await runtimeJson("/api/orchestrator/create-and-run", {
+    method: "POST",
+    body: { goal: mission.goal || mission.title, max_steps: 20 },
+  });
+  const created = result.created || {};
+  const run = result.run || {};
+  emit({
+    type: "tool_result",
+    message: `Hermes created ${created.tasks || 0} validated task cards for ${created.slug || mission.title}`,
+    data: {
+      project: created.slug,
+      tasks: created.tasks,
+      planSource: created.orchestrator?.plan_source,
+      planSummary: created.orchestrator?.plan_summary,
+      approvals: (created.approvals || []).length,
+      executed: run.executed_count || 0,
+    },
+  });
+  if (run.status === "error") throw new Error(run.errors?.[0]?.error || "AgentOS queue execution failed");
+  if (run.status === "waiting_for_human_gate" || (created.approvals || []).length) {
+    emit({
+      type: "approval_required",
+      message: "Hermes reached an approval gate. Review the requested action in AgentOS Approvals.",
+      data: { project: created.slug, approvals: created.approvals || [] },
+      status: "waiting_for_approval",
+    });
+    return;
+  }
+  emit({
+    type: "complete",
+    message: created.orchestrator?.plan_summary || `Hermes completed the safe AgentOS queue for ${created.slug || mission.title}.`,
+    status: "completed",
+  });
+}
+
+async function runBuiltInMission(mission, emit) {
+  emit({ type: "status", message: "Legacy built-in mission started", status: "running" });
   const key = openaiKey();
   if (!key) return demoRun(mission, emit);
 

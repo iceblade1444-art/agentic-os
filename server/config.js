@@ -15,6 +15,7 @@ export const config = {
   notion: env.NOTION_TOKEN || "",
   slack: env.SLACK_WEBHOOK_URL || "",
   obsidianVault: env.OBSIDIAN_VAULT || "./vault",
+  agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
 
   // ---- security ----
   authToken: env.AUTH_TOKEN || "",                       // empty = auth disabled (dev)

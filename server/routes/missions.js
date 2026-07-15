@@ -33,12 +33,12 @@ r.patch("/:id", (req, res) => {
   res.json(summary(m));
 });
 
-// Run a mission with the built-in orchestrator, streaming events over SSE.
+// Run a mission through Hermes in the AgentOS runtime, streaming events over SSE.
 r.post("/:id/run", async (req, res) => {
   const m = db.missions.get(req.params.id);
   if (!m) return res.status(404).json({ error: "not found" });
   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  db.missions.update(m.id, { orchestrator: "built-in", status: "running" });
+  db.missions.update(m.id, { orchestrator: "hermes", status: "running" });
   const emit = (ev) => { const saved = db.missions.addEvent(m.id, ev) || ev; res.write(`data: ${JSON.stringify(saved)}\n\n`); };
   try { await runMission(m, emit); }
   catch (e) { emit({ type: "error", message: e.message, status: "failed" }); }

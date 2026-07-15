@@ -1,53 +1,51 @@
 {
-  "version": 2,
-  "updated_at": "2026-06-26",
-  "mode": "single_agent",
+  "version": 3,
+  "updated_at": "2026-07-15",
+  "mode": "hermes_orchestrated",
   "reference": {
-    "source": "AgentOS Mila single-orchestrator mode",
-    "pattern": "one visible agent, internal tool/model orchestration, Gemini Live for voice, GPT/OpenAI for reasoning when configured"
+    "source": "AgentOS Hermes-primary architecture",
+    "pattern": "Hermes plans and routes, AgentOS validates and executes, Mila/Gemini Live is the voice interface"
   },
   "status_values": ["real", "provider", "ui_only", "planned", "disabled"],
   "agents": [
     {
+      "id": "hermes",
+      "display_name": "Hermes",
+      "kind": "primary_orchestrator",
+      "status": "real",
+      "spec_path": "agents/hermes.md",
+      "runner": "hermes_cli_bounded_planner",
+      "queue_owner": "hermes",
+      "reasoning_provider": "openai-codex",
+      "model": "gpt-5.5",
+      "tools": ["hermes.chat", "agent_queue", "workflow.engine", "approval.queue", "project_files", "obsidian_memory"],
+      "permissions": ["orchestrate_goals", "create_tasks", "route_agents", "request_approval", "read_workspace"],
+      "requires_approval_for_external_actions": true,
+      "notes": [
+        "Hermes is the primary strategic orchestrator.",
+        "Planning runs in bounded JSON-only mode without direct tool execution.",
+        "AgentOS validates and persists the plan before any queue execution."
+      ]
+    },
+    {
       "id": "mila",
       "display_name": "Mila",
-      "kind": "single_orchestrator_agent",
+      "kind": "voice_assistant",
       "status": "real",
       "spec_path": "agents/mila.md",
       "memory_path": "memory/mila-initial-memory.md",
-      "runner": "agentos_orchestrator",
+      "runner": "gemini_live_voice_bridge",
       "queue_owner": "mila",
       "voice_provider": "gemini_live",
-      "reasoning_provider": "openai_gpt_when_configured",
-      "fallback_reasoning": "local_agentos_tools",
-      "tools": [
-        "voice.gemini_live",
-        "agentosctl",
-        "agent_queue",
-        "workflow.engine",
-        "approval.queue",
-        "project_files",
-        "tests",
-        "dashboard_api"
-      ],
-      "permissions": [
-        "orchestrate_goals",
-        "create_projects",
-        "create_tasks",
-        "write_local_artifacts",
-        "run_local_tests",
-        "create_internal_agents",
-        "update_memory",
-        "request_approval",
-        "read_workspace",
-        "write_workspace"
-      ],
+      "reasoning_provider": "hermes",
+      "fallback_reasoning": "agentos_safe_plan",
+      "tools": ["voice.gemini_live", "command_bridge", "approval.queue", "dashboard_api", "memory_writeback"],
+      "permissions": ["capture_goals", "speak_results", "read_status", "request_approval", "update_memory"],
       "requires_approval_for_external_actions": true,
       "notes": [
-        "Mila is the only visible agent in the dashboard.",
-        "Gemini Live is the speech-to-speech user conversation layer.",
-        "OpenAI GPT models are available only when OPENAI_API_KEY is configured in the local environment.",
-        "Mila may create internal helper agents as project/task artifacts when useful."
+        "Mila is the voice and conversation interface.",
+        "Gemini Live handles speech-to-speech interaction.",
+        "Mila passes planning and routing work to Hermes."
       ]
     }
   ]

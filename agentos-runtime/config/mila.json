@@ -1,7 +1,12 @@
 {
   "agent_id": "mila",
   "display_name": "Mila",
-  "mode": "single_agent_orchestrator",
+  "mode": "voice_assistant",
+  "orchestrator": {
+    "provider": "hermes",
+    "role": "primary_orchestrator",
+    "status_endpoint": "/api/orchestrator/status"
+  },
   "voice": {
     "conversation_provider": "gemini_live",
     "speech_to_speech_only_provider": "gemini_live",
@@ -21,14 +26,14 @@
       "voice_name": "Leda",
       "language_default": "ru-RU",
       "states": ["idle", "listening", "thinking", "speaking", "tool_running", "blocked"],
-      "turn_loop": ["microphone", "transcript", "gemini_live", "command_bridge", "approval_gate", "result", "spoken_reply", "memory_writeback"],
+      "turn_loop": ["microphone", "transcript", "gemini_live", "hermes_orchestrator", "approval_gate", "result", "spoken_reply", "memory_writeback"],
       "memory_writeback": "memory/mila-learnings.md"
     }
   },
   "models": {
-    "reasoning_provider": "openai",
-    "openai_api_key_env": "OPENAI_API_KEY",
-    "fallback_provider": "local_agentos_tools"
+    "reasoning_provider": "hermes",
+    "voice_provider": "gemini_live",
+    "fallback_provider": "agentos_safe_plan"
   },
   "workspace_access": {
     "read": true,
