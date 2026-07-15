@@ -115,11 +115,11 @@ configuration folder.
 For production, create a server vault directory:
 
 ```bash
-sudo mkdir -p /var/lib/agentos/obsidian-vault
-sudo chown -R agentos:agentos /var/lib/agentos
+mkdir -p /home/admilana/agentic-os/vault/.obsidian
 ```
 
-Then set:
+The compose service mounts that host directory at `/app/obsidian-vault` and
+sets:
 
 ```bash
 OBSIDIAN_VAULT_PATH=/app/obsidian-vault
@@ -159,7 +159,7 @@ ANTHROPIC_API_KEY=
 Python AgentOS runtime:
 
 ```bash
-nano /home/admilana/agentos-runtime/.env
+nano /home/admilana/agentic-os/agentos-runtime/.env
 ```
 
 Minimum useful file:
@@ -167,7 +167,7 @@ Minimum useful file:
 ```dotenv
 GEMINI_API_KEY=replace_me
 GOOGLE_API_KEY=replace_me
-OBSIDIAN_VAULT_PATH=/var/lib/agentos/obsidian-vault
+OBSIDIAN_VAULT_PATH=/app/obsidian-vault
 AGENTOS_PORT=8765
 ```
 
@@ -181,116 +181,37 @@ LIVEKIT_API_SECRET=
 
 ## First server setup
 
-Assume Ubuntu/Debian and the existing `admilana` user from the screenshot:
-
-```bash
-sudo apt update
-sudo apt install -y git curl xz-utils nginx python3 python3-venv python3-pip rsync
-sudo mkdir -p /var/lib/agentos/obsidian-vault
-sudo chown -R admilana:admilana /var/lib/agentos
-```
-
-Deploy the GitHub visual first:
+The current production deployment uses Docker Compose for both services. Run it
+as `admilana`, who is already a member of the `docker` group:
 
 ```bash
 cd /home/admilana
-git clone https://github.com/iceblade1444-art/agentic-os.git agentic-os
+git clone git@github.com:iceblade1444-art/agentic-os.git agentic-os
 cd /home/admilana/agentic-os
 cp .env.example .env
-nano .env
-bash deploy.sh
-curl -fsS http://127.0.0.1:8787/api/health
+cp agentos-runtime/.env.example agentos-runtime/.env
+chmod 600 .env agentos-runtime/.env
+mkdir -p vault/.obsidian
+docker compose up -d --build
 ```
 
-Copy this Python AgentOS runtime next. Temporary path until it is merged into
-the GitHub repo:
+Hermes remains installed for the host user and is mounted read-only into the
+runtime container. Verify the combined deployment:
 
 ```bash
-rsync -az --delete \
-  --exclude .git \
-  --exclude .env \
-  --exclude __pycache__ \
-  --exclude .pytest_cache \
-  --exclude logs/runtime \
-  ./ admilana@SERVER:/home/admilana/agentos-runtime/
-```
-
-Create a virtual environment:
-
-```bash
-cd /home/admilana/agentos-runtime
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install pytest google-genai
-```
-
-`google-genai` is needed for Gemini Native Audio voice. If voice is disabled,
-the dashboard can still run without it, but the native voice endpoint will not
-be ready.
-
-## Preflight checks
-
-Run these before touching nginx:
-
-```bash
-cd /home/admilana/agentos-runtime
-.venv/bin/python agentosctl.py release check --pretty
-.venv/bin/python -m pytest -q
-env OBSIDIAN_VAULT_PATH=/var/lib/agentos/obsidian-vault \
-  .venv/bin/python dashboard/backend/app.py \
-  --workspace /home/admilana/agentos-runtime \
-  --host 127.0.0.1 \
-  --port 8765
-```
-
-In another shell:
-
-```bash
+docker compose ps
+docker exec agentos-runtime hermes --version
 curl -fsS http://127.0.0.1:8765/api/mila/status
 curl -fsS http://127.0.0.1:8765/api/obsidian/status
+curl -fsS http://172.16.10.6:8787/api/health
 ```
 
-Stop the foreground server after the check.
-
-## systemd service
-
-Create:
+Run the full test suite before publishing a runtime update:
 
 ```bash
-sudo nano /etc/systemd/system/agentos-dashboard.service
-```
-
-Service:
-
-```ini
-[Unit]
-Description=AgentOS Mila dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=admilana
-Group=admilana
-WorkingDirectory=/home/admilana/agentos-runtime
-EnvironmentFile=/home/admilana/agentos-runtime/.env
-Environment=AGENTOS_ROOT=/home/admilana/agentos-runtime
-Environment=AGENTOS_PORT=8765
-Environment=OBSIDIAN_VAULT_PATH=/var/lib/agentos/obsidian-vault
-ExecStart=/home/admilana/agentos-runtime/.venv/bin/python /home/admilana/agentos-runtime/dashboard/backend/app.py --workspace /home/admilana/agentos-runtime --host 127.0.0.1 --port 8765
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable it:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now agentos-dashboard
-sudo systemctl status agentos-dashboard --no-pager
-journalctl -u agentos-dashboard -n 80 --no-pager
+cd /home/admilana/agentic-os/agentos-runtime
+python3 -m pytest -q
+python3 agentosctl.py --workspace . release check --pretty
 ```
 
 ## nginx/OpenResty proxy
@@ -373,63 +294,50 @@ Expected:
 - GitHub Agentic OS visual loads at `/`;
 - `/api/health` returns the Node app health;
 - local `127.0.0.1:8765/api/mila/status` returns `status: ok`;
-- local `127.0.0.1:8765/api/obsidian/status` points to `/var/lib/agentos/obsidian-vault`;
+- local `127.0.0.1:8765/api/obsidian/status` points to `/app/obsidian-vault`;
 - `hermes profile list` works under the same Linux user that runs AgentOS;
 - release check remains `ready_local`.
 
 ## Updating production later
 
-Copy the changed files, then:
+Pull the canonical GitHub `main`, then rebuild both services:
 
 ```bash
 cd /home/admilana/agentic-os
 git pull --ff-only
 docker compose up -d --build
-curl -fsS http://127.0.0.1:8787/api/health
-
-cd /home/admilana/agentos-runtime
-.venv/bin/python agentosctl.py release check --pretty
-.venv/bin/python -m pytest -q
-sudo systemctl restart agentos-dashboard
-sudo systemctl status agentos-dashboard --no-pager
+docker compose ps
+curl -fsS http://172.16.10.6:8787/api/health
+curl -fsS http://127.0.0.1:8765/api/mila/status
 ```
 
 ## Rollback
 
-If the new deployment fails:
+If a new runtime image fails, inspect logs and return to the previous known
+commit before rebuilding:
 
 ```bash
-sudo systemctl stop agentos-dashboard
-sudo cp /root/nginx-before-agentos-TIMESTAMP.conf /etc/nginx/nginx.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-If code was updated through git:
-
-```bash
-cd /opt/agentos
+cd /home/admilana/agentic-os
+docker compose logs --tail 100 agentos-runtime
 git log --oneline -5
-git checkout PREVIOUS_GOOD_COMMIT
-sudo systemctl restart agentos-dashboard
+git revert BAD_COMMIT
+docker compose up -d --build
 ```
 
 Do not run destructive git commands on production unless the exact rollback
 target is known.
 
-## What is manual right now
+## Access and maintenance
 
-Manual server access is still required. Provide one of these:
+Production SSH is available on the private network as `admilana@172.16.10.6`.
+The public IP is behind NAT, so use the private address from this workstation.
+The deploy key used by Codex has fingerprint:
 
-1. SSH host, port, username, and key/password path. The username should be `admilana`, not `root`.
-2. Access through a hosting control panel with terminal/file manager.
-3. Add this machine's public SSH key to the production user and confirm the
-   username and SSH port.
-4. VPN access if the real server is only reachable on the private network.
+```text
+SHA256:ctpIkSilaZ8zM5pybvvN4c33ht3sWEIzpXFJATNKwlY
+```
 
-Once access works, the deploy can be completed with the steps above.
-
-Useful server-side SSH diagnostics:
+Useful server-side diagnostics:
 
 ```bash
 hostname -I
@@ -438,9 +346,8 @@ sudo grep -E '^(AllowUsers|PasswordAuthentication|PubkeyAuthentication|PermitRoo
 sudo journalctl -u ssh -n 80 --no-pager
 ```
 
-Useful client-side connection attempts once the private IP is known:
+Client connection:
 
 ```bash
-ssh -i ~/.ssh/mila_vm105_codex2 -o IdentitiesOnly=yes admilana@SERVER_PRIVATE_IP
-ssh -i ~/.ssh/mila_vm105_codex2 -o IdentitiesOnly=yes admilana@93.188.83.254
+ssh -i ~/.ssh/agentos_codex_deploy -o IdentitiesOnly=yes admilana@172.16.10.6
 ```
