@@ -77,8 +77,10 @@ That gives one canonical GitHub project and one server checkout.
 
 ### Hermes Agent
 
-Hermes is required for real Hermes profile discovery and real Hermes Kanban
-operations. AgentOS calls it through the `hermes` CLI.
+Hermes is the primary AgentOS orchestrator. It creates bounded plans for goals;
+AgentOS validates those plans and executes them through approval-gated queues.
+The current production profile is `default`, provider `openai-codex`, model
+`gpt-5.5`. Mila/Gemini Live is the voice assistant, not the orchestrator.
 
 Official Linux install path:
 
@@ -91,6 +93,16 @@ hermes doctor
 hermes setup
 hermes profile list
 ```
+
+After setup, verify the integrated role through the private runtime:
+
+```bash
+curl -fsS http://127.0.0.1:8765/api/orchestrator/status
+curl -fsS http://127.0.0.1:8765/api/mila/status
+```
+
+The first response must report `primary: true` and `ready: true`; the second
+must report Mila as `voice_assistant` linked to Hermes.
 
 Install Hermes while logged in as `admilana`, because the AgentOS runtime
 service also runs as `admilana`. If browser automation dependencies are needed,

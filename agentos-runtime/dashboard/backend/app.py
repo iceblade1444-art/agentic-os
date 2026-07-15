@@ -15,6 +15,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -68,6 +69,265 @@ def now() -> str:
 def slugify(text: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
     return slug[:80] or f"goal-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+
+def orchestrator_config_path(workspace: Path) -> Path:
+    return workspace / "config" / "orchestrator.json"
+
+
+def default_orchestrator_config():
+    return {
+        "version": 1,
+        "primary": "hermes",
+        "enabled": True,
+        "command": "hermes",
+        "profile": "default",
+        "provider": "openai-codex",
+        "model": "gpt-5.5",
+        "planning": {
+            "toolsets": ["todo"],
+            "max_turns": 1,
+            "timeout_seconds": 120,
+            "max_tasks": 24,
+            "tools_allowed": False,
+        },
+        "fallback": "agentos_safe_plan",
+        "voice_interface": "mila_gemini_live",
+    }
+
+
+def load_orchestrator_config(workspace: Path):
+    config = default_orchestrator_config()
+    raw = read_json(orchestrator_config_path(workspace), {})
+    for key in ["version", "primary", "enabled", "command", "profile", "provider", "model", "fallback", "voice_interface"]:
+        if key in raw:
+            config[key] = raw[key]
+    planning = dict(config["planning"])
+    planning.update(raw.get("planning") or {})
+    planning["max_turns"] = _bounded_int(planning.get("max_turns"), 1, minimum=1, maximum=3)
+    planning["timeout_seconds"] = _bounded_int(planning.get("timeout_seconds"), 120, minimum=10, maximum=300)
+    planning["max_tasks"] = _bounded_int(planning.get("max_tasks"), 24, minimum=1, maximum=24)
+    planning["tools_allowed"] = False
+    config["planning"] = planning
+    config["enabled"] = bool(config.get("enabled", True))
+    return config
+
+
+def hermes_orchestrator_status(workspace: Path):
+    load_workspace_dotenv(workspace)
+    config = load_orchestrator_config(workspace)
+    mock_ready = bool(os.getenv("AGENTOS_HERMES_MOCK_PLAN"))
+    command = str(config.get("command") or "hermes")
+    executable = shutil.which(command)
+    version = None
+    error = None
+    ready = False
+    if mock_ready:
+        ready = True
+        version = "mock"
+    elif config.get("enabled") and executable:
+        try:
+            result = subprocess.run([command, "--version"], text=True, capture_output=True, timeout=10, cwd=str(workspace))
+            ready = result.returncode == 0
+            version = (result.stdout or result.stderr).strip().splitlines()[0][:120] if ready else None
+            if not ready:
+                error = "hermes_version_check_failed"
+        except (OSError, subprocess.SubprocessError):
+            error = "hermes_version_check_failed"
+    elif not config.get("enabled"):
+        error = "hermes_disabled"
+    else:
+        error = "hermes_command_not_found"
+    return {
+        "status": "ok",
+        "decision": "hermes_primary_orchestrator_status",
+        "primary": config.get("primary") == "hermes",
+        "ready": ready,
+        "enabled": config.get("enabled"),
+        "agent": {"id": "hermes", "display_name": "Hermes", "role": "primary_orchestrator"},
+        "profile": config.get("profile"),
+        "provider": config.get("provider"),
+        "model": config.get("model"),
+        "version": version,
+        "planning": config.get("planning"),
+        "fallback": config.get("fallback"),
+        "error": error,
+        "secrets_included": False,
+    }
+
+
+def _extract_json_object(text: str):
+    clean = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", text or "")
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(clean):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(clean[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise ValueError("hermes_json_plan_not_found")
+
+
+def _safe_plan_artifacts(raw_artifacts):
+    artifacts = []
+    for raw in raw_artifacts if isinstance(raw_artifacts, list) else []:
+        candidate = str(raw or "").strip().replace("\\", "/")
+        path = Path(candidate)
+        if not candidate or path.is_absolute() or ".." in path.parts:
+            continue
+        safe = re.sub(r"[^a-zA-Z0-9._/-]+", "-", candidate).strip("-./")[:120]
+        if safe and safe not in artifacts:
+            artifacts.append(safe)
+    return artifacts[:8]
+
+
+def normalize_hermes_plan(slug: str, raw_plan: dict, max_tasks: int = 24):
+    raw_tasks = raw_plan.get("tasks") if isinstance(raw_plan, dict) else None
+    if not isinstance(raw_tasks, list) or not raw_tasks:
+        raise ValueError("hermes_plan_tasks_required")
+    max_tasks = max(1, min(24, int(max_tasks or 24)))
+    tasks = []
+    raw_to_final = {}
+    approval_gates = []
+    risky_terms = re.compile(r"\b(deploy|publish|send|email|payment|delete|credential|production|release)\b", re.IGNORECASE)
+
+    def next_id():
+        return f"T{len(tasks) + 1:03d}"
+
+    for raw_index, item in enumerate(raw_tasks[:max_tasks], start=1):
+        if not isinstance(item, dict):
+            continue
+        objective = str(item.get("title") or item.get("objective") or "").strip()[:300]
+        if not objective:
+            continue
+        raw_id = str(item.get("id") or f"T{raw_index:03d}").upper()
+        owner = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(item.get("owner") or "hermes-worker").strip().lower()).strip("-")[:40] or "hermes-worker"
+        requested_deps = item.get("depends_on") if isinstance(item.get("depends_on"), list) else []
+        dependencies = []
+        for dep in requested_deps:
+            mapped = raw_to_final.get(str(dep).upper())
+            if mapped and mapped not in dependencies:
+                dependencies.append(mapped)
+        risk = str(item.get("risk_level") or "low").strip().lower()
+        if risk not in {"low", "medium", "high"}:
+            risk = "medium"
+        requires_approval = bool(item.get("requires_approval")) or risk == "high" or bool(risky_terms.search(objective))
+        if requires_approval:
+            risk = "high"
+        acceptance = [str(value).strip()[:200] for value in (item.get("acceptance_criteria") or []) if str(value).strip()][:8]
+        artifacts = _safe_plan_artifacts(item.get("artifacts"))
+        lane = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(item.get("lane") or "hermes-plan").strip().lower()).strip("-")[:40] or "hermes-plan"
+
+        if requires_approval and len(tasks) < max_tasks:
+            gate_id = next_id()
+            tasks.append(agentic_task(
+                slug,
+                gate_id,
+                f"Human approval gate: {objective}",
+                "approval-guard",
+                dependencies,
+                risk_level="high",
+                requires_approval=True,
+                acceptance=["Operator explicitly approves or denies the proposed risky action"],
+                artifacts=[f"approvals/{gate_id.lower()}-decision.md"],
+                lane="human-gate",
+            ))
+            approval_gates.append({"task_id": gate_id, "objective": objective})
+            dependencies = [gate_id]
+        if len(tasks) >= max_tasks:
+            raw_to_final[raw_id] = tasks[-1]["id"]
+            continue
+        task_id = next_id()
+        task = agentic_task(
+            slug,
+            task_id,
+            objective,
+            owner,
+            dependencies,
+            risk_level=risk,
+            requires_approval=False,
+            acceptance=acceptance or ["Requested result is persisted", "Verification evidence is recorded"],
+            artifacts=artifacts,
+            lane=lane,
+        )
+        if requires_approval:
+            task["approved_execution_required"] = True
+        tasks.append(task)
+        raw_to_final[raw_id] = task_id
+        raw_to_final[f"T{raw_index:03d}"] = task_id
+    if not tasks:
+        raise ValueError("hermes_plan_has_no_valid_tasks")
+    return {
+        "summary": str(raw_plan.get("summary") or raw_plan.get("plan_summary") or "Hermes generated an execution plan.").strip()[:500],
+        "tasks": tasks,
+        "approval_gates": approval_gates,
+    }
+
+
+def hermes_plan_goal(workspace: Path, slug: str, goal: str):
+    config = load_orchestrator_config(workspace)
+    planning = config.get("planning") or {}
+    mock_plan = os.getenv("AGENTOS_HERMES_MOCK_PLAN")
+    raw_output = ""
+    source = "hermes_cli"
+    session_id = None
+    try:
+        if mock_plan:
+            raw_plan = json.loads(mock_plan)
+            source = "hermes_mock"
+        else:
+            if os.getenv("PYTEST_CURRENT_TEST"):
+                raise RuntimeError("hermes_live_planning_disabled_in_tests")
+            if not config.get("enabled"):
+                raise RuntimeError("hermes_disabled")
+            prompt = "\n".join([
+                "You are Hermes, the primary strategic orchestrator for AgentOS.",
+                "Create a safe, concrete execution plan for the goal below.",
+                "Do not call tools and do not perform any action. Return one JSON object only.",
+                "Schema: {\"summary\":string,\"tasks\":[{\"id\":\"T001\",\"title\":string,\"owner\":string,\"depends_on\":[\"T000\"],\"risk_level\":\"low|medium|high\",\"requires_approval\":boolean,\"acceptance_criteria\":[string],\"artifacts\":[relative_path],\"lane\":string}]}",
+                "Dependencies may reference earlier task IDs only. Mark deploy, publish, send, delete, payment, credential, and production changes as high risk and requiring approval.",
+                f"Goal: {goal}",
+            ])
+            command = [
+                str(config.get("command") or "hermes"), "chat", "-q", prompt, "-Q",
+                "--source", "tool", "--max-turns", str(planning.get("max_turns") or 1),
+            ]
+            for toolset in planning.get("toolsets") or ["todo"]:
+                command.extend(["-t", str(toolset)])
+            result = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                timeout=int(planning.get("timeout_seconds") or 120),
+                cwd=str(workspace),
+            )
+            raw_output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+            if result.returncode != 0:
+                raise RuntimeError("hermes_plan_command_failed")
+            raw_plan = _extract_json_object(raw_output)
+            match = re.search(r"session_id:\s*([a-zA-Z0-9_-]+)", raw_output)
+            session_id = match.group(1) if match else None
+        normalized = normalize_hermes_plan(slug, raw_plan, int(planning.get("max_tasks") or 24))
+        return {
+            "status": "planned",
+            "source": source,
+            "orchestrator": "hermes",
+            "session_id": session_id,
+            **normalized,
+        }
+    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        return {
+            "status": "fallback",
+            "source": "agentos_safe_plan",
+            "orchestrator": "hermes",
+            "error": str(exc)[:160],
+            "summary": "Hermes was unavailable, so AgentOS used its safe approval-gated fallback plan.",
+            "tasks": agentic_orchestra_tasks(slug, goal),
+            "approval_gates": [{"task_id": "T010", "objective": "Approve post-research fulfillment"}],
+        }
 
 
 def list_projects(workspace: Path):
@@ -300,21 +560,33 @@ def mila_agent_dock(workspace: Path):
     }
     voice = voice_health(workspace)
     gemini = next((item for item in voice.get("providers", []) if item.get("provider") == "gemini_live"), {})
-    openai_ready = bool(os.getenv("OPENAI_API_KEY"))
+    hermes = hermes_orchestrator_status(workspace)
     agents = [
+        {
+            "role": "hermes",
+            "display_name": "Hermes",
+            "status": "ready" if hermes.get("ready") else "needs_attention",
+            "signals": [
+                "primary_orchestrator",
+                f"profile={hermes.get('profile') or 'default'}",
+                f"provider={hermes.get('provider') or 'unknown'}",
+                f"model={hermes.get('model') or 'unknown'}",
+                f"runtime={'ready' if hermes.get('ready') else hermes.get('error') or 'not_ready'}",
+                f"queue_items={counts['queue_items']}",
+                f"pending_approvals={counts['pending_approvals']}",
+            ],
+        },
         {
             "role": "mila",
             "display_name": "Mila",
             "status": "ready" if gemini.get("ready") else "voice_needs_attention",
             "signals": [
-                "single_visible_agent",
-                "orchestrator",
+                "voice_assistant",
+                "user_interface",
                 "voice=gemini_live",
                 f"gemini_live={'ready' if gemini.get('ready') else 'not_ready'}",
-                f"openai_gpt={'ready' if openai_ready else 'missing_OPENAI_API_KEY'}",
+                "orchestrator=hermes",
                 f"projects={counts['projects']}",
-                f"queue_items={counts['queue_items']}",
-                f"pending_approvals={counts['pending_approvals']}",
                 latest_report.name if latest_report else "no_report",
             ],
         }
@@ -352,7 +624,9 @@ def mila_agent_dock(workspace: Path):
             "local_first": True,
             "risky_actions_require_approval": True,
             "read_only_endpoint": True,
-            "single_agent_mode": True,
+            "single_agent_mode": False,
+            "hermes_primary_orchestrator": True,
+            "mila_voice_only": True,
         },
     }
 
@@ -1145,19 +1419,28 @@ def mila_single_agent_status(workspace: Path):
     dock = mila_agent_dock(workspace)
     voice = voice_health(workspace)
     gemini = next((item for item in voice.get("providers", []) if item.get("provider") == "gemini_live"), {})
+    hermes = hermes_orchestrator_status(workspace)
     memory_paths = [
         cfg.get("memory", {}).get("initial", "memory/mila-initial-memory.md"),
         cfg.get("memory", {}).get("learnings", "memory/mila-learnings.md"),
     ]
     return {
         "status": "ok",
-        "decision": "mila_single_agent_status",
+        "decision": "mila_voice_assistant_status",
         "agent": {
             "id": "mila",
             "display_name": "Mila",
-            "mode": cfg.get("mode", "single_agent_orchestrator"),
+            "role": "voice_assistant",
+            "mode": cfg.get("mode", "voice_assistant"),
             "visible_agents": len(dock.get("agents", [])),
-            "is_only_visible_agent": len(dock.get("agents", [])) == 1 and dock.get("agents", [{}])[0].get("role") == "mila",
+            "is_only_visible_agent": False,
+        },
+        "orchestrator": {
+            "id": "hermes",
+            "role": "primary_orchestrator",
+            "ready": bool(hermes.get("ready")),
+            "profile": hermes.get("profile"),
+            "model": hermes.get("model"),
         },
         "voice": {
             "provider": "gemini_live",
@@ -1166,10 +1449,11 @@ def mila_single_agent_status(workspace: Path):
             "speech_to_speech": True,
         },
         "models": {
-            "openai_gpt": {
-                "ready": bool(os.getenv("OPENAI_API_KEY")),
-                "api_key_env": "OPENAI_API_KEY",
-                "raw_key_exposed": False,
+            "hermes": {
+                "ready": bool(hermes.get("ready")),
+                "provider": hermes.get("provider"),
+                "model": hermes.get("model"),
+                "raw_credentials_exposed": False,
             },
             "gemini_live": {
                 "ready": bool(gemini.get("ready")),
@@ -1219,7 +1503,7 @@ def mila_nova_voice_agent(workspace: Path):
     return {
         "status": "ok",
         "decision": "mila_nova_voice_agent",
-        "agent": {"id": "mila", "display_name": "Mila", "role": "single_orchestrator"},
+        "agent": {"id": "mila", "display_name": "Mila", "role": "voice_assistant", "orchestrator": "hermes"},
         "reference": {
             "name": reference.get("name", "AGENT NOVA voice assistant"),
             "backend_reference_found": backend_ref.exists(),
@@ -1252,7 +1536,7 @@ def mila_nova_voice_agent(workspace: Path):
             "speech_to_speech_target": True,
         },
         "states": runtime.get("states", ["idle", "listening", "thinking", "speaking", "tool_running", "blocked"]),
-        "turn_loop": runtime.get("turn_loop", ["microphone", "transcript", "gemini_live", "command_bridge", "approval_gate", "result", "spoken_reply", "memory_writeback"]),
+        "turn_loop": runtime.get("turn_loop", ["microphone", "transcript", "gemini_live", "hermes_orchestrator", "approval_gate", "result", "spoken_reply", "memory_writeback"]),
         "memory": {
             "writeback": runtime.get("memory_writeback", "memory/mila-learnings.md"),
             "conversation_items_saved": True,
@@ -1986,45 +2270,79 @@ def create_agentic_goal(workspace: Path, goal: str):
     slug = slugify(goal)
     project_dir = workspace / "projects" / slug
     project_dir.mkdir(parents=True, exist_ok=True)
-    tasks = agentic_orchestra_tasks(slug, goal)
+    plan = hermes_plan_goal(workspace, slug, goal)
+    tasks = plan["tasks"]
+    human_gates = [gate.get("task_id") for gate in plan.get("approval_gates", []) if gate.get("task_id")]
     metadata = {
         "slug": slug,
         "goal": goal,
         "created_at": now(),
         "status": "orchestrated",
-        "workflow": "kanban_agentic_orchestra",
-        "source_video": "https://www.youtube.com/watch?v=EKVRqcpTT6s",
+        "workflow": "hermes_primary_orchestrator",
+        "orchestrator": {
+            "primary": "hermes",
+            "plan_source": plan.get("source"),
+            "plan_status": plan.get("status"),
+            "plan_summary": plan.get("summary"),
+            "session_id": plan.get("session_id"),
+            "execution_scheduler": "agentos_safe_queue",
+            "voice_interface": "mila_gemini_live",
+        },
         "orchestra": {
             "single_source_of_truth": "projects/<slug>/tasks.json + agents/queue.json",
-            "rubric_threshold": 65,
-            "human_gates": ["T010"],
-            "agent_roles": ["x-scout", "web-scout", "orchestrator", "researcher-source", "researcher-context", "researcher-solutions", "analyst", "builder", "tester", "video-producer", "approval-guard"],
+            "human_gates": human_gates,
+            "agent_roles": sorted({str(task.get("owner") or "hermes-worker") for task in tasks}),
         },
     }
     write_json(project_dir / "project.json", metadata)
     write_json(project_dir / "tasks.json", tasks)
     write_text(project_dir / "project-brief.md", "\n".join([
-        f"# Agentic Orchestra Brief: {goal}",
+        f"# Hermes Orchestration Brief: {goal}",
         "",
         "## Goal",
         goal,
         "",
-        "## Workflow from reference video",
-        "Detect → validate/dedupe/rubric → parallel research lanes → route decision → one human gate → builder/tester/video producer → final handoff.",
+        "## Primary orchestrator",
+        "Hermes plans and routes the work. AgentOS validates the plan, persists tasks, and executes the safe local queue. Mila/Gemini is the voice interface.",
+        "",
+        "## Plan summary",
+        str(plan.get("summary") or "No summary returned."),
+        "",
+        "## Plan source",
+        str(plan.get("source") or "unknown"),
         "",
         "## Safety",
-        "Risky shipping/build/publish decisions wait at T010 until the operator approves, shelves, or modifies the plan.",
+        "Hermes cannot bypass AgentOS approvals. Risky deploy, publish, send, delete, payment, credential, and production actions wait at a human gate.",
     ]) + "\n")
-    approval = create_approval(
-        workspace,
-        "agentic_human_gate",
-        f"Approve post-research route for {slug}: build prototype and/or video deliverable after scouts, rubric, and research lanes complete.",
-        "high",
-        context={"project": slug, "task_id": "T010", "unlock_tasks": ["T011", "T013"], "source_video": "EKVRqcpTT6s"},
-    )
+    approvals = []
+    for gate in plan.get("approval_gates", []):
+        gate_id = gate.get("task_id")
+        unlock_tasks = [task.get("id") for task in tasks if gate_id in (task.get("depends_on") or [])]
+        approvals.append(create_approval(
+            workspace,
+            "agentic_human_gate",
+            f"Hermes requests approval for {slug}: {gate.get('objective') or gate_id}",
+            "high",
+            context={"project": slug, "task_id": gate_id, "unlock_tasks": unlock_tasks, "orchestrator": "hermes"},
+        ))
     sync_agent_queue(workspace)
-    append_event(workspace, "goal_created", project=slug, goal=goal, workflow="kanban_agentic_orchestra", approval_id=approval.get("id"))
-    return {**metadata, "approval": approval, "tasks": len(tasks), "queue": list_agent_queue(workspace).get("count", 0)}
+    append_event(
+        workspace,
+        "goal_created",
+        project=slug,
+        goal=goal,
+        workflow="hermes_primary_orchestrator",
+        orchestrator="hermes",
+        plan_source=plan.get("source"),
+        approval_ids=[approval.get("id") for approval in approvals],
+    )
+    return {
+        **metadata,
+        "approval": approvals[0] if approvals else None,
+        "approvals": approvals,
+        "tasks": len(tasks),
+        "queue": list_agent_queue(workspace).get("count", 0),
+    }
 
 
 HIGH_RISK_ACTIONS = {"send_email", "mass_email", "publish", "deploy", "delete_file", "payment", "change_credentials", "production_change", "enable_agent_worker_daemon", "agentic_human_gate", "agentic_workflow_gate", "create_real_kanban_tasks"}
@@ -2765,9 +3083,9 @@ def agentic_orchestrator_overview(workspace: Path, project=None):
             by_lane[lane][status_value if status_value in by_lane[lane] else "planned"] = by_lane[lane].get(status_value, 0) + 1
     return {
         "status": "ok",
-        "decision": "agentic_orchestrator_overview",
-        "source_video": "EKVRqcpTT6s",
-        "principles": ["Kanban is the durable shared state", "agents claim one card at a time", "research/judgment/build artifacts are persisted", "human gate unlocks fulfillment"],
+        "decision": "hermes_orchestrator_overview",
+        "orchestrator": hermes_orchestrator_status(workspace),
+        "principles": ["Hermes is the primary strategic orchestrator", "AgentOS validates and persists every plan", "agents claim one card at a time", "human approval unlocks risky fulfillment", "Mila/Gemini is the voice interface"],
         "projects": projects,
         "queue": {"count": len(queue), "items": queue},
         "pending_human_gates": pending,
@@ -2792,7 +3110,7 @@ def run_agentic_orchestrator(workspace: Path, project=None, max_steps=20, dry_ru
             executed.append({"step": step + 1, "dry_run": True, "queue_id": item.get("queue_id"), "owner": item.get("owner"), "lane": item.get("lane")})
             continue
         worker = str(item.get("owner") or "orchestrator-agent")
-        result = run_next_agent_queue_item(workspace, worker, 300, queue_id=item.get("queue_id"), project=project, owner=item.get("owner"), execution_context={"orchestrator_run": True, "source_video": "EKVRqcpTT6s"})
+        result = run_next_agent_queue_item(workspace, worker, 300, queue_id=item.get("queue_id"), project=project, owner=item.get("owner"), execution_context={"orchestrator_run": True, "primary_orchestrator": "hermes"})
         if result.get("error"):
             errors.append(result)
             break
@@ -2801,7 +3119,9 @@ def run_agentic_orchestrator(workspace: Path, project=None, max_steps=20, dry_ru
     gate_wait = bool(overview.get("pending_human_gates")) and not overview.get("queue", {}).get("items")
     return {
         "status": "waiting_for_human_gate" if gate_wait else ("error" if errors else ("executed" if executed else "idle")),
-        "decision": "agentic_orchestrator_run",
+        "decision": "hermes_orchestrator_run",
+        "orchestrator": "hermes",
+        "execution_scheduler": "agentos_safe_queue",
         "dry_run": dry_run,
         "project": project,
         "executed_count": len([x for x in executed if not x.get("dry_run")]),
@@ -6554,8 +6874,8 @@ def mila_live_chat(workspace: Path, text: str, provider: str = "gemini_live"):
         "safe": True,
     }
     fallback_reply = (
-        "Привет. Я Мила, твой локальный AgentOS-оркестратор. "
-        "Могу обсудить задачу, создать проект, показать статус или помочь собрать артефакт."
+        "Привет. Я Мила, голосовой ассистент AgentOS. "
+        "Я передаю цели главному оркестратору Hermes, озвучиваю статус и запрашиваю подтверждение рискованных действий."
     )
     if not health.get("ready"):
         result = {**base, "status": "blocked", "reply": fallback_reply}
@@ -6585,7 +6905,8 @@ def mila_command_reply(command: dict):
         return f"Дайджест готов: проектов {data.get('projects', 0)}, approvals {data.get('pending_approvals', 0)}, событий {data.get('events', 0)}."
     if intent == "create_goal":
         result = command.get("result") or {}
-        return f"Готово. Я создала проект {result.get('slug') or result.get('goal') or ''} и запустила рабочий контур."
+        source = ((result.get("orchestrator") or {}).get("plan_source") or "Hermes")
+        return f"Готово. Hermes подготовил план проекта {result.get('slug') or result.get('goal') or ''} и запустил безопасный рабочий контур. Источник плана: {source}."
     if intent == "request_approval":
         approval = (command.get("result") or {}).get("approval") or command.get("result") or {}
         return f"Готово. Создала approval {approval.get('id', '')}."
@@ -6622,20 +6943,20 @@ def mila_native_voice_ready(workspace: Path) -> dict:
 def mila_build_live_system_instruction(workspace: Path) -> str:
     initial = (workspace / "memory" / "mila-initial-memory.md").read_text(encoding="utf-8", errors="ignore") if (workspace / "memory" / "mila-initial-memory.md").exists() else ""
     digest = digest_summary(workspace)
-    return f"""You are Mila, the single visible AgentOS orchestrator.
+    return f"""You are Mila, the AgentOS voice assistant. Hermes is the primary orchestrator.
 
 Speak Russian by default. If the user switches language, follow the user.
-You are warm, concise, professional, and practical. You are a real-time voice assistant, not a command help screen.
+You are warm, concise, professional, and practical. You are a real-time voice interface, not the planning or execution authority.
 
 You can:
 - discuss tasks naturally;
 - help shape goals;
-- create local AgentOS projects when the user clearly asks;
+- pass explicit goals to Hermes for planning and AgentOS for approval-gated execution;
 - explain status and next steps;
 - keep secrets private.
 
 For explicit actions, answer naturally and briefly. AgentOS may execute safe local commands after the voice transcript.
-Never reveal API keys or credentials. Never claim an external action was published or sent unless AgentOS confirms it.
+Never reveal API keys or credentials. Never claim that you planned or executed work yourself. Name Hermes as the orchestrator. Never claim an external action was published or sent unless AgentOS confirms it.
 
 Current local status:
 - projects: {digest.get("projects", 0)}
@@ -7249,6 +7570,8 @@ def handle_api(workspace: str | Path, path: str, method: str = "GET", payload=No
         return voice_health(workspace)
     if method == "GET" and clean == "/api/agent-queue":
         return list_agent_queue(workspace)
+    if method == "GET" and clean == "/api/orchestrator/status":
+        return hermes_orchestrator_status(workspace)
     if method == "GET" and clean == "/api/orchestrator":
         qs = parse_qs(parsed.query)
         project = (qs.get("project") or [None])[0] or None

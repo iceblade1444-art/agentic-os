@@ -35,32 +35,36 @@ def post_api(path: str, payload: dict):
     return json.loads(result.stdout)
 
 
-def test_mila_single_agent_status_is_secret_safe():
+def test_mila_voice_assistant_status_is_secret_safe():
     data = call_api("/api/mila/status")
 
     assert data["status"] == "ok"
-    assert data["decision"] == "mila_single_agent_status"
+    assert data["decision"] == "mila_voice_assistant_status"
     assert data["agent"]["id"] == "mila"
-    assert data["agent"]["is_only_visible_agent"] is True
+    assert data["agent"]["role"] == "voice_assistant"
+    assert data["agent"]["is_only_visible_agent"] is False
+    assert data["orchestrator"]["id"] == "hermes"
+    assert data["orchestrator"]["role"] == "primary_orchestrator"
     assert data["voice"]["provider"] == "gemini_live"
     assert data["voice"]["speech_to_speech"] is True
-    assert data["models"]["openai_gpt"]["api_key_env"] == "OPENAI_API_KEY"
-    assert data["models"]["openai_gpt"]["raw_key_exposed"] is False
+    assert data["models"]["hermes"]["raw_credentials_exposed"] is False
     assert data["memory"]["all_present"] is True
-    assert data["registry"]["mode"] == "single_agent"
+    assert data["registry"]["mode"] == "hermes_orchestrated"
 
     blob = json.dumps(data, ensure_ascii=False)
     assert "sk-" not in blob
     assert "GEMINI_API_KEY=" not in blob
 
 
-def test_frontend_has_only_mila_agent_card_source():
+def test_frontend_has_hermes_orchestrator_and_mila_voice_source():
     text = INDEX.read_text(encoding="utf-8")
 
+    assert "{id:'hermes'" in text
     assert "{id:'mila'" in text
     assert "{id:'claude'" not in text
     assert "{id:'openclaw'" not in text
     assert "gemini_live" in text
+    assert "Primary AgentOS orchestrator" in text
 
 
 def test_mila_nova_voice_agent_status_is_secret_safe():

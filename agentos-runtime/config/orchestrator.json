@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "primary": "hermes",
+  "enabled": true,
+  "command": "hermes",
+  "profile": "default",
+  "provider": "openai-codex",
+  "model": "gpt-5.5",
+  "planning": {
+    "toolsets": ["todo"],
+    "max_turns": 1,
+    "timeout_seconds": 120,
+    "max_tasks": 24,
+    "tools_allowed": false
+  },
+  "fallback": "agentos_safe_plan",
+  "voice_interface": "mila_gemini_live"
+}

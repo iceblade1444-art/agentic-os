@@ -14,6 +14,23 @@ Create a practical AI operating layer where a user can give one goal and the sys
 6. Log decisions, blockers, approvals, and final results.
 7. Keep risky actions behind explicit approval gates.
 
+## Active orchestration architecture
+
+- **Hermes** is the primary orchestrator. It turns goals into bounded JSON plans and selects task owners, dependencies, acceptance criteria, and artifacts.
+- **AgentOS** validates the Hermes plan, rejects unsafe paths, persists cards, executes the local queue, and enforces approval gates.
+- **Mila + Gemini Live** is the voice assistant. Mila captures goals, sends them to Hermes, presents approvals, and speaks verified results.
+- If Hermes is unavailable or returns invalid JSON, AgentOS records `agentos_safe_plan` and uses its conservative fallback workflow.
+
+Status endpoints:
+
+```text
+GET /api/orchestrator/status  Hermes installation/profile/model readiness
+GET /api/orchestrator         Hermes projects, queue, lanes, and approvals
+GET /api/mila/status          Mila/Gemini voice readiness and Hermes linkage
+```
+
+See `sops/hermes-primary-orchestrator.md` before changing models, prompts, task limits, or approval behavior.
+
 ## Main folders
 
 ```text
@@ -94,7 +111,7 @@ Safety notes:
 
 ## Mila desktop quickstart
 
-Mila is the Jarvis-style UX layer for AgentOS. It keeps the same safety model: microphone input and Gemini normalization route through `/api/voice-session`, then through the command bridge and approval gates.
+Mila is the Jarvis-style voice UX layer for AgentOS. Microphone input and Gemini normalization route through `/api/voice-session`; explicit goals then go to Hermes and return through AgentOS validation, queues, and approval gates.
 
 Start Mila on Windows:
 
