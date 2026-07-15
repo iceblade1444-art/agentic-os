@@ -1,0 +1,28 @@
+{
+  "slug": "goal-20260626171614",
+  "goal": "сделай защищённый корпоративный чат",
+  "created_at": "2026-06-26T17:16:14",
+  "status": "orchestrated",
+  "workflow": "kanban_agentic_orchestra",
+  "source_video": "https://www.youtube.com/watch?v=EKVRqcpTT6s",
+  "orchestra": {
+    "single_source_of_truth": "projects/<slug>/tasks.json + agents/queue.json",
+    "rubric_threshold": 65,
+    "human_gates": [
+      "T010"
+    ],
+    "agent_roles": [
+      "x-scout",
+      "web-scout",
+      "orchestrator",
+      "researcher-source",
+      "researcher-context",
+      "researcher-solutions",
+      "analyst",
+      "builder",
+      "tester",
+      "video-producer",
+      "approval-guard"
+    ]
+  }
+}

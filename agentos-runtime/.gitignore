@@ -1,0 +1,16 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python/cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime outputs
+logs/runtime/
+voice/transcripts/
+voice/input.txt
+voice/last_*.txt
+voice/last_result.json

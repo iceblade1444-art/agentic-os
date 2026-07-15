@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-22",
+  "policy": {
+    "default_risk": "medium",
+    "default_requires_approval": true,
+    "secrets_allowed_locations": [
+      ".env",
+      "process_environment"
+    ],
+    "secrets_forbidden_locations": [
+      "dashboard/frontend",
+      "reports",
+      "logs",
+      "JSON configs",
+      "launcher scripts",
+      "generated artifacts"
+    ]
+  },
+  "tools": [
+    {
+      "name": "agentosctl.init",
+      "surface": "cli",
+      "description": "Create the local AgentOS workspace structure.",
+      "inputs": ["workspace"],
+      "outputs": ["folders", "README.md"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "agentosctl.new_goal",
+      "surface": "cli",
+      "description": "Create a project brief and task graph from a user goal.",
+      "inputs": ["goal", "optional slug"],
+      "outputs": ["project.json", "project-brief.md", "tasks.json", "daily log"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "agentosctl.run_demo.landing_page",
+      "surface": "cli",
+      "description": "Generate and verify the local AI SEO landing-page demo.",
+      "inputs": ["workspace"],
+      "outputs": ["projects/ai-seo-landing-page-demo/index.html", "qa-report.md"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "dashboard.status",
+      "surface": "api",
+      "endpoint": "/api/status",
+      "description": "Read project and approval counts.",
+      "inputs": [],
+      "outputs": ["workspace status summary"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "dashboard.production_readiness",
+      "surface": "api",
+      "endpoint": "/api/production-readiness",
+      "description": "Read release readiness and safe worker state.",
+      "inputs": [],
+      "outputs": ["release checks", "worker state", "optional blockers"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+      "secret_handling": "presence_only"
+    },
+    {
+      "name": "dashboard.runtime_diagnostics",
+      "surface": "api",
+      "endpoint": "/api/dashboard/runtime-diagnostics",
+      "description": "Read process, provider, and secret-presence diagnostics.",
+      "inputs": [],
+      "outputs": ["redacted diagnostics"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+      "secret_handling": "presence_only"
+    },
+    {
+      "name": "approval.request",
+      "surface": "cli/api",
+      "description": "Create an approval record for risky work.",
+      "inputs": ["action", "summary", "risk"],
+      "outputs": ["approval record"],
+      "risk": "medium",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "approval.approve_or_deny",
+      "surface": "cli/api",
+      "description": "Change an approval decision.",
+      "inputs": ["approval id", "decision"],
+      "outputs": ["updated approval record"],
+      "risk": "high",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "agent_queue.execute",
+      "surface": "api",
+      "endpoint": "/api/agent-queue/execute",
+      "description": "Execute queued agent work.",
+      "inputs": ["queue item"],
+      "outputs": ["queue run", "artifacts", "events"],
+      "risk": "medium",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "agent_worker.enable",
+      "surface": "api",
+      "endpoint": "/api/agent-worker/enable",
+      "description": "Enable the worker daemon after approval.",
+      "inputs": ["approval id"],
+      "outputs": ["agent-worker config"],
+      "risk": "high",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "voice.local_file",
+      "surface": "cli/api",
+      "description": "Read command text from a local file and route it through the command bridge.",
+      "inputs": ["voice/input.txt"],
+      "outputs": ["transcript", "command result"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "voice.gemini_live",
+      "surface": "provider",
+      "description": "Gemini Live voice layer for recognition and normalization.",
+      "inputs": ["audio/text session"],
+      "outputs": ["normalized command", "transcript"],
+      "risk": "medium",
+      "requires_approval": false,
+      "credentials": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+      "secret_handling": "environment_only"
+    },
+    {
+      "name": "external.send_email",
+      "surface": "future-tool",
+      "description": "Send email outside the local workspace.",
+      "inputs": ["recipient", "subject", "body"],
+      "outputs": ["external email"],
+      "risk": "high",
+      "requires_approval": true,
+      "credentials": ["email_provider_credentials"]
+    },
+    {
+      "name": "external.publish_or_deploy",
+      "surface": "future-tool",
+      "description": "Publish content or deploy software outside the local workspace.",
+      "inputs": ["target", "artifact"],
+      "outputs": ["external production change"],
+      "risk": "high",
+      "requires_approval": true,
+      "credentials": ["deployment_credentials"]
+    }
+  ]
+}

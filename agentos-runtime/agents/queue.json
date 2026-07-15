@@ -1,0 +1,78 @@
+[
+  {
+    "queue_id": "goal-20260626171614:T011",
+    "project": "goal-20260626171614",
+    "task_id": "T011",
+    "objective": "Builder agent: create persistent prototype/tool artifact after approval",
+    "owner": "builder",
+    "risk_level": "low",
+    "lane": "fulfill",
+    "acceptance_criteria": [
+      "Artifact or decision persisted",
+      "Audit event recorded"
+    ],
+    "planned_artifacts": [
+      "prototype.md"
+    ],
+    "depends_on": [
+      "T010"
+    ],
+    "created_at": "2026-07-14T11:07:34",
+    "status": "queued",
+    "claimed_by": null,
+    "claimed_at": null,
+    "started_at": null,
+    "completed_at": null,
+    "failed_at": null,
+    "cancelled_at": null,
+    "cancel_reason": null,
+    "last_error": null,
+    "retry_count": 0,
+    "artifacts": [],
+    "result_summary": null,
+    "executor": null,
+    "log_path": null,
+    "lease_owner": null,
+    "lease_acquired_at": null,
+    "lease_expires_at": null,
+    "heartbeat_at": null
+  },
+  {
+    "queue_id": "goal-20260626171614:T013",
+    "project": "goal-20260626171614",
+    "task_id": "T013",
+    "objective": "Video producer: generate slide/script deliverable after approval",
+    "owner": "video-producer",
+    "risk_level": "low",
+    "lane": "fulfill",
+    "acceptance_criteria": [
+      "Artifact or decision persisted",
+      "Audit event recorded"
+    ],
+    "planned_artifacts": [
+      "slides-and-speaker-notes.md"
+    ],
+    "depends_on": [
+      "T010"
+    ],
+    "created_at": "2026-07-14T11:07:34",
+    "status": "queued",
+    "claimed_by": null,
+    "claimed_at": null,
+    "started_at": null,
+    "completed_at": null,
+    "failed_at": null,
+    "cancelled_at": null,
+    "cancel_reason": null,
+    "last_error": null,
+    "retry_count": 0,
+    "artifacts": [],
+    "result_summary": null,
+    "executor": null,
+    "log_path": null,
+    "lease_owner": null,
+    "lease_acquired_at": null,
+    "lease_expires_at": null,
+    "heartbeat_at": null
+  }
+]

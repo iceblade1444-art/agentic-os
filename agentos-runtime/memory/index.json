@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-22",
+  "policy": {
+    "human_readable_source": "markdown",
+    "update_memory_after": [
+      "successful runs",
+      "explicit user instruction",
+      "durable project or business decisions"
+    ],
+    "do_not_store": [
+      "API keys",
+      "passwords",
+      "temporary run noise",
+      "unapproved external action details",
+      "raw private transcripts unless explicitly needed"
+    ]
+  },
+  "sources": [
+    {
+      "id": "user_profile",
+      "path": "memory/user-profile.md",
+      "purpose": "Stable user preferences and operating context.",
+      "load_when": ["planning", "voice personalization", "final reporting"]
+    },
+    {
+      "id": "business_context",
+      "path": "memory/business-context.md",
+      "purpose": "Business goals, audience, products, and durable constraints.",
+      "load_when": ["planning", "content work", "product work"]
+    },
+    {
+      "id": "brand_voice",
+      "path": "memory/brand-voice.md",
+      "purpose": "Tone and writing preferences for generated content.",
+      "load_when": ["content work", "dashboard copy", "reports"]
+    },
+    {
+      "id": "decisions",
+      "path": "memory/decisions.md",
+      "purpose": "Durable architecture and product decisions.",
+      "load_when": ["architecture changes", "roadmap updates", "risk review"]
+    },
+    {
+      "id": "active_projects",
+      "path": "memory/active-projects.md",
+      "purpose": "Human-readable list of active initiatives.",
+      "load_when": ["planning", "status reporting", "prioritization"]
+    }
+  ],
+  "derived_context": {
+    "projects": "projects/*/project.json",
+    "tasks": "projects/*/tasks.json",
+    "approvals": "approvals/approvals.json",
+    "events": "logs/events.json",
+    "daily_reports": "logs/daily/*.md"
+  }
+}

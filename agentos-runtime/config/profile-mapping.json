@@ -1,0 +1,7 @@
+{
+  "orchestrator": "default",
+  "content-agent": "default",
+  "coding-agent": "default",
+  "qa-agent": "default",
+  "email-agent": "default"
+}

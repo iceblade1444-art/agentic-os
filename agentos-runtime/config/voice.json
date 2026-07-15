@@ -1,0 +1,34 @@
+{
+  "default_provider": "gemini_live",
+  "providers": {
+    "mock_text": {
+      "enabled": true,
+      "mode": "text_to_command",
+      "description": "Development provider: use supplied text as if it was recognized speech."
+    },
+    "local_file": {
+      "enabled": true,
+      "mode": "file_to_command",
+      "input_file": "C:/Users/User/AgentOS/voice/input.txt",
+      "description": "Read recognized text from a file written by an external STT tool."
+    },
+    "gemini_live": {
+      "enabled": true,
+      "allow_env_credentials": true,
+      "mode": "voice_to_voice",
+      "api_key_env": "GEMINI_API_KEY",
+      "fallback_api_key_env": "GOOGLE_API_KEY",
+      "model": "gemini-live-3.1",
+      "native_audio_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+      "native_audio_voice": "Leda",
+      "websocket_path": "/ws/mila/voice",
+      "transport": "websocket_or_sdk",
+      "description": "Planned Gemini Live voice-to-voice provider. Disabled until API key and exact model endpoint are configured."
+    }
+  },
+  "safety": {
+    "route_actions_through_command_bridge": true,
+    "require_approval_for_high_risk_intents": true,
+    "store_last_transcript": true
+  }
+}

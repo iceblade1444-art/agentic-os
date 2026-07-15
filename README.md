@@ -1,5 +1,30 @@
 # Agentic OS — Dashboard
 
+## Production architecture
+
+The repository contains the public Agentic OS visual and the private Python
+runtime used by Mila:
+
+```text
+index.html + server/       public visual and Node API on port 8787
+agentos-runtime/           Python orchestration runtime on port 8765
+vault/                     shared Obsidian Markdown vault
+Hermes Agent               installed for the Linux deploy user
+```
+
+Start or update both services with:
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:8765/api/mila/status
+```
+
+The root domain must continue to point to the Node service on port `8787`.
+Keep port `8765` private until the runtime API has a reviewed authentication
+and proxy layer. Deployment details and rollback steps live in
+`agentos-runtime/sops/production-deploy-agent-milanapremium.md`.
+
 **The operating system for AI agents.** A fully-functional, dependency-free web dashboard to
 build, run and orchestrate intelligent agents — agents, chat, a visual workflow builder,
 knowledge/memory, MCP servers, integrations, evaluations, observability, guardrails and secrets.

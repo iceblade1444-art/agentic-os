@@ -19,3 +19,33 @@ services:
     volumes:
       - ./data:/app/data        # persists db.json (missions, MCP servers, integrations)
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
+
+  agentos-runtime:
+    build:
+      context: ./agentos-runtime
+    image: agentos-runtime:latest
+    container_name: agentos-runtime
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - ./agentos-runtime/.env
+    environment:
+      - HOME=/home/admilana
+      - OBSIDIAN_VAULT_PATH=/app/obsidian-vault
+      - PATH=/home/admilana/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+    ports:
+      - "${RUNTIME_BIND_ADDRESS:-127.0.0.1}:${RUNTIME_HOST_PORT:-8765}:8765"
+    volumes:
+      - ./vault:/app/obsidian-vault
+      - ./agentos-runtime/agents:/app/agents
+      - ./agentos-runtime/approvals:/app/approvals
+      - ./agentos-runtime/artifacts:/app/artifacts
+      - ./agentos-runtime/drafts:/app/drafts
+      - ./agentos-runtime/exports:/app/exports
+      - ./agentos-runtime/logs:/app/logs
+      - ./agentos-runtime/memory:/app/memory
+      - ./agentos-runtime/projects:/app/projects
+      - ./agentos-runtime/work:/app/work
+      - /home/admilana/.hermes:/home/admilana/.hermes
+      - /home/admilana/.local/share/uv:/home/admilana/.local/share/uv:ro
+      - /home/admilana/.local/bin/hermes:/home/admilana/.local/bin/hermes:ro

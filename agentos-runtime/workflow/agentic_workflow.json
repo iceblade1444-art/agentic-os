@@ -1,0 +1,118 @@
+{
+  "name": "agentos-seo-content-pipeline",
+  "board": "agentos-content",
+  "workspace_root": "work/seo-pipeline",
+  "cost_gate_usd": 5,
+  "template_reference": "tonbistudio/hermes-multi-agent-workflow",
+  "sources": [
+    {
+      "id": "transcripts",
+      "profile": "voice",
+      "skill": "transcript-scout",
+      "schedule": "live",
+      "query": "Find reusable source material in voice transcripts and meeting notes."
+    },
+    {
+      "id": "keyword-web",
+      "profile": "researcher",
+      "skill": "keyword-scout",
+      "schedule": "manual",
+      "query": "Find search intent, SERP gaps, competitors, and supporting URLs."
+    },
+    {
+      "id": "projects",
+      "profile": "workspace",
+      "skill": "project-scout",
+      "schedule": "manual",
+      "query": "Use AgentOS project context, reports, and app-builder artifacts."
+    }
+  ],
+  "item_schema": {
+    "fields": ["title", "keyword", "slug", "sources", "intent", "audience", "strategic_fit"]
+  },
+  "dedup": {
+    "method": "token-cosine",
+    "duplicate_threshold": 0.62,
+    "possible_threshold": 0.4
+  },
+  "rubric": {
+    "threshold": 65,
+    "dimensions": [
+      {"dimension": "search_intent", "max": 25, "hint": "keyword has clear intent and article angle"},
+      {"dimension": "source_strength", "max": 20, "hint": "transcripts/projects/web sources support the article"},
+      {"dimension": "conversion_fit", "max": 20, "hint": "fits funnel and product positioning"},
+      {"dimension": "differentiation", "max": 20, "hint": "can produce non-generic, useful content"},
+      {"dimension": "publish_safety", "max": 15, "hint": "low risk of secrets, claims, or unsafe publishing"}
+    ]
+  },
+  "research_lanes": {
+    "role": "researcher",
+    "lanes": ["verify_sources", "serp_gap_audit", "outline_brief", "risk_review"],
+    "classifier_lane": "serp_gap_audit"
+  },
+  "route": {
+    "classifier": "serp_gap_audit.solution_quality",
+    "map": {
+      "missing": "article_pack",
+      "weak": "article_pack",
+      "crowded": "brief_only",
+      "unsafe": "shelve",
+      "good": "refresh_existing"
+    }
+  },
+  "paths": {
+    "article_pack": {
+      "prep": [
+        {"stage": "synthesize_brief", "role": "analyst"},
+        {"stage": "draft_proposal", "role": "orchestrator"}
+      ],
+      "propose": {"role": "orchestrator", "template": "paths/proposals/seo-article-pack.md"},
+      "fulfill": [
+        {"stage": "write_articles", "role": "writer"},
+        {"stage": "edit_and_fact_check", "role": "editor"},
+        {"stage": "publish_package", "role": "orchestrator"}
+      ],
+      "workspace_subdir": "article-packs",
+      "scope_rails": "no external publish without approval; redact secrets; cite sources"
+    },
+    "brief_only": {
+      "prep": [{"stage": "make_content_brief", "role": "analyst"}],
+      "propose": {"role": "orchestrator"},
+      "fulfill": [{"stage": "deliver_brief", "role": "orchestrator"}],
+      "workspace_subdir": "briefs"
+    },
+    "refresh_existing": {
+      "prep": [{"stage": "refresh_plan", "role": "analyst"}],
+      "propose": {"role": "orchestrator"},
+      "fulfill": [
+        {"stage": "update_existing", "role": "writer"},
+        {"stage": "final_report", "role": "orchestrator"}
+      ],
+      "workspace_subdir": "refreshes"
+    },
+    "shelve": {"auto": true}
+  },
+  "roles": {
+    "orchestrator": "Hermes",
+    "researcher": "Claude",
+    "analyst": "OpenClaw",
+    "writer": "Gemini",
+    "editor": "Codex",
+    "tester": "Hermes"
+  },
+  "gate": {
+    "channel": "AgentOS approvals",
+    "approve": ["approve"],
+    "shelve": ["shelve", "reject"],
+    "modify": ["modify"],
+    "single_human_gate": true
+  },
+  "gotchas_preserved": [
+    "scouts only detect",
+    "route waits for all research lanes",
+    "one human gate",
+    "persistent workspace for fulfill",
+    "status is not delivery",
+    "no auto-publish"
+  ]
+}

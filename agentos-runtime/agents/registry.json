@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "updated_at": "2026-06-26",
+  "mode": "single_agent",
+  "reference": {
+    "source": "AgentOS Mila single-orchestrator mode",
+    "pattern": "one visible agent, internal tool/model orchestration, Gemini Live for voice, GPT/OpenAI for reasoning when configured"
+  },
+  "status_values": ["real", "provider", "ui_only", "planned", "disabled"],
+  "agents": [
+    {
+      "id": "mila",
+      "display_name": "Mila",
+      "kind": "single_orchestrator_agent",
+      "status": "real",
+      "spec_path": "agents/mila.md",
+      "memory_path": "memory/mila-initial-memory.md",
+      "runner": "agentos_orchestrator",
+      "queue_owner": "mila",
+      "voice_provider": "gemini_live",
+      "reasoning_provider": "openai_gpt_when_configured",
+      "fallback_reasoning": "local_agentos_tools",
+      "tools": [
+        "voice.gemini_live",
+        "agentosctl",
+        "agent_queue",
+        "workflow.engine",
+        "approval.queue",
+        "project_files",
+        "tests",
+        "dashboard_api"
+      ],
+      "permissions": [
+        "orchestrate_goals",
+        "create_projects",
+        "create_tasks",
+        "write_local_artifacts",
+        "run_local_tests",
+        "create_internal_agents",
+        "update_memory",
+        "request_approval",
+        "read_workspace",
+        "write_workspace"
+      ],
+      "requires_approval_for_external_actions": true,
+      "notes": [
+        "Mila is the only visible agent in the dashboard.",
+        "Gemini Live is the speech-to-speech user conversation layer.",
+        "OpenAI GPT models are available only when OPENAI_API_KEY is configured in the local environment.",
+        "Mila may create internal helper agents as project/task artifacts when useful."
+      ]
+    }
+  ]
+}

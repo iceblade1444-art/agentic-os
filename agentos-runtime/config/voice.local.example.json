@@ -1,0 +1,13 @@
+{
+  "description": "Local overrides example. Copy to voice.local.json for safe toggles only. Put real keys in C:/Users/User/AgentOS/.env or OS environment variables, never in JSON config.",
+  "providers": {
+    "gemini_live": {
+      "enabled": false,
+      "allow_env_credentials": true,
+      "api_key_env": "GEMINI_API_KEY",
+      "fallback_api_key_env": "GOOGLE_API_KEY",
+      "model": "gemini-live-3.1",
+      "transport": "websocket_or_sdk"
+    }
+  }
+}

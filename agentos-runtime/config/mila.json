@@ -1,0 +1,50 @@
+{
+  "agent_id": "mila",
+  "display_name": "Mila",
+  "mode": "single_agent_orchestrator",
+  "voice": {
+    "conversation_provider": "gemini_live",
+    "speech_to_speech_only_provider": "gemini_live",
+    "nova_reference": {
+      "name": "AGENT NOVA voice assistant",
+      "backend_reference": "C:/AGENT NOVA/backend/app/api/v1/voice_ws.py",
+      "frontend_reference": "C:/AGENT NOVA/frontend/src/lib/voice-client.ts",
+      "pattern": "Browser PCM 16k -> AgentOS WebSocket -> Gemini Live native audio -> browser PCM 24k"
+    },
+    "runtime": {
+      "mode": "nova_style_live_assistant",
+      "primary_provider": "gemini_live",
+      "target_transport": "gemini_native_audio_websocket",
+      "websocket_path": "/ws/mila/voice",
+      "browser_fallback": "speech_recognition_and_speech_synthesis",
+      "native_audio_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+      "voice_name": "Leda",
+      "language_default": "ru-RU",
+      "states": ["idle", "listening", "thinking", "speaking", "tool_running", "blocked"],
+      "turn_loop": ["microphone", "transcript", "gemini_live", "command_bridge", "approval_gate", "result", "spoken_reply", "memory_writeback"],
+      "memory_writeback": "memory/mila-learnings.md"
+    }
+  },
+  "models": {
+    "reasoning_provider": "openai",
+    "openai_api_key_env": "OPENAI_API_KEY",
+    "fallback_provider": "local_agentos_tools"
+  },
+  "workspace_access": {
+    "read": true,
+    "write": true,
+    "create_projects": true,
+    "create_internal_agents": true,
+    "run_tests": true,
+    "update_memory": true
+  },
+  "safety": {
+    "secrets_never_written": true,
+    "external_actions_require_approval": true,
+    "destructive_actions_require_approval": true
+  },
+  "memory": {
+    "initial": "memory/mila-initial-memory.md",
+    "learnings": "memory/mila-learnings.md"
+  }
+}

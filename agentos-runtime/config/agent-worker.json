@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "enabled": false,
+  "mode": "preview",
+  "worker": "dashboard-agent",
+  "max_items_per_tick": 1,
+  "ttl_seconds": 300,
+  "interval_seconds": 60,
+  "preview_ttl_seconds": 900,
+  "dry_run": true,
+  "runtime_mode": "dry_run",
+  "filters": {
+    "queue_id": null,
+    "project": null,
+    "owner": null
+  },
+  "requires_approval": true,
+  "approval_action": "enable_agent_worker_daemon",
+  "updated_at": "2026-06-17T10:07:45",
+  "enable_approval_id": "approval_5c311b2be7",
+  "enable_requested_at": "2026-06-16T23:34:21",
+  "enabled_by_approval": "approval_5c311b2be7",
+  "enabled_at": "2026-06-16T23:34:21"
+}
