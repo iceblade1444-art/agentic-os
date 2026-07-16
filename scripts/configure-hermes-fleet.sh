@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERMES_BIN="${HERMES_BIN:-$HOME/.local/bin/hermes}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TEMPLATE_ROOT="$REPO_ROOT/hermes/fleet"
+PROFILE_ROOT="$HOME/.hermes/profiles"
+WORKSPACE_ROOT="${HERMES_FLEET_WORKSPACE_ROOT:-$HOME/hermes-workspaces}"
+
+if [[ ! -x "$HERMES_BIN" ]]; then
+  echo "Hermes CLI was not found at $HERMES_BIN" >&2
+  exit 1
+fi
+
+for role in orchestrator scout scribe reach dev; do
+  if [[ ! -d "$TEMPLATE_ROOT/$role" ]]; then
+    echo "Missing fleet template: $TEMPLATE_ROOT/$role" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$HOME/.hermes/backups" "$WORKSPACE_ROOT/shared"
+backup="$HOME/.hermes/backups/fleet-before-$(date +%Y%m%d-%H%M%S).zip"
+"$HERMES_BIN" backup --quick --output "$backup" --label "before Agentic OS fleet" >/dev/null
+chmod 600 "$backup"
+echo "Hermes backup: $backup"
+
+python3 - "$HOME/.hermes/SOUL.md" "$TEMPLATE_ROOT/orchestrator/SOUL_APPEND.md" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+target = Path(sys.argv[1])
+block = Path(sys.argv[2]).read_text(encoding="utf-8").strip()
+text = target.read_text(encoding="utf-8") if target.exists() else ""
+pattern = re.compile(
+    r"<!-- AGENTIC_OS_FLEET_START -->.*?<!-- AGENTIC_OS_FLEET_END -->",
+    re.DOTALL,
+)
+updated = pattern.sub(block, text) if pattern.search(text) else text.rstrip() + "\n\n" + block + "\n"
+target.write_text(updated.lstrip(), encoding="utf-8")
+PY
+chmod 600 "$HOME/.hermes/SOUL.md"
+
+"$HERMES_BIN" profile describe default --text \
+  "Primary Agentic OS orchestrator. Decomposes goals, routes work to specialist profiles, tracks approvals, and synthesizes results for the user in Telegram." >/dev/null
+
+"$HERMES_BIN" tools enable kanban --platform cli >/dev/null
+"$HERMES_BIN" tools enable kanban --platform telegram >/dev/null
+"$HERMES_BIN" config set kanban.orchestrator_profile default >/dev/null
+"$HERMES_BIN" config set kanban.max_in_progress 2 >/dev/null
+"$HERMES_BIN" config set kanban.max_in_progress_per_profile 1 >/dev/null
+"$HERMES_BIN" config set kanban.auto_promote_children true >/dev/null
+
+configure_profile() {
+  local name="$1" description="$2" memory_mb="$3"
+  local profile_home="$PROFILE_ROOT/$name"
+  local workspace="$WORKSPACE_ROOT/$name"
+  local volumes
+
+  if [[ ! -d "$profile_home" ]]; then
+    "$HERMES_BIN" profile create "$name" --clone-from default --description "$description"
+  else
+    "$HERMES_BIN" profile describe "$name" --text "$description" >/dev/null
+  fi
+
+  mkdir -p "$workspace"
+  install -m 600 "$TEMPLATE_ROOT/$name/SOUL.md" "$profile_home/SOUL.md"
+  install -m 644 "$TEMPLATE_ROOT/$name/AGENTS.md" "$workspace/AGENTS.md"
+
+  volumes="[\"$workspace:$workspace\",\"$HOME/.hermes/cache/documents:/output\"]"
+  ENV_PATH="$profile_home/.env" DOCKER_VOLUMES="$volumes" python3 <<'PY'
+from pathlib import Path
+import os
+
+path = Path(os.environ["ENV_PATH"])
+updates = {
+    "TELEGRAM_BOT_TOKEN": "",
+    "TERMINAL_DOCKER_VOLUMES": os.environ["DOCKER_VOLUMES"],
+}
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+seen = set()
+out = []
+for line in lines:
+    key = line.split("=", 1)[0] if "=" in line and not line.lstrip().startswith("#") else None
+    if key in updates:
+        out.append(f"{key}={updates[key]}")
+        seen.add(key)
+    else:
+        out.append(line)
+for key, value in updates.items():
+    if key not in seen:
+        out.append(f"{key}={value}")
+path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+PY
+  chmod 600 "$profile_home/.env"
+
+  "$HERMES_BIN" -p "$name" config set terminal.cwd "$workspace" >/dev/null
+  "$HERMES_BIN" -p "$name" config set terminal.docker_volumes "$volumes" >/dev/null
+  "$HERMES_BIN" -p "$name" config set terminal.container_cpu 1 >/dev/null
+  "$HERMES_BIN" -p "$name" config set terminal.container_memory "$memory_mb" >/dev/null
+}
+
+configure_profile scout \
+  "Research and trend intelligence: gathers primary sources, compares evidence, identifies market and product signals, and writes cited findings." 2048
+configure_profile scribe \
+  "Writing and content: turns research and rough ideas into clear drafts, documentation, briefs, scripts, and audience-aware edits." 2048
+configure_profile reach \
+  "Growth and monetization strategy: develops positioning, offers, campaigns, outreach drafts, partnerships, and measurable experiments." 2048
+configure_profile dev \
+  "Engineering and automation: implements and tests code, integrations, infrastructure changes, and operational tooling with reviewable handoffs." 4096
+
+"$HERMES_BIN" kanban init >/dev/null
+if "$HERMES_BIN" kanban boards list | grep -qE '(^|[[:space:]])agentic-os([[:space:]]|$)'; then
+  "$HERMES_BIN" kanban boards switch agentic-os >/dev/null
+else
+  "$HERMES_BIN" kanban boards create agentic-os \
+    --name "Agentic OS" \
+    --description "Shared work queue for the Hermes specialist fleet" \
+    --color "#7c3aed" \
+    --switch \
+    --default-workdir "$WORKSPACE_ROOT/shared" >/dev/null
+fi
+"$HERMES_BIN" kanban boards set-default-workdir agentic-os "$WORKSPACE_ROOT/shared" >/dev/null
+
+if systemctl --user is-active --quiet hermes-gateway.service; then
+  systemctl --user restart hermes-gateway.service
+fi
+
+echo
+"$HERMES_BIN" profile list
+echo
+"$HERMES_BIN" kanban assignees
+echo
+echo "Hermes fleet configured. Only the default profile owns the Telegram gateway."

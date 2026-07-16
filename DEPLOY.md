@@ -244,6 +244,36 @@ vault (a folder of `.md` files) to agents: `list_notes`, `read_note`, `search_no
 
 ---
 
+## 7. Configure the persistent Hermes fleet
+
+After the default Hermes profile, Telegram gateway, and Agentic OS MCP bridge work,
+create the four specialist profiles:
+
+```bash
+cd /home/admilana/agentic-os
+bash scripts/configure-hermes-fleet.sh
+```
+
+The default profile remains the only Telegram-facing orchestrator. `scout`, `scribe`,
+`reach`, and `dev` inherit the configured model and MCP bridge but receive isolated
+Hermes state, memory, `SOUL.md`, workspace, Docker mount, and profile description.
+Those descriptions are used by Hermes Kanban when routing cards. The installer caps
+the board at two concurrent workers and one task per profile to fit an 8 GB server.
+
+Verify the fleet:
+
+```bash
+hermes profile list
+hermes kanban assignees
+hermes kanban boards list
+systemctl --user is-active hermes-gateway.service
+```
+
+Do not start a gateway for a specialist profile unless it has its own messaging bot
+token. The installer intentionally clears `TELEGRAM_BOT_TOKEN` in every specialist.
+
+---
+
 ## Security checklist
 
 - [ ] `AUTH_TOKEN` set to a long random value (`openssl rand -hex 32`)

@@ -19,6 +19,23 @@ and a persistent audit identifying which agent listed, searched, read, created,
 or updated a note. Agentic OS auto-starts the bundled Obsidian MCP server unless
 `AUTO_CONNECT_OBSIDIAN=false`.
 
+### Hermes specialist fleet
+
+The repository includes a reproducible five-role Hermes setup under `hermes/fleet/`:
+
+- `default` — the existing Telegram orchestrator and final user-facing authority;
+- `scout` — research and trend intelligence;
+- `scribe` — writing, documentation, and content;
+- `reach` — growth, marketing, outreach drafts, and monetization strategy;
+- `dev` — engineering, automation, and integrations.
+
+Run `bash scripts/configure-hermes-fleet.sh` on the server after Hermes is configured.
+It makes a private quick backup, creates or updates the four persistent profiles,
+removes their Telegram bot token, gives each profile a dedicated workspace and
+Docker mount, enables the native Hermes Kanban toolset for the orchestrator, and
+creates the `agentic-os` board. The script is idempotent and never starts specialist
+gateways.
+
 Start or update both services with:
 
 ```bash
