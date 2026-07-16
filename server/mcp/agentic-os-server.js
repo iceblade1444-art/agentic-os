@@ -15,7 +15,11 @@ const BASE = (process.env.AGENTIC_OS_URL || "http://127.0.0.1:8787").replace(/\/
 const TOKEN = process.env.AGENTIC_OS_TOKEN || "";
 
 async function api(path, opts = {}) {
-  const headers = { "Content-Type": "application/json" };
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Agent-Name": process.env.AGENTIC_OS_ACTOR || "Hermes",
+    "X-Agent-Source": "hermes-mcp",
+  };
   if (TOKEN) headers.Authorization = "Bearer " + TOKEN;
   const res = await fetch(BASE + path, {
     method: opts.method || "GET",
@@ -64,6 +68,30 @@ server.registerTool("agentic_mila_status",
 server.registerTool("agentic_mila_connection_code",
   { description: "Create a 10-minute one-time code for connecting the MILA mobile app.", inputSchema: { label: z.string().optional() } },
   async ({ label }) => text(await api("/api/integrations/mila/connection-code", { method: "POST", body: { label: label || "MILA user" } })));
+
+server.registerTool("obsidian_status",
+  { description: "Check the shared Agentic OS Obsidian vault, note counts and MCP readiness.", inputSchema: {} },
+  async () => text(await api("/api/knowledge/status")));
+
+server.registerTool("obsidian_list_notes",
+  { description: "List Markdown notes in the shared Obsidian vault.", inputSchema: { query: z.string().optional() } },
+  async ({ query }) => text(await api(`/api/knowledge/notes${query ? `?q=${encodeURIComponent(query)}` : ""}`)));
+
+server.registerTool("obsidian_read_note",
+  { description: "Read one Markdown note from the shared Obsidian vault.", inputSchema: { path: z.string() } },
+  async ({ path }) => text(await api(`/api/knowledge/notes/read?path=${encodeURIComponent(path)}`)));
+
+server.registerTool("obsidian_search_notes",
+  { description: "Full-text search the shared Obsidian vault.", inputSchema: { query: z.string(), limit: z.number().optional() } },
+  async ({ query, limit }) => text(await api(`/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit || 20}`)));
+
+server.registerTool("obsidian_create_note",
+  { description: "Create a Markdown note in the shared Obsidian vault. Confirm the intended write with the user first.", inputSchema: { path: z.string(), content: z.string() } },
+  async ({ path, content }) => text(await api("/api/knowledge/notes", { method: "POST", body: { path, content } })));
+
+server.registerTool("obsidian_append_note",
+  { description: "Append durable knowledge to a Markdown note. Confirm the intended write with the user first.", inputSchema: { path: z.string(), text: z.string() } },
+  async ({ path, text: value }) => text(await api("/api/knowledge/notes/append", { method: "POST", body: { path, text: value } })));
 
 server.registerTool("agentic_run_llm",
   { description: "Run a one-shot LLM completion (sub-agent) through the Agentic OS model proxy.", inputSchema: { instructions: z.string().optional(), input: z.string(), model: z.string().optional() } },

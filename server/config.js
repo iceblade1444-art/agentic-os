@@ -15,6 +15,7 @@ export const config = {
   notion: env.NOTION_TOKEN || "",
   slack: env.SLACK_WEBHOOK_URL || "",
   obsidianVault: env.OBSIDIAN_VAULT || "./vault",
+  autoConnectObsidian: env.AUTO_CONNECT_OBSIDIAN !== "false",
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",

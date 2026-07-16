@@ -13,6 +13,12 @@ Hermes Agent               primary orchestrator, installed for the Linux deploy 
 Mila + Gemini Live         voice and conversation assistant
 ```
 
+The **Obsidian Library** page is the live view of `vault/`. It shows Markdown
+notes, folders, tags, wiki-links, MCP readiness, the tools available to Hermes,
+and a persistent audit identifying which agent listed, searched, read, created,
+or updated a note. Agentic OS auto-starts the bundled Obsidian MCP server unless
+`AUTO_CONNECT_OBSIDIAN=false`.
+
 Start or update both services with:
 
 ```bash

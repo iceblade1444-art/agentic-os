@@ -28,7 +28,7 @@ const NAV = [
     { route: "tools", icon: "tools", label: "Tools" },
   ]},
   { group: "Context", items: [
-    { route: "knowledge", icon: "knowledge", label: "Knowledge" },
+    { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },
     { route: "memory", icon: "memory", label: "Memory" },
     { route: "mcp", icon: "mcp", label: "MCP Servers" },
     { route: "integrations", icon: "integrations", label: "Integrations" },
