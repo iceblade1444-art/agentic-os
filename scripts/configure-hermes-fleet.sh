@@ -20,10 +20,16 @@ for role in orchestrator scout scribe reach dev; do
   fi
 done
 
-mkdir -p "$HOME/.hermes/backups" "$WORKSPACE_ROOT/shared"
-backup="$HOME/.hermes/backups/fleet-before-$(date +%Y%m%d-%H%M%S).zip"
-"$HERMES_BIN" backup --quick --output "$backup" --label "before Agentic OS fleet" >/dev/null
-chmod 600 "$backup"
+umask 077
+mkdir -p "$WORKSPACE_ROOT/shared"
+"$HERMES_BIN" backup --quick --label "before-agentic-os-fleet" >/dev/null
+backup="$(find "$HOME/.hermes/state-snapshots" -mindepth 1 -maxdepth 1 -type d \
+  -name '*-before-agentic-os-fleet' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)"
+if [[ -z "$backup" || ! -d "$backup" ]]; then
+  echo "Hermes did not create the required state snapshot" >&2
+  exit 1
+fi
+chmod -R go-rwx "$backup"
 echo "Hermes backup: $backup"
 
 python3 - "$HOME/.hermes/SOUL.md" "$TEMPLATE_ROOT/orchestrator/SOUL_APPEND.md" <<'PY'
