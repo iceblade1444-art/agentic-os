@@ -17,6 +17,7 @@ export const config = {
   obsidianVault: env.OBSIDIAN_VAULT || "./vault",
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
+  hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
 
   // ---- security ----
   authToken: env.AUTH_TOKEN || "",                       // empty = auth disabled (dev)

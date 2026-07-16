@@ -10,6 +10,7 @@ CONFIG_DIR="$HOME/.config/agentic-os"
 SERVICE_DIR="$HOME/.config/systemd/user"
 ENV_FILE="$CONFIG_DIR/hermes-dashboard.env"
 SERVICE_FILE="$SERVICE_DIR/hermes-dashboard.service"
+SOCKET_SERVICE_FILE="$SERVICE_DIR/hermes-dashboard-socket.service"
 
 for required in "$HOME/.local/bin/hermes" "$PYTHON" "$PIP" "$APP_ENV"; do
   if [ ! -e "$required" ]; then
@@ -85,16 +86,36 @@ RestartSec=5
 WantedBy=default.target
 EOF
 
-chmod 600 "$ENV_FILE" "$SERVICE_FILE"
-chmod +x "$ROOT/scripts/run-hermes-dashboard.sh"
+cat > "$SOCKET_SERVICE_FILE" <<EOF
+[Unit]
+Description=Private Unix socket bridge for Hermes Dashboard
+After=hermes-dashboard.service
+Requires=hermes-dashboard.service
+
+[Service]
+Type=simple
+Environment=HOME=$HOME
+ExecStart=/usr/bin/python3 $ROOT/scripts/hermes-socket-proxy.py $HOME/.local/state/agentic-os/hermes-dashboard.sock
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+
+chmod 600 "$ENV_FILE" "$SERVICE_FILE" "$SOCKET_SERVICE_FILE"
+chmod +x "$ROOT/scripts/run-hermes-dashboard.sh" "$ROOT/scripts/run-hermes-dashboard-stack.sh" "$ROOT/scripts/hermes-socket-proxy.py"
 systemctl --user daemon-reload
-systemctl --user enable --now hermes-dashboard.service
+systemctl --user enable hermes-dashboard.service hermes-dashboard-socket.service
+systemctl --user restart hermes-dashboard.service
+systemctl --user restart hermes-dashboard-socket.service
 
 # Linger needs sudo on some hosts. This user crontab fallback starts Hermes on
 # reboot even when the per-user systemd manager is not started until login.
 CRON_MARKER="# agentic-os-hermes-dashboard"
-CRON_LINE="@reboot sleep 30 && $ROOT/scripts/run-hermes-dashboard.sh >>$HOME/.local/state/agentic-os/hermes-dashboard.log 2>&1 $CRON_MARKER"
+CRON_LINE="@reboot sleep 30 && $ROOT/scripts/run-hermes-dashboard-stack.sh >>$HOME/.local/state/agentic-os/hermes-dashboard-stack.log 2>&1 $CRON_MARKER"
 { crontab -l 2>/dev/null | grep -Fv "$CRON_MARKER" || true; echo "$CRON_LINE"; } | crontab -
 
 echo "Hermes Dashboard service installed."
 systemctl --user --no-pager --full status hermes-dashboard.service | sed -n '1,16p'
+systemctl --user --no-pager --full status hermes-dashboard-socket.service | sed -n '1,16p'

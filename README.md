@@ -261,18 +261,19 @@ docker compose up -d --build
 ```
 
 The installer adds the official `web`/`pty` extras, builds Hermes' own React UI (using Docker when
-host npm is unavailable), creates a user
-`systemd` service and a reboot fallback, and configures Hermes' password provider. The username is
-`admin`; the password is the existing Agentic OS `AUTH_TOKEN`. Only a scrypt password hash and a
-separate random session-signing key are written to the private user config. Check it with:
+host npm is unavailable), creates user `systemd` services and a reboot fallback. Hermes stays on
+loopback and the Node container reaches it through a private owner-only Unix socket, so the
+existing Agentic OS login is the only browser login. A scrypt fallback password hash and a separate
+random session-signing key are still written to the private user config for fail-closed operation
+if the bind mode is changed later. Check it with:
 
 ```bash
 systemctl --user status hermes-dashboard
 curl -I http://127.0.0.1:8787/hermes/
 ```
 
-`HERMES_DASHBOARD_URL` defaults to `http://host.docker.internal:9119`. Compose maps that hostname
-to the Linux host gateway; firewall rules must keep port `9119` private.
+Production sets `HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock`. Port `9119` is
+loopback-only and is not reachable from the container network or public firewall.
 
 > The `agentic-os` MCP server is a thin stdio bridge over the REST API, so Hermes can run on the
 > same box or anywhere that can reach `AGENTIC_OS_URL`.

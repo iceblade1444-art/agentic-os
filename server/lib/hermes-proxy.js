@@ -1,4 +1,5 @@
 import httpProxy from "http-proxy";
+import http from "node:http";
 
 import { config } from "../config.js";
 import { isAuthed, requireAuth } from "./auth.js";
@@ -8,6 +9,10 @@ const PREFIX = "/hermes";
 export function stripHermesPrefix(url = "/") {
   const stripped = url.replace(/^\/hermes(?=\/|\?|$)/, "");
   return stripped || "/";
+}
+
+export function isBareHermesRequest(method, url) {
+  return method === "GET" && String(url || "").split("?", 1)[0] === PREFIX;
 }
 
 function forwardedHeaders(req) {
@@ -29,8 +34,11 @@ function rejectUpgrade(socket, status = "401 Unauthorized") {
 }
 
 export function createHermesProxy() {
+  const target = config.hermesDashboardSocket
+    ? { protocol: "http:", host: "localhost", hostname: "localhost", socketPath: config.hermesDashboardSocket }
+    : config.hermesDashboardUrl;
   const proxy = httpProxy.createProxyServer({
-    target: config.hermesDashboardUrl,
+    target,
     changeOrigin: true,
     ws: true,
     xfwd: true,
@@ -54,7 +62,12 @@ export function createHermesProxy() {
 }
 
 export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
-  app.get(PREFIX, requireAuth, (req, res) => res.redirect(302, `${PREFIX}/`));
+  app.use((req, res, next) => {
+    if (isBareHermesRequest(req.method, req.originalUrl || req.url)) {
+      return requireAuth(req, res, () => res.redirect(302, `${PREFIX}/`));
+    }
+    next();
+  });
   app.use(PREFIX, requireAuth, (req, res) => {
     req.url = stripHermesPrefix(req.originalUrl || req.url);
     proxy.web(req, res);
@@ -74,15 +87,35 @@ export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
 export async function hermesDashboardStatus(fetchImpl = fetch) {
   const checkedAt = new Date().toISOString();
   try {
-    const response = await fetchImpl(`${config.hermesDashboardUrl}/`, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(3000),
-      headers: { Host: new URL(config.hermesDashboardUrl).host },
-    });
+    let status;
+    if (config.hermesDashboardSocket) {
+      status = await new Promise((resolve, reject) => {
+        const request = http.request({
+          socketPath: config.hermesDashboardSocket,
+          path: "/",
+          method: "GET",
+          headers: { Host: "127.0.0.1:9119" },
+          timeout: 3000,
+        }, (response) => {
+          response.resume();
+          resolve(response.statusCode || 0);
+        });
+        request.on("timeout", () => request.destroy(new Error("Hermes Dashboard probe timed out")));
+        request.on("error", reject);
+        request.end();
+      });
+    } else {
+      const response = await fetchImpl(`${config.hermesDashboardUrl}/`, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(3000),
+        headers: { Host: new URL(config.hermesDashboardUrl).host },
+      });
+      status = response.status;
+    }
     return {
       configured: true,
-      ready: response.status >= 200 && response.status < 500,
-      status: response.status,
+      ready: status >= 200 && status < 500,
+      status,
       url: PREFIX + "/",
       checkedAt,
     };

@@ -128,12 +128,12 @@ docker compose up -d --build
 systemctl --user --no-pager status hermes-dashboard
 ```
 
-It listens on `0.0.0.0:9119` because the Node container reaches the Linux host
-through `host.docker.internal`. UFW must not allow `9119`; the only supported
-browser entry is the authenticated same-origin route
-`https://agent.milanapremium.uz/hermes/`. The official Hermes password provider
-uses username `admin`, the current Agentic OS admin password, a scrypt hash at
-rest and a separate private signing key.
+It listens only on `127.0.0.1:9119`. A user service forwards a private Unix
+socket into the Node container, avoiding any Docker-to-host network exception.
+The only supported browser entry is the authenticated same-origin route
+`https://agent.milanapremium.uz/hermes/`; the existing Agentic OS session is the
+browser gate. A scrypt fallback hash and separate private signing key remain in
+the user-only config for fail-closed operation if the bind mode changes later.
 
 ### Obsidian
 

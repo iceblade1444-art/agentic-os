@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { hermesDashboardStatus, stripHermesPrefix } from "../server/lib/hermes-proxy.js";
+import { hermesDashboardStatus, isBareHermesRequest, stripHermesPrefix } from "../server/lib/hermes-proxy.js";
 
 test("Hermes proxy strips only its mounted prefix", () => {
   assert.equal(stripHermesPrefix("/hermes"), "/");
   assert.equal(stripHermesPrefix("/hermes/"), "/");
   assert.equal(stripHermesPrefix("/hermes/api/status?profile=default"), "/api/status?profile=default");
   assert.equal(stripHermesPrefix("/hermes-chat"), "/hermes-chat");
+});
+
+test("Hermes root redirect does not loop on the slash route", () => {
+  assert.equal(isBareHermesRequest("GET", "/hermes"), true);
+  assert.equal(isBareHermesRequest("GET", "/hermes?profile=default"), true);
+  assert.equal(isBareHermesRequest("GET", "/hermes/"), false);
+  assert.equal(isBareHermesRequest("POST", "/hermes"), false);
 });
 
 test("Hermes control status treats login redirects as a ready dashboard", async () => {

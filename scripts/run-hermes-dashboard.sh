@@ -16,7 +16,7 @@ if ss -ltn 2>/dev/null | grep -q ':9119 '; then
 fi
 
 exec "$HOME/.local/bin/hermes" dashboard \
-  --host 0.0.0.0 \
+  --host 127.0.0.1 \
   --port 9119 \
   --no-open \
   --skip-build

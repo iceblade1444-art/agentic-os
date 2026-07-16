@@ -13,6 +13,7 @@ services:
       - DATA_DIR=/app/data
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
+      - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
     ports:
       # Keep localhost for a proxy on this host. Set BIND_ADDRESS to the server's
       # private/LAN IP when the reverse proxy runs on another machine.
@@ -20,10 +21,9 @@ services:
     volumes:
       - ./data:/app/data        # persists db.json (missions, MCP servers, integrations)
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
+      - /home/admilana/.local/state/agentic-os:/run/agentic-os
     depends_on:
       - agentos-runtime
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   agentos-runtime:
     build:
