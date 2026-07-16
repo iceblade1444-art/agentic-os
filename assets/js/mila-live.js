@@ -1,6 +1,22 @@
 const LIVE_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained";
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
+const FRAME_INTERVAL_MS = 1050;
+
+export function isTranscriptPlausible(text, language = "auto") {
+  const value = String(text || "");
+  if (!value || language === "auto") return true;
+  const letters = value.match(/\p{L}/gu) || [];
+  if (letters.length < 2) return true;
+  const unexpected = language === "ru-RU"
+    ? value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
+    : language === "en-US"
+      ? value.match(/[\u0400-\u052f\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
+      : value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || [];
+  return unexpected.length / letters.length < 0.35;
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function bytesToBase64(bytes) {
   let binary = "";
@@ -70,6 +86,11 @@ export class MilaLiveSession {
     this.currentAssistant = "";
     this.readyResolve = null;
     this.readyReject = null;
+    this.speechRecognition = null;
+    this.recognitionFinal = "";
+    this.recognitionShouldRun = false;
+    this.browserTranscription = false;
+    this.transcriptWarningSent = false;
   }
 
   async start() {
@@ -92,6 +113,7 @@ export class MilaLiveSession {
     this.ready = false;
     this._commitTurn();
     this._clearPlayback();
+    this._stopSpeechRecognition();
     if (this.socket && this.socket.readyState < WebSocket.CLOSING) this.socket.close(1000, "Session ended");
     this.socket = null;
     await this._cleanupAudio();
@@ -101,16 +123,101 @@ export class MilaLiveSession {
   toggleMute() {
     this.muted = !this.muted;
     for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
+    if (this.muted) {
+      if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+      this._stopSpeechRecognition();
+      this.options.onLevel?.("input", 0);
+    } else this._startSpeechRecognition();
     this._state(this.muted ? "muted" : "listening");
     return this.muted;
   }
 
   sendText(text) {
+    return this.sendTurn({ prompt: text, displayText: text });
+  }
+
+  async sendTurn({ prompt, displayText, images = [] }) {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) throw new Error("Mila Live is not connected");
-    this.currentUser = text;
-    this.options.onPartial?.("user", text);
-    this.socket.send(JSON.stringify({ realtimeInput: { text } }));
+    const message = String(prompt || "").trim();
+    if (!message) throw new Error("Add a message or attachment");
+    this.currentUser = String(displayText || message).trim();
+    this.options.onPartial?.("user", this.currentUser);
+    for (let index = 0; index < images.length; index++) {
+      const item = images[index];
+      this.socket.send(JSON.stringify({
+        realtimeInput: { video: { data: item.data, mimeType: item.type || "image/jpeg" } },
+      }));
+      if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
+    }
+    this.socket.send(JSON.stringify({ realtimeInput: { text: message } }));
     this._state("thinking");
+  }
+
+  _startSpeechRecognition() {
+    const language = this.options.transcriptionLanguage || "auto";
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
+      this.browserTranscription = false;
+      this.options.onTranscriptionMode?.("gemini");
+      return;
+    }
+    this._stopSpeechRecognition();
+    const recognition = new Recognition();
+    recognition.lang = language;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    this.speechRecognition = recognition;
+    this.recognitionShouldRun = true;
+    this.browserTranscription = true;
+    this.options.onTranscriptionMode?.("browser");
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index++) {
+        const result = event.results[index];
+        const value = result[0]?.transcript?.trim() || "";
+        if (!value) continue;
+        if (result.isFinal) this.recognitionFinal = `${this.recognitionFinal} ${value}`.trim();
+        else interim = `${interim} ${value}`.trim();
+      }
+      const value = `${this.recognitionFinal} ${interim}`.trim();
+      if (!value) return;
+      if (!isTranscriptPlausible(value, language)) {
+        if (!this.transcriptWarningSent) this.options.onTranscriptWarning?.();
+        this.transcriptWarningSent = true;
+        return;
+      }
+      this.currentUser = value;
+      this.options.onPartial?.("user", value);
+      if (!this.currentAssistant) this._state("thinking");
+    };
+    recognition.onerror = (event) => {
+      if (["no-speech", "aborted"].includes(event.error)) return;
+      this.browserTranscription = false;
+      this.recognitionShouldRun = false;
+      this.options.onTranscriptionMode?.("gemini");
+    };
+    recognition.onend = () => {
+      if (!this.recognitionShouldRun || !this.ready || this.muted || this.intentionalClose) return;
+      setTimeout(() => {
+        try { recognition.start(); } catch { this.options.onTranscriptionMode?.("gemini"); }
+      }, 180);
+    };
+    try { recognition.start(); }
+    catch {
+      this.browserTranscription = false;
+      this.recognitionShouldRun = false;
+      this.options.onTranscriptionMode?.("gemini");
+    }
+  }
+
+  _stopSpeechRecognition() {
+    this.recognitionShouldRun = false;
+    const recognition = this.speechRecognition;
+    if (recognition) recognition.onend = null;
+    try { recognition?.stop(); } catch { /* already stopped */ }
+    this.speechRecognition = null;
+    this.browserTranscription = false;
   }
 
   async _openAudio() {
@@ -189,6 +296,7 @@ export class MilaLiveSession {
     if (message.setupComplete) {
       this.ready = true;
       this._state("listening");
+      this._startSpeechRecognition();
       this.readyResolve?.();
       return;
     }
@@ -201,10 +309,15 @@ export class MilaLiveSession {
         this._state("listening");
       }
       const userText = content.inputTranscription?.text;
-      if (userText) {
-        this.currentUser += userText;
-        this.options.onPartial?.("user", this.currentUser);
-        if (!this.currentAssistant) this._state("thinking");
+      if (userText && !this.browserTranscription) {
+        if (isTranscriptPlausible(userText, this.options.transcriptionLanguage)) {
+          this.currentUser += userText;
+          this.options.onPartial?.("user", this.currentUser);
+          if (!this.currentAssistant) this._state("thinking");
+        } else if (!this.transcriptWarningSent) {
+          this.transcriptWarningSent = true;
+          this.options.onTranscriptWarning?.();
+        }
       }
       const assistantText = content.outputTranscription?.text;
       if (assistantText) {
@@ -285,11 +398,14 @@ export class MilaLiveSession {
     if (user || assistant) this.options.onTurn?.({ user, assistant });
     this.currentUser = "";
     this.currentAssistant = "";
+    this.recognitionFinal = "";
+    this.transcriptWarningSent = false;
     this.options.onPartial?.("user", "");
     this.options.onPartial?.("assistant", "");
   }
 
   async _cleanupAudio() {
+    this._stopSpeechRecognition();
     if (this.processor) this.processor.onaudioprocess = null;
     try { this.processor?.disconnect(); } catch { /* disconnected */ }
     try { this.inputSource?.disconnect(); } catch { /* disconnected */ }
