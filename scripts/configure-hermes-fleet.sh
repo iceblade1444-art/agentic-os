@@ -2,6 +2,7 @@
 set -euo pipefail
 
 HERMES_BIN="${HERMES_BIN:-$HOME/.local/bin/hermes}"
+HERMES_PYTHON="${HERMES_PYTHON:-$HOME/.hermes/hermes-agent/venv/bin/python}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATE_ROOT="$REPO_ROOT/hermes/fleet"
@@ -10,6 +11,10 @@ WORKSPACE_ROOT="${HERMES_FLEET_WORKSPACE_ROOT:-$HOME/hermes-workspaces}"
 
 if [[ ! -x "$HERMES_BIN" ]]; then
   echo "Hermes CLI was not found at $HERMES_BIN" >&2
+  exit 1
+fi
+if [[ ! -x "$HERMES_PYTHON" ]]; then
+  echo "Hermes Python was not found at $HERMES_PYTHON" >&2
   exit 1
 fi
 
@@ -32,6 +37,28 @@ fi
 chmod -R go-rwx "$backup"
 echo "Hermes backup: $backup"
 
+set_profile_toolsets() {
+  local config_path="$1"
+  shift
+  "$HERMES_PYTHON" - "$config_path" "$@" <<'PY'
+from pathlib import Path
+import os
+import stat
+import sys
+import yaml
+
+path = Path(sys.argv[1])
+toolsets = sys.argv[2:]
+config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+config["toolsets"] = toolsets
+mode = stat.S_IMODE(path.stat().st_mode)
+tmp = path.with_name(path.name + ".fleet.tmp")
+tmp.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+os.chmod(tmp, mode)
+os.replace(tmp, path)
+PY
+}
+
 python3 - "$HOME/.hermes/SOUL.md" "$TEMPLATE_ROOT/orchestrator/SOUL_APPEND.md" <<'PY'
 from pathlib import Path
 import re
@@ -52,8 +79,20 @@ chmod 600 "$HOME/.hermes/SOUL.md"
 "$HERMES_BIN" profile describe default --text \
   "Primary Agentic OS orchestrator. Decomposes goals, routes work to specialist profiles, tracks approvals, and synthesizes results for the user in Telegram." >/dev/null
 
+set_profile_toolsets "$HOME/.hermes/config.yaml" hermes-cli kanban
 "$HERMES_BIN" tools enable kanban --platform cli >/dev/null
 "$HERMES_BIN" tools enable kanban --platform telegram >/dev/null
+"$HERMES_PYTHON" - "$HOME/.hermes/config.yaml" <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+config = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8")) or {}
+platforms = config.get("platform_toolsets") or {}
+missing = [name for name in ("cli", "telegram") if "kanban" not in platforms.get(name, [])]
+if missing:
+    raise SystemExit("Kanban toolset was not enabled for: " + ", ".join(missing))
+PY
 "$HERMES_BIN" config set kanban.orchestrator_profile default >/dev/null
 "$HERMES_BIN" config set kanban.max_in_progress 2 >/dev/null
 "$HERMES_BIN" config set kanban.max_in_progress_per_profile 1 >/dev/null
@@ -74,6 +113,7 @@ configure_profile() {
   mkdir -p "$workspace"
   install -m 600 "$TEMPLATE_ROOT/$name/SOUL.md" "$profile_home/SOUL.md"
   install -m 644 "$TEMPLATE_ROOT/$name/AGENTS.md" "$workspace/AGENTS.md"
+  set_profile_toolsets "$profile_home/config.yaml" hermes-cli
 
   volumes="[\"$workspace:$workspace\",\"$HOME/.hermes/cache/documents:/output\"]"
   ENV_PATH="$profile_home/.env" DOCKER_VOLUMES="$volumes" python3 <<'PY'
