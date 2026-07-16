@@ -424,6 +424,15 @@ Dockerfile · .env.example · package.json
   and gates arbitrary-command MCP spawning behind `ALLOW_CUSTOM_MCP` (off by default). Without
   `AUTH_TOKEN` the API is open — keep it on localhost/LAN in that case. See [DEPLOY.md](DEPLOY.md).
 
+### Authenticated profile
+
+The sidebar profile comes from `/api/auth/me`, never from demo browser data. The
+current owner login is displayed as **Creator**; set `CREATOR_NAME` and
+`CREATOR_EMAIL` to customize it. Signed sessions already carry `id`, `name`,
+`email`, `role`, and `avatar`, so future registered accounts will display their
+own name automatically. Public self-registration is not implemented yet: the
+current release still has one owner login protected by `AUTH_TOKEN`.
+
 ## 🙏 Design credits
 
 The visual system was refined using design intelligence from the **ui-ux-pro-max** skill

@@ -1,7 +1,7 @@
 // Frontend API client + backend detection. When the Node backend is present,
 // MCP / Integrations / Chat use real endpoints; otherwise the app falls back to
 // the local localStorage mock so the static build still works.
-const state = { on: false, health: null, authRequired: false, authed: true };
+const state = { on: false, health: null, authRequired: false, authed: true, user: null };
 
 async function j(url, opts = {}) {
   const res = await fetch(url, {
@@ -25,16 +25,27 @@ export const api = {
         state.health = await res.json();
         state.on = true;
         state.authRequired = !!state.health.auth;
-        if (state.authRequired) {
-          try { const me = await (await fetch("/api/auth/me")).json(); state.authed = !!me.authed; } catch { state.authed = false; }
-        } else state.authed = true;
+        try {
+          const me = await (await fetch("/api/auth/me")).json();
+          state.authed = !!me.authed;
+          state.user = me.user || null;
+        } catch {
+          state.authed = !state.authRequired;
+          state.user = null;
+        }
       }
     } catch { state.on = false; }
     return state.on;
   },
   get needsAuth() { return state.on && state.authRequired && !state.authed; },
   auth: {
-    login: async (password) => { const r = await j("/api/auth/login", { method: "POST", body: { password } }); state.authed = true; return r; },
+    get user() { return state.user; },
+    login: async (password) => {
+      const result = await j("/api/auth/login", { method: "POST", body: { password } });
+      state.authed = true;
+      state.user = result.user || null;
+      return result;
+    },
     logout: () => j("/api/auth/logout", { method: "POST" }),
     me: () => j("/api/auth/me"),
   },

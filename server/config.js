@@ -18,6 +18,13 @@ export const config = {
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
+  creator: {
+    id: "creator",
+    name: env.CREATOR_NAME || "Creator",
+    email: env.CREATOR_EMAIL || "",
+    role: "Creator",
+    avatar: "",
+  },
 
   // ---- security ----
   authToken: env.AUTH_TOKEN || "",                       // empty = auth disabled (dev)

@@ -77,7 +77,7 @@ function seed() {
   chat.activeSession = chat.sessions[0].id;
 
   return {
-    profile: { name: "Sofia Carter", email: "sofia@acme.com", role: "Admin", avatar: "" },
+    profile: { name: "Creator", email: "", role: "Creator", avatar: "" },
     settings: {
       theme: "dark",
       llm: { provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "", model: "gpt-4o-mini" },

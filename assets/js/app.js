@@ -83,7 +83,7 @@ function sidebarHTML() {
     <div class="sidebar-foot">
       <div class="user-chip">
         <div class="avatar" style="width:34px;height:34px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</div>
-        <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email)}</span></div>
+        <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email || (p.role === "Creator" ? "Project owner" : p.role || "User"))}</span></div>
         <button class="icon-btn" id="user-menu">${icon("more")}</button>
       </div>
     </div>
@@ -251,9 +251,23 @@ async function boot() {
     else if (e.key === "Escape") closeOverlay();
   });
   if (api.needsAuth) return renderLogin();
+  syncAuthenticatedProfile();
   renderShell();
   mountMilaDock();
   route();
+}
+
+function syncAuthenticatedProfile() {
+  const user = api.auth.user;
+  if (!user?.name) return;
+  store.set((state) => {
+    state.profile = {
+      name: user.name,
+      email: user.email || "",
+      role: user.role || "User",
+      avatar: user.avatar || "",
+    };
+  });
 }
 
 function renderLogin() {
