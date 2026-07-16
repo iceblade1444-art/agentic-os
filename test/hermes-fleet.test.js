@@ -20,7 +20,7 @@ test("Hermes fleet installer keeps Telegram on the orchestrator only", () => {
   const script = fs.readFileSync(path.join(root, "scripts", "configure-hermes-fleet.sh"), "utf8");
   assert.match(script, /profile create.*--clone-from default/);
   assert.match(script, /"TELEGRAM_BOT_TOKEN": ""/);
-  assert.match(script, /tools enable kanban --platform telegram/);
+  assert.match(script, /enable_platform_toolset "\$HOME\/\.hermes\/config\.yaml" telegram kanban/);
   assert.match(script, /set_profile_toolsets "\$HOME\/\.hermes\/config\.yaml" hermes-cli kanban/);
   assert.match(script, /set_profile_toolsets "\$profile_home\/config\.yaml" hermes-cli/);
   assert.match(script, /kanban\.max_in_progress 2/);
