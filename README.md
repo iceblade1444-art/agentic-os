@@ -297,6 +297,23 @@ transcriptions appear beside the call. The browser receives only a short-lived,
 constrained Gemini Live token minted through the Mila backend. It never receives
 Mila's admin token, account session, or the long-lived Gemini API key.
 
+Choose **Russian**, **Uzbek** or **English** before starting a call. On Edge and
+Chrome the selected language also enables the browser speech recognizer for a
+more reliable visible transcript; Gemini input transcription remains the
+fallback. Transcript text that is clearly in an unrelated writing system is
+hidden instead of being saved as a misleading user message.
+
+The composer accepts drag-and-drop, clipboard images and up to four attachments
+per turn. JPEG, PNG and WebP images are resized to a maximum 1600-pixel edge and
+sent as Gemini Live vision frames. Text, Markdown, code, CSV, JSON and log files
+up to 1 MB are sent as bounded text context (maximum 60,000 characters per
+file). PDF, Office, archives and executable binaries are intentionally rejected;
+those formats need a separate document-ingestion pipeline. Attachments stay in
+the browser session and are not written to the Agentic OS server. The transcript
+toolbar can copy the conversation or export it as Markdown. Gemini currently
+limits audio-only Live sessions to 15 minutes and sessions that include image
+frames to 2 minutes; end and restart the call when that limit is reached.
+
 Mila handles the conversation. When a request needs tools, files, research,
 deployment, or another real action, Mila asks for confirmation and calls
 `delegate_to_hermes`. Agentic OS creates a Mission and streams it to Hermes, so
@@ -344,6 +361,7 @@ assets/
     icons.js               Inline SVG icon set (lucide-style)
     api.js                 Backend API client + auto-detection (falls back to demo)
     mila-live.js           Gemini Live WebSocket, microphone PCM and audio playback
+    mila-attachments.js    Image resizing + bounded text/code attachment context
     pages/
       dashboard.js         Home: stats, charts, activity, health, top agents
       agents.js            Agents table + create/edit modal + detail drawer + delete
