@@ -197,6 +197,12 @@ fi
 
 if systemctl --user is-active --quiet hermes-gateway.service; then
   systemctl --user restart hermes-gateway.service
+  for _ in {1..15}; do
+    systemctl --user is-active --quiet hermes-gateway.service && break
+    sleep 1
+  done
+  systemctl --user is-active --quiet hermes-gateway.service
+  sleep 2
 fi
 
 echo
