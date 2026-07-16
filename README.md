@@ -297,6 +297,12 @@ transcriptions appear beside the call. The browser receives only a short-lived,
 constrained Gemini Live token minted through the Mila backend. It never receives
 Mila's admin token, account session, or the long-lived Gemini API key.
 
+Once a live call starts, it stays active while you move between Agentic OS pages.
+On every page except the full Mila workspace, a mini chat appears in the lower
+right corner with the latest transcript, text and file sending, mute, end-call,
+minimize, and return-to-Mila controls. Reloading or closing the browser tab ends
+the browser-owned microphone session.
+
 Choose **Russian**, **Uzbek** or **English** before starting a call. On Edge and
 Chrome the selected language also enables the browser speech recognizer for a
 more reliable visible transcript; Gemini input transcription remains the
