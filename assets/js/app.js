@@ -2,6 +2,7 @@ import { store } from "./store.js";
 import { icon } from "./icons.js";
 import { api } from "./api.js";
 import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui.js";
+import { mountMilaDock } from "./mila-dock.js";
 
 import dashboard from "./pages/dashboard.js";
 import agents, { openCreateAgent } from "./pages/agents.js";
@@ -251,6 +252,7 @@ async function boot() {
   });
   if (api.needsAuth) return renderLogin();
   renderShell();
+  mountMilaDock();
   route();
 }
 

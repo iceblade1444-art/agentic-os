@@ -26,9 +26,31 @@ test("Mila attachment prompt includes bounded text context and image names", () 
 
 test("Mila workspace exposes language, attachment and transcript actions", () => {
   const source = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+  const hub = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
   for (const id of ["milaLanguage", "milaAttach", "milaFile", "milaCopy", "milaExport", "milaDropOverlay"]) {
     assert.match(source, new RegExp(`id=\\"${id}\\"`));
   }
   assert.match(source, /prepareMilaAttachment/);
-  assert.match(source, /transcriptionLanguage/);
+  assert.match(hub, /transcriptionLanguage/);
+});
+
+test("Mila session persists across Agentic OS route unmounts", () => {
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+  const hub = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const unmount = page.slice(page.indexOf("unmount()"));
+  assert.doesNotMatch(unmount, /\.stop\(/);
+  assert.match(unmount, /unsubscribe/);
+  assert.match(hub, /export const milaHub/);
+  assert.match(app, /mountMilaDock\(\)/);
+});
+
+test("Mila mini chat exposes persistent call controls", () => {
+  const source = fs.readFileSync(new URL("../assets/js/mila-dock.js", import.meta.url), "utf8");
+  assert.match(source, /dock\.id = "milaDock"/);
+  for (const id of ["milaDockText", "milaDockAttach", "milaDockMute", "milaDockEnd", "milaDockSend"]) {
+    assert.match(source, new RegExp(`id=\\"${id}\\"`));
+  }
+  assert.match(source, /milaHub\.subscribe/);
+  assert.match(source, /routeName\(\) === "mila"/);
 });
