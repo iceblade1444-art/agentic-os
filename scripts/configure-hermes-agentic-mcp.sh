@@ -13,10 +13,12 @@ if ! docker inspect agentic-os >/dev/null 2>&1; then
   exit 1
 fi
 
-"$HERMES_BIN" mcp remove agentic-os >/dev/null 2>&1 || true
-"$HERMES_BIN" mcp add agentic-os \
+printf '\n' | "$HERMES_BIN" mcp remove agentic-os >/dev/null 2>&1 || true
+# Hermes asks whether all discovered tools should be enabled. A blank answer accepts
+# the default so this deployment helper also works without an interactive terminal.
+printf '\n' | "$HERMES_BIN" mcp add agentic-os \
   --command docker \
   --args exec -i agentic-os node /app/server/mcp/agentic-os-server.js
-"$HERMES_BIN" mcp test agentic-os
+timeout 30s "$HERMES_BIN" mcp test agentic-os
 
 echo "Hermes can now use Agentic OS and Obsidian tools through MCP."
