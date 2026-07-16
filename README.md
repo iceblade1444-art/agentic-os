@@ -260,7 +260,8 @@ bash scripts/install-hermes-dashboard.sh
 docker compose up -d --build
 ```
 
-The installer adds the official `web`/`pty` extras, builds Hermes' own React UI, creates a user
+The installer adds the official `web`/`pty` extras, builds Hermes' own React UI (using Docker when
+host npm is unavailable), creates a user
 `systemd` service and a reboot fallback, and configures Hermes' password provider. The username is
 `admin`; the password is the existing Agentic OS `AUTH_TOKEN`. Only a scrypt password hash and a
 separate random session-signing key are written to the private user config. Check it with:

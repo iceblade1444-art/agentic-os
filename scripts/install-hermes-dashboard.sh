@@ -21,12 +21,22 @@ done
 echo "Installing official Hermes web dependencies..."
 "$PIP" install -e "$HERMES_REPO[web,pty]"
 
-if ! command -v npm >/dev/null 2>&1; then
-  echo "npm is required once to build the official Hermes web UI." >&2
+if command -v npm >/dev/null 2>&1; then
+  npm --prefix "$HERMES_REPO/web" install
+  npm --prefix "$HERMES_REPO/web" run build
+elif command -v docker >/dev/null 2>&1; then
+  echo "Host npm is unavailable; building the official UI in node:22-alpine..."
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp \
+    -v "$HERMES_REPO:/work" \
+    -w /work/web \
+    node:22-alpine \
+    sh -lc 'npm install && npm run build'
+else
+  echo "npm or Docker is required once to build the official Hermes web UI." >&2
   exit 1
 fi
-npm --prefix "$HERMES_REPO/web" install
-npm --prefix "$HERMES_REPO/web" run build
 
 PASSWORD_HASH="$({ "$PYTHON" - "$APP_ENV" <<'PY'
 import sys
