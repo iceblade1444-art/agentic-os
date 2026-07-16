@@ -15,17 +15,21 @@ export function isBareHermesRequest(method, url) {
   return method === "GET" && String(url || "").split("?", 1)[0] === PREFIX;
 }
 
-function forwardedHeaders(req) {
+export function hermesForwardedHeaders(req) {
   const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
-  return { proto, host };
+  const origin = req.headers.origin ? "http://127.0.0.1:9119" : "";
+  return { proto, host, origin };
 }
 
 function prepareProxyRequest(proxyReq, req) {
-  const { proto, host } = forwardedHeaders(req);
+  const { proto, host, origin } = hermesForwardedHeaders(req);
   proxyReq.setHeader("X-Forwarded-Prefix", PREFIX);
   proxyReq.setHeader("X-Forwarded-Proto", proto);
   if (host) proxyReq.setHeader("X-Forwarded-Host", host);
+  // Hermes is deliberately loopback-only and validates WS/POST origins. The
+  // public origin was already authenticated by Agentic OS before this hop.
+  if (origin) proxyReq.setHeader("Origin", origin);
 }
 
 function rejectUpgrade(socket, status = "401 Unauthorized") {
