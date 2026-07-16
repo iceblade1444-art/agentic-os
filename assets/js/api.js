@@ -53,6 +53,7 @@ export const api = {
     test: (provider) => j(`/api/integrations/${provider}/test`, { method: "POST" }),
     slackSend: (text) => j("/api/integrations/slack/send", { method: "POST", body: { text } }),
     milaStatus: () => j("/api/integrations/mila/status"),
+    milaVoiceToken: () => j("/api/integrations/mila/voice-token", { method: "POST" }),
     milaConnectionCode: (label) => j("/api/integrations/mila/connection-code", { method: "POST", body: { label } }),
     milaSubscription: (body) => j("/api/integrations/mila/subscription", { method: "POST", body }),
     milaAppUpdate: (body) => j("/api/integrations/mila/app-update", { method: "POST", body }),

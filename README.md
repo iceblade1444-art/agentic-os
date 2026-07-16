@@ -291,6 +291,21 @@ dashboard can check Gemini Live readiness and create a 10-minute, one-time code
 for the mobile app. The same operations are exposed to missions and Hermes as
 `agentic_mila_status` and `agentic_mila_connection_code` tools.
 
+**Mila Live** in the main navigation is the browser voice console. Press the
+microphone, grant browser permission, and speak naturally; live input and output
+transcriptions appear beside the call. The browser receives only a short-lived,
+constrained Gemini Live token minted through the Mila backend. It never receives
+Mila's admin token, account session, or the long-lived Gemini API key.
+
+Mila handles the conversation. When a request needs tools, files, research,
+deployment, or another real action, Mila asks for confirmation and calls
+`delegate_to_hermes`. Agentic OS creates a Mission and streams it to Hermes, so
+Hermes remains the primary orchestrator and all existing approval gates still
+apply. Change Mila's speaking rules, supported languages, or handoff policy in
+`assets/js/pages/mila.js`; change PCM/WebSocket handling in
+`assets/js/mila-live.js`; change the secure token exchange in
+`server/lib/mila.js`.
+
 The production mobile endpoint is served under
 `https://agent.milanapremium.uz/mila/`; nginx strips the `/mila/` prefix before
 forwarding to the isolated Mila container. Long-lived Gemini credentials remain
@@ -328,10 +343,12 @@ assets/
     ui.js                  Helpers: toasts, modals, drawers, menus, SVG charts
     icons.js               Inline SVG icon set (lucide-style)
     api.js                 Backend API client + auto-detection (falls back to demo)
+    mila-live.js           Gemini Live WebSocket, microphone PCM and audio playback
     pages/
       dashboard.js         Home: stats, charts, activity, health, top agents
       agents.js            Agents table + create/edit modal + detail drawer + delete
       missions.js          Missions: submit a goal + live orchestration event feed
+      mila.js              Mila Live voice UI + confirmed Hermes handoff
       chat.js              Streaming chat (backend proxy / direct / demo fallback)
       workflows.js         Drag-and-connect SVG node canvas
       settings.js          Appearance / Model / Profile / Data
