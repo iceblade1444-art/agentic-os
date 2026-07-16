@@ -40,7 +40,7 @@ test("Hermes control status treats login redirects as a ready dashboard", async 
   const result = await hermesDashboardStatus(async (url, options) => {
     calls.push({ url, options });
     return new Response(null, { status: 302, headers: { Location: "/login" } });
-  });
+  }, { socketPath: "", dashboardUrl: "http://hermes.test:9119" });
 
   assert.equal(result.ready, true);
   assert.equal(result.status, 302);
@@ -51,7 +51,7 @@ test("Hermes control status treats login redirects as a ready dashboard", async 
 test("Hermes control status returns a bounded unavailable result", async () => {
   const result = await hermesDashboardStatus(async () => {
     throw new Error("connection refused");
-  });
+  }, { socketPath: "", dashboardUrl: "http://hermes.test:9119" });
 
   assert.equal(result.ready, false);
   assert.equal(result.status, 0);

@@ -88,14 +88,16 @@ export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
   return proxy;
 }
 
-export async function hermesDashboardStatus(fetchImpl = fetch) {
+export async function hermesDashboardStatus(fetchImpl = fetch, options = {}) {
   const checkedAt = new Date().toISOString();
+  const socketPath = options.socketPath ?? config.hermesDashboardSocket;
+  const dashboardUrl = options.dashboardUrl ?? config.hermesDashboardUrl;
   try {
     let status;
-    if (config.hermesDashboardSocket) {
+    if (socketPath) {
       status = await new Promise((resolve, reject) => {
         const request = http.request({
-          socketPath: config.hermesDashboardSocket,
+          socketPath,
           path: "/",
           method: "GET",
           headers: { Host: "127.0.0.1:9119" },
@@ -109,10 +111,10 @@ export async function hermesDashboardStatus(fetchImpl = fetch) {
         request.end();
       });
     } else {
-      const response = await fetchImpl(`${config.hermesDashboardUrl}/`, {
+      const response = await fetchImpl(`${dashboardUrl}/`, {
         redirect: "manual",
         signal: AbortSignal.timeout(3000),
-        headers: { Host: new URL(config.hermesDashboardUrl).host },
+        headers: { Host: new URL(dashboardUrl).host },
       });
       status = response.status;
     }
