@@ -7,6 +7,7 @@ import dashboard from "./pages/dashboard.js";
 import agents, { openCreateAgent } from "./pages/agents.js";
 import missions from "./pages/missions.js";
 import hermes from "./pages/hermes.js";
+import mila from "./pages/mila.js";
 import chat from "./pages/chat.js";
 import workflows from "./pages/workflows.js";
 import settings from "./pages/settings.js";
@@ -19,6 +20,7 @@ const NAV = [
     { route: "", icon: "home", label: "Home" },
     { route: "missions", icon: "rocket", label: "Missions" },
     { route: "hermes", icon: "brain", label: "Hermes Control" },
+    { route: "mila", icon: "mic", label: "Mila Live" },
     { route: "agents", icon: "agents", label: "Agents" },
     { route: "chat", icon: "chat", label: "Chat" },
     { route: "workflows", icon: "workflow", label: "Workflows" },
@@ -40,7 +42,7 @@ const NAV = [
 ];
 
 const PAGES = {
-  "": dashboard, agents, missions, hermes, chat, workflows, settings, components,
+  "": dashboard, agents, missions, hermes, mila, chat, workflows, settings, components,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
@@ -217,14 +219,18 @@ function openNotifications(anchor) {
 /* ---------------- Router ---------------- */
 function currentRoute() { return (location.hash.replace(/^#\/?/, "").split("/")[0]) || ""; }
 
+let mountedPage = null;
+
 function route() {
   const r = currentRoute();
   const page = PAGES[r] || notFound;
   const view = qs("#view");
   if (!view) return;
+  mountedPage?.unmount?.();
   const ctx = { navigate: (to) => (location.hash = "#/" + to), rerender: route, params: location.hash.split("/").slice(2) };
   view.innerHTML = `<div class="view">${page.render(ctx)}</div>`;
   page.mount && page.mount(qs(".view", view), ctx);
+  mountedPage = page;
   // update active nav without full re-render
   qsa(".nav-item").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#/" + r));
   document.title = (page.title ? page.title + " · " : "") + "Agentic OS";

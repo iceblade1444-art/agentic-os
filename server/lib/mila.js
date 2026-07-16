@@ -6,6 +6,8 @@ const cleanBaseUrl = (value) => {
   return url.toString().replace(/\/$/, "");
 };
 
+const dashboardSessions = new Map();
+
 export async function milaRequest(cfg = {}, pathname, options = {}) {
   const baseUrl = cleanBaseUrl(cfg.baseUrl);
   const adminToken = String(cfg.adminToken || "").trim();
@@ -33,10 +35,74 @@ export async function milaRequest(cfg = {}, pathname, options = {}) {
   }
 }
 
+async function milaSessionRequest(cfg = {}, pathname, options = {}) {
+  const baseUrl = cleanBaseUrl(cfg.baseUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 12000);
+  try {
+    const response = await (options.fetchImpl || fetch)(baseUrl + pathname, {
+      method: options.method || "POST",
+      headers: {
+        ...(options.bearer ? { Authorization: `Bearer ${options.bearer}` } : {}),
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `MILA HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("MILA request timed out");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const milaStatus = (cfg, options) => milaRequest(cfg, "/admin/status", options);
 export const milaConnectionCode = (cfg, label, options) => milaRequest(cfg, "/admin/connection-code", {
   ...options, method: "POST", body: { label },
 });
+
+// Mint a constrained Gemini Live token without exposing MILA's admin token,
+// account session, or long-lived provider key to the browser.
+export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", options = {}) {
+  const cacheKey = cleanBaseUrl(cfg.baseUrl);
+  let sessionToken = dashboardSessions.get(cacheKey);
+  if (!sessionToken) {
+    const connection = await milaConnectionCode(cfg, label, options);
+    if (!connection.code) throw new Error("MILA did not create a connection code");
+    const session = await milaSessionRequest(cfg, "/v1/auth/device", {
+      ...options,
+      method: "POST",
+      body: { code: connection.code },
+    });
+    if (!session.token) throw new Error("MILA did not create a dashboard session");
+    sessionToken = session.token;
+    dashboardSessions.set(cacheKey, sessionToken);
+  }
+
+  let voice;
+  try {
+    voice = await milaSessionRequest(cfg, "/v1/voice/token", {
+      ...options,
+      method: "POST",
+      bearer: sessionToken,
+    });
+  } catch (error) {
+    // Re-authorize once when the MILA backend revoked or lost its session.
+    if (!/session|unauthorized|401/i.test(error.message || "")) throw error;
+    dashboardSessions.delete(cacheKey);
+    return milaVoiceToken(cfg, label, options);
+  }
+  if (!voice.token) throw new Error("MILA did not create a Gemini Live token");
+  return {
+    token: voice.token,
+    expiresAt: voice.expiresAt || null,
+    newSessionExpiresAt: voice.newSessionExpiresAt || null,
+  };
+}
 export const milaSetSubscription = (cfg, subscription, options) => milaRequest(cfg, "/admin/subscription", {
   ...options, method: "POST", body: subscription,
 });

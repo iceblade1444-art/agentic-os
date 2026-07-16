@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
-import { milaConnectionCode, milaSetAppUpdate, milaSetSubscription, milaStatus } from "../lib/mila.js";
+import { milaConnectionCode, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
 
 const r = Router();
 
@@ -58,6 +58,7 @@ const milaAction = (handler) => async (req, res) => {
 };
 
 r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
+r.post("/mila/voice-token", milaAction((cfg) => milaVoiceToken(cfg)));
 r.post("/mila/connection-code", milaAction((cfg, body) => milaConnectionCode(cfg, body.label)));
 r.post("/mila/subscription", milaAction((cfg, body) => milaSetSubscription(cfg, body)));
 r.post("/mila/app-update", milaAction((cfg, body) => milaSetAppUpdate(cfg, body)));
