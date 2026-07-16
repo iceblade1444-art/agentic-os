@@ -22,5 +22,6 @@ test("Hermes fleet installer keeps Telegram on the orchestrator only", () => {
   assert.match(script, /"TELEGRAM_BOT_TOKEN": ""/);
   assert.match(script, /tools enable kanban --platform telegram/);
   assert.match(script, /kanban\.max_in_progress 2/);
+  assert.match(script, /state-snapshots/);
   assert.doesNotMatch(script, /-p "\$name" gateway start/);
 });
