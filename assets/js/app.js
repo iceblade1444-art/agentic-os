@@ -6,6 +6,7 @@ import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui
 import dashboard from "./pages/dashboard.js";
 import agents, { openCreateAgent } from "./pages/agents.js";
 import missions from "./pages/missions.js";
+import hermes from "./pages/hermes.js";
 import chat from "./pages/chat.js";
 import workflows from "./pages/workflows.js";
 import settings from "./pages/settings.js";
@@ -17,6 +18,7 @@ const NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
     { route: "missions", icon: "rocket", label: "Missions" },
+    { route: "hermes", icon: "brain", label: "Hermes Control" },
     { route: "agents", icon: "agents", label: "Agents" },
     { route: "chat", icon: "chat", label: "Chat" },
     { route: "workflows", icon: "workflow", label: "Workflows" },
@@ -38,7 +40,7 @@ const NAV = [
 ];
 
 const PAGES = {
-  "": dashboard, agents, missions, chat, workflows, settings, components,
+  "": dashboard, agents, missions, hermes, chat, workflows, settings, components,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,

@@ -83,5 +83,6 @@ export const api = {
       }
     },
   },
+  hermes: { status: () => j("/api/hermes/control/status") },
   llm: { status: () => j("/api/llm/status") },
 };

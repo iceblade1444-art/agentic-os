@@ -118,6 +118,23 @@ If browser automation is not needed on this server:
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-browser
 ```
 
+The official dashboard is installed and managed separately from the bounded
+planner process. From the canonical checkout:
+
+```bash
+cd /home/admilana/agentic-os
+bash scripts/install-hermes-dashboard.sh
+docker compose up -d --build
+systemctl --user --no-pager status hermes-dashboard
+```
+
+It listens only on `127.0.0.1:9119`. A user service forwards a private Unix
+socket into the Node container, avoiding any Docker-to-host network exception.
+The only supported browser entry is the authenticated same-origin route
+`https://agent.milanapremium.uz/hermes/`; the existing Agentic OS session is the
+browser gate. A scrypt fallback hash and separate private signing key remain in
+the user-only config for fail-closed operation if the bind mode changes later.
+
 ### Obsidian
 
 The Obsidian desktop app is not required on a headless production server.

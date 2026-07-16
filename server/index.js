@@ -1,6 +1,7 @@
 // Agentic OS server — serves the SPA and the /api backend (LLM proxy, MCP, integrations).
 import express from "express";
 import cors from "cors";
+import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
@@ -9,10 +10,12 @@ import mcp from "./routes/mcp.js";
 import integrations from "./routes/integrations.js";
 import missions from "./routes/missions.js";
 import { requireAuth, loginHandler, logoutHandler, meHandler, rateLimit, authEnabled } from "./lib/auth.js";
+import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { shutdownAll } from "./mcp/manager.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
+const server = createServer(app);
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 
@@ -24,16 +27,22 @@ const CSP = [
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://api.openai.com https://api.anthropic.com",
   "script-src 'self'",
+  "frame-src 'self'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
 app.use((req, res, next) => {
+  if (req.path === "/hermes" || req.path.startsWith("/hermes/")) return next();
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Content-Security-Policy", CSP);
   next();
 });
+
+// Hermes serves its official dashboard here, including PTY WebSockets. Mount
+// before body parsers so config forms, uploads and streaming bodies stay intact.
+mountHermesProxy(app, server);
 
 // CORS: same-origin only unless ALLOW_ORIGIN is set explicitly
 if (config.allowOrigin) app.use(cors({ origin: config.allowOrigin.split(",").map((s) => s.trim()), credentials: true }));
@@ -59,6 +68,7 @@ app.use("/api/llm", llm);
 app.use("/api/mcp", mcp);
 app.use("/api/integrations", integrations);
 app.use("/api/missions", missions);
+app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
 // ---- Static frontend (only assets + index.html; never expose server/, .env, node_modules) ----
@@ -72,7 +82,7 @@ app.use((req, res, next) => {
 
 app.use((err, req, res, next) => { console.error("[error]", err); res.status(500).json({ error: err.message }); });
 
-const server = app.listen(config.port, () => {
+server.listen(config.port, () => {
   console.log(`\n  ▲ Agentic OS running → http://localhost:${config.port}`);
   console.log(`    LLM proxy   : ${config.openai.key ? "openai ✓" : "openai —"}  ${config.anthropic.key ? "anthropic ✓" : "anthropic —"}`);
   console.log(`    Data store  : ${path.resolve(config.dataDir)}/db.json`);

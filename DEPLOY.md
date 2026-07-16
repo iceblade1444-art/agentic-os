@@ -173,6 +173,31 @@ hermes                          # then: "List the tools available in Agentic OS 
 
 Watch it happen live on the **Missions** page of the dashboard.
 
+### Install the official Hermes web dashboard
+
+Agentic OS exposes the complete official Hermes Dashboard inside **Hermes Control**. Install its
+optional web/PTTY dependencies and persistent user service after Hermes itself is configured:
+
+```bash
+cd ~/agentic-os
+bash scripts/install-hermes-dashboard.sh
+docker compose up -d --build
+```
+
+Open `https://agent.milanapremium.uz/#/hermes`. The existing Agentic OS session is reused; there is
+no second browser login. Hermes listens only on `127.0.0.1:9119`, and a private owner-only Unix
+socket connects it to the Node container. Do not add port `9119` to UFW or the public reverse
+proxy. Both HTTP and WebSocket upgrades on `/hermes/` require a valid `aos_session` cookie.
+
+Verify without printing credentials:
+
+```bash
+systemctl --user --no-pager status hermes-dashboard
+systemctl --user --no-pager status hermes-dashboard-socket
+~/.local/bin/hermes dashboard --status
+docker compose logs --tail 100 agentic-os
+```
+
 ---
 
 ## 6. Obsidian vault as an agent tool
@@ -212,6 +237,7 @@ vault (a folder of `.md` files) to agents: `list_notes`, `read_note`, `search_no
 - [ ] `AGENTIC_OS_TOKEN` matches `AUTH_TOKEN` so the Hermes bridge authenticates (automatic when
       you only set `AUTH_TOKEN`)
 - [ ] Firewall: only 80/443 (+ SSH); the app stays on `127.0.0.1:8787` behind nginx
+- [ ] Hermes port `9119` is loopback-only; access is through the private socket and protected `/hermes/`
 - [ ] Rotated the SSH password you shared earlier; using SSH keys
 - [ ] `.env` and `data/` stay out of git (already in `.gitignore`)
 
