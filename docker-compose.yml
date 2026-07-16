@@ -22,6 +22,8 @@ services:
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
     depends_on:
       - agentos-runtime
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   agentos-runtime:
     build:

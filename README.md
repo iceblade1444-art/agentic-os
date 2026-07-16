@@ -45,7 +45,7 @@ It runs in **two modes**:
 
 ## ✨ Features
 
-- **16 pages / routes** — Home dashboard, **Missions**, Agents (full CRUD), Chat, Workflow Builder,
+- **17 pages / routes** — Home dashboard, **Missions**, **Hermes Control**, Agents (full CRUD), Chat, Workflow Builder,
   Tools, Knowledge, Memory, MCP Servers, Integrations, Evaluations, Observability, Guardrails,
   Secrets, Settings, plus a Component Library showcase.
 - **Missions & orchestration** — submit a natural-language mission and watch **Hermes** plan it
@@ -243,6 +243,35 @@ You can also add it to Agentic OS's own MCP page as the **`agentic-os-hub`** ser
    Then reload/test: `hermes mcp test agentic-os` (or `/reload-mcp` in a session).
 5. **Give Hermes a mission.** Create it in the dashboard. Node forwards it to
    `/api/orchestrator/create-and-run` on the private runtime and the **Missions feed updates live**.
+
+### Hermes Control web interface
+
+The **Hermes Control** page embeds the official Hermes Dashboard under the protected same-origin
+route `/hermes/`. It keeps the existing Agentic OS visual shell while exposing Hermes Chat/PTY,
+sessions, config, logs, analytics, cron, profiles, skills, MCP, webhooks, channels, security checks,
+backups and system operations. HTTP and WebSocket traffic pass through `server/lib/hermes-proxy.js`;
+the upstream port is never linked from the browser.
+
+On the production server, install and start the dashboard once:
+
+```bash
+cd /home/admilana/agentic-os
+bash scripts/install-hermes-dashboard.sh
+docker compose up -d --build
+```
+
+The installer adds the official `web`/`pty` extras, builds Hermes' own React UI, creates a user
+`systemd` service and a reboot fallback, and configures Hermes' password provider. The username is
+`admin`; the password is the existing Agentic OS `AUTH_TOKEN`. Only a scrypt password hash and a
+separate random session-signing key are written to the private user config. Check it with:
+
+```bash
+systemctl --user status hermes-dashboard
+curl -I http://127.0.0.1:8787/hermes/
+```
+
+`HERMES_DASHBOARD_URL` defaults to `http://host.docker.internal:9119`. Compose maps that hostname
+to the Linux host gateway; firewall rules must keep port `9119` private.
 
 > The `agentic-os` MCP server is a thin stdio bridge over the REST API, so Hermes can run on the
 > same box or anywhere that can reach `AGENTIC_OS_URL`.
