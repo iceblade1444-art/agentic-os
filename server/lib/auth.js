@@ -34,6 +34,28 @@ function constEq(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
+export function creatorUser() {
+  return { ...config.creator };
+}
+
+export function userFromSession(payload) {
+  const user = payload?.user;
+  if (!user || typeof user.name !== "string" || !user.name.trim()) return creatorUser();
+  return {
+    id: String(user.id || "user").slice(0, 100),
+    name: user.name.trim().slice(0, 120),
+    email: String(user.email || "").trim().slice(0, 200),
+    role: String(user.role || "User").trim().slice(0, 80),
+    avatar: String(user.avatar || "").trim().slice(0, 1000),
+  };
+}
+
+export function authenticatedUser(req) {
+  if (!isAuthed(req)) return null;
+  if (!authEnabled() || (req.headers.authorization || "").startsWith("Bearer ")) return creatorUser();
+  return userFromSession(verify(parseCookies(req)[COOKIE]));
+}
+
 export function isAuthed(req) {
   if (!authEnabled()) return true;
   const auth = req.headers.authorization || "";
@@ -46,25 +68,27 @@ export function requireAuth(req, res, next) {
   res.status(401).json({ error: "unauthorized" });
 }
 
-function sessionCookie(req) {
-  const token = sign({ exp: Date.now() + 7 * 864e5 });
+export function sessionCookie(req, user = creatorUser()) {
+  const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }) });
   const secure = config.secureCookie || req.secure ? "; Secure" : "";
   return `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 86400}${secure}`;
 }
 
 export function loginHandler(req, res) {
-  if (!authEnabled()) return res.json({ ok: true, required: false });
+  if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
   const password = (req.body || {}).password || "";
   if (!constEq(password, config.authToken)) return res.status(401).json({ error: "Invalid password" });
-  res.setHeader("Set-Cookie", sessionCookie(req));
-  res.json({ ok: true });
+  const user = creatorUser();
+  res.setHeader("Set-Cookie", sessionCookie(req, user));
+  res.json({ ok: true, user });
 }
 export function logoutHandler(req, res) {
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });
 }
 export function meHandler(req, res) {
-  res.json({ required: authEnabled(), authed: isAuthed(req) });
+  const user = authenticatedUser(req);
+  res.json({ required: authEnabled(), authed: !!user, user });
 }
 
 // Simple in-memory rate limiter (per-IP sliding window).
