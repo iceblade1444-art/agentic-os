@@ -54,26 +54,153 @@ export const tools = {
 export const knowledge = {
   title: "Knowledge",
   render() {
-    const bases = ensure("kbs", () => [
-      { id: "k1", name: "Product Docs", docs: 128, size: "24 MB", updated: Date.now() - 3600e3, color: "violet" },
-      { id: "k2", name: "Support Playbook", docs: 42, size: "8 MB", updated: Date.now() - 7200e3, color: "green" },
-      { id: "k3", name: "Engineering Wiki", docs: 310, size: "96 MB", updated: Date.now() - 26e5, color: "blue" },
-    ]);
-    return head("Knowledge", "Vector-indexed knowledge bases for retrieval", `<button class="btn btn-primary">${icon("plus")}New base</button>`) + `
-      <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Bases", bases.length, "knowledge")}
-        ${statMini("Documents", bases.reduce((a, b) => a + b.docs, 0), "file")}
-        ${statMini("Embeddings", "1.2M", "network")}
-        ${statMini("Index size", "128 MB", "database")}
-      </div>
-      <div class="grid cols-3" style="margin-bottom:16px">
-        ${bases.map((b) => `<div class="card"><div class="row gap-3"><div class="aico" style="background:${store.colors[b.color]}">${icon("book")}</div><div class="stack"><span class="fw-700">${b.name}</span><span class="hint">${b.docs} docs · ${b.size}</span></div></div><div class="row between mt-4 text-sm muted"><span>Updated ${timeAgo(b.updated)}</span><a href="#" class="row gap-2">Open ${icon("arrowright")}</a></div></div>`).join("")}
-      </div>
-      <div class="card" style="border-style:dashed">
-        <div class="empty"><div class="empty-ico">${icon("upload")}</div><h4>Add documents</h4><p>Drag &amp; drop files here or click to browse — PDF, DOCX, MD, TXT.</p><button class="btn btn-secondary">${icon("upload")}Upload files</button></div>
-      </div>`;
+    const actions = `<button class="btn btn-secondary" id="knowledgeRefresh">${icon("refresh")}Refresh</button><button class="btn btn-primary" id="knowledgeNew">${icon("plus")}New note</button>`;
+    return head("Obsidian Library", "Shared Markdown knowledge used by Hermes and Agentic OS agents", actions)
+      + `<div id="knowledgeBody">${loadingCard("Reading Obsidian vault…")}</div>`;
+  },
+  mount(root) {
+    if (!api.on) {
+      root.querySelector("#knowledgeBody").innerHTML = demoNote("Start the Node backend to read the real Obsidian vault.");
+      return;
+    }
+    knowledgeMount(root);
   },
 };
+
+function knowledgeBytes(bytes = 0) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function knowledgeAction(entry) {
+  const labels = { list: "listed notes", read: "read", search: "searched", create: "created", append: "updated" };
+  return labels[entry.action] || entry.action;
+}
+
+function knowledgeMount(root) {
+  const body = root.querySelector("#knowledgeBody");
+  let status = null;
+  let notes = [];
+  let usage = [];
+  let selected = null;
+  let query = "";
+  let searchTimer = null;
+
+  const draw = () => {
+    if (!status) return;
+    const activePath = selected?.path || "";
+    body.innerHTML = `
+      <div class="grid cols-4 knowledge-stats">
+        ${statMini("Notes", status.notes, "file")}
+        ${statMini("Folders", status.folders, "knowledge")}
+        ${statMini("Vault size", knowledgeBytes(status.bytes), "database")}
+        ${statMini("Agent access", status.mcp.status === "active" ? "Active" : "Offline", "network")}
+      </div>
+      <div class="knowledge-status">
+        <span class="knowledge-logo">${icon("book")}</span>
+        <div><strong>${esc(status.name)}</strong><span class="mono">${esc(status.path)}</span></div>
+        <span class="badge ${status.ready && status.writable ? "success" : "warning"}"><span class="dot"></span>${status.writable ? "Read + write" : "Read only"}</span>
+        <span class="badge ${status.mcp.status === "active" ? "success" : "error"}"><span class="dot"></span>MCP ${esc(status.mcp.status)}</span>
+        <span class="knowledge-updated">${status.updatedAt ? `Updated ${timeAgo(status.updatedAt)}` : "Empty vault"}</span>
+      </div>
+      <div class="knowledge-workspace">
+        <section class="knowledge-browser" aria-label="Obsidian notes">
+          <div class="knowledge-toolbar">
+            <div class="search knowledge-search">${icon("search")}<input id="knowledgeSearch" value="${esc(query)}" placeholder="Search notes, tags and folders…"/></div>
+            <span>${notes.length} notes</span>
+          </div>
+          <div class="knowledge-note-list" id="knowledgeNoteList">
+            ${notes.length ? notes.map((note) => `<button class="knowledge-note ${note.path === activePath ? "active" : ""}" type="button" data-note-path="${esc(note.path)}">
+              <span class="knowledge-note-icon">${icon("file")}</span>
+              <span class="knowledge-note-copy"><strong>${esc(note.title)}</strong><small>${esc(note.path)}</small><em>${esc(note.excerpt || "Empty note")}</em></span>
+              <span class="knowledge-note-meta"><time>${timeAgo(note.updatedAt)}</time><small>${knowledgeBytes(note.size)}</small></span>
+            </button>`).join("") : `<div class="empty knowledge-empty"><div class="empty-ico">${icon("search")}</div><h4>No notes found</h4><p>Try another search or create a note.</p></div>`}
+          </div>
+        </section>
+        <section class="knowledge-inspector" aria-label="Selected Obsidian note">
+          <div class="knowledge-preview" id="knowledgePreview">
+            ${selected ? `<div class="knowledge-preview-head"><div><strong>${esc(selected.title)}</strong><span>${esc(selected.path)}</span></div><span class="badge neutral">${knowledgeBytes(selected.size)}</span></div>
+              <div class="knowledge-note-facts">
+                <span>${icon("layers")}${esc(selected.folder)}</span>
+                <span>${icon("network")}${selected.links.length} links</span>
+                <span>${icon("clock")}${timeAgo(selected.updatedAt)}</span>
+              </div>
+              ${selected.tags.length ? `<div class="knowledge-tags">${selected.tags.map((tag) => `<span>#${esc(tag)}</span>`).join("")}</div>` : ""}
+              <pre class="knowledge-markdown">${esc(selected.content)}</pre>`
+              : `<div class="empty knowledge-empty"><div class="empty-ico">${icon("book")}</div><h4>Select a note</h4><p>Its Markdown content, links and tags will appear here.</p></div>`}
+          </div>
+          <div class="knowledge-agents">
+            <div class="knowledge-section-head"><div><strong>How agents use this library</strong><span>${esc(status.access.orchestrator)} through the Agentic OS MCP bridge</span></div><span class="badge ${status.mcp.status === "active" ? "success" : "error"}">${status.access.tools.length} tools</span></div>
+            <div class="knowledge-tool-list">${status.access.tools.map((tool) => `<span class="mono">${esc(tool)}</span>`).join("")}</div>
+            <div class="knowledge-usage" id="knowledgeUsage">
+              ${usage.length ? usage.slice(0, 8).map((entry) => `<div class="knowledge-use-row"><span class="knowledge-use-icon">${icon(entry.action === "search" ? "search" : entry.action === "read" ? "eye" : entry.action === "list" ? "layers" : "edit")}</span><div><strong>${esc(entry.actor)}</strong><span>${esc(knowledgeAction(entry))}${entry.path ? ` · ${esc(entry.path)}` : entry.query ? ` · “${esc(entry.query)}”` : ""}</span></div><time>${timeAgo(entry.at)}</time></div>`).join("")
+                : `<div class="knowledge-no-usage">No agent access recorded yet. Tool calls will appear here.</div>`}
+            </div>
+          </div>
+        </section>
+      </div>`;
+    wire();
+  };
+
+  const selectNote = async (path) => {
+    try {
+      selected = await api.knowledge.read(path);
+      usage = await api.knowledge.usage(50);
+      draw();
+      body.querySelector("#knowledgePreview")?.scrollTo(0, 0);
+    } catch (error) { toast("error", "Obsidian", error.message); }
+  };
+
+  const load = async (nextQuery = query) => {
+    query = nextQuery;
+    try {
+      [status, notes, usage] = await Promise.all([
+        api.knowledge.status(), api.knowledge.list(query), api.knowledge.usage(50),
+      ]);
+      if (selected && !notes.some((note) => note.path === selected.path)) selected = null;
+      draw();
+      if (!selected && notes[0]) await selectNote(notes[0].path);
+    } catch (error) {
+      body.innerHTML = `<div class="alert error"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Obsidian library unavailable</div><div class="a-desc">${esc(error.message)}</div></div></div>`;
+    }
+  };
+
+  const wire = () => {
+    body.querySelectorAll("[data-note-path]").forEach((button) => {
+      button.onclick = () => selectNote(button.dataset.notePath);
+    });
+    const search = body.querySelector("#knowledgeSearch");
+    search.oninput = () => {
+      clearTimeout(searchTimer);
+      const value = search.value;
+      searchTimer = setTimeout(() => load(value.trim()), 280);
+    };
+  };
+
+  root.querySelector("#knowledgeRefresh").onclick = () => load();
+  root.querySelector("#knowledgeNew").onclick = () => openModal({
+    title: "New Obsidian note",
+    width: 680,
+    body: `<div class="field"><label class="label">Vault path</label><input class="input" id="knowledgeNewPath" placeholder="Projects/New idea.md"/></div><div class="field mt-3"><label class="label">Markdown</label><textarea class="textarea" id="knowledgeNewContent" rows="12" placeholder="# New idea\n\nWrite durable knowledge here…"></textarea></div>`,
+    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="knowledgeCreate">${icon("save")}Create note</button>`,
+    onMount: (modal) => {
+      modal.querySelector("#knowledgeNewPath").focus();
+      modal.querySelector("#knowledgeCreate").onclick = async () => {
+        const path = modal.querySelector("#knowledgeNewPath").value.trim();
+        const content = modal.querySelector("#knowledgeNewContent").value;
+        if (!path) return toast("error", "Obsidian", "Add a vault path");
+        try {
+          selected = await api.knowledge.create({ path, content });
+          closeOverlay();
+          toast("success", "Obsidian", `Created ${selected.path}`);
+          await load();
+        } catch (error) { toast("error", "Obsidian", error.message); }
+      };
+    },
+  });
+  load();
+}
 
 /* ============================ MEMORY ============================ */
 export const memory = {

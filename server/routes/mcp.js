@@ -4,6 +4,8 @@ import { Router } from "express";
 import { db } from "../store.js";
 import { config } from "../config.js";
 import * as mgr from "../mcp/manager.js";
+import { authenticatedUser } from "../lib/auth.js";
+import { knowledge } from "../lib/knowledge.js";
 
 const r = Router();
 
@@ -58,10 +60,23 @@ r.post("/servers/:id/disconnect", async (req, res) => {
 r.post("/servers/:id/call", async (req, res) => {
   const { tool, args } = req.body || {};
   if (!tool) return res.status(400).json({ error: "tool name required" });
+  const server = db.mcp.get(req.params.id);
   try {
     const result = await mgr.callTool(req.params.id, tool, args || {});
+    if (server?.kind === "obsidian") {
+      await knowledge.recordMcp(tool, args || {}, {
+        actor: req.get("X-Agent-Name") || authenticatedUser(req)?.name || "MCP client",
+        source: req.get("X-Agent-Source") || "obsidian-mcp",
+      });
+    }
     res.json({ ok: true, result });
   } catch (e) {
+    if (server?.kind === "obsidian") {
+      await knowledge.recordMcp(tool, args || {}, {
+        actor: req.get("X-Agent-Name") || authenticatedUser(req)?.name || "MCP client",
+        source: req.get("X-Agent-Source") || "obsidian-mcp", outcome: "error",
+      });
+    }
     res.status(500).json({ error: e.message });
   }
 });

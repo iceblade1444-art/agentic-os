@@ -6,6 +6,7 @@ import { db } from "../store.js";
 import * as mgr from "../mcp/manager.js";
 import { slackSend } from "./connectors.js";
 import { milaConnectionCode, milaStatus } from "./mila.js";
+import { knowledge } from "./knowledge.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const safeParse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -41,6 +42,7 @@ async function cap(name, args) {
       if (!srv) throw new Error("server not found: " + args.server);
       if (!mgr.isLive(srv.id)) await mgr.connect(srv);
       const r = await mgr.callTool(srv.id, args.tool, args.args || {});
+      if (srv.kind === "obsidian") await knowledge.recordMcp(args.tool, args.args || {}, { actor: "Built-in Orchestrator", source: "mission" });
       return { result: (r.result?.content || r.content || []).map((c) => c.text).filter(Boolean).join("\n") || JSON.stringify(r) };
     }
     case "agentic_list_integrations":

@@ -9,9 +9,11 @@ import llm from "./routes/llm.js";
 import mcp from "./routes/mcp.js";
 import integrations from "./routes/integrations.js";
 import missions from "./routes/missions.js";
+import knowledge from "./routes/knowledge.js";
 import { requireAuth, loginHandler, logoutHandler, meHandler, rateLimit, authEnabled } from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
-import { shutdownAll } from "./mcp/manager.js";
+import * as mcpManager from "./mcp/manager.js";
+import { db } from "./store.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -68,6 +70,7 @@ app.use("/api/llm", llm);
 app.use("/api/mcp", mcp);
 app.use("/api/integrations", integrations);
 app.use("/api/missions", missions);
+app.use("/api/knowledge", knowledge);
 app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
@@ -82,15 +85,30 @@ app.use((req, res, next) => {
 
 app.use((err, req, res, next) => { console.error("[error]", err); res.status(500).json({ error: err.message }); });
 
-server.listen(config.port, () => {
+server.listen(config.port, async () => {
   console.log(`\n  ▲ Agentic OS running → http://localhost:${config.port}`);
   console.log(`    LLM proxy   : ${config.openai.key ? "openai ✓" : "openai —"}  ${config.anthropic.key ? "anthropic ✓" : "anthropic —"}`);
   console.log(`    Data store  : ${path.resolve(config.dataDir)}/db.json`);
   if (authEnabled()) console.log(`    Auth        : enabled ✓${config.allowCustomMcp ? "   Custom MCP: allowed" : ""}`);
   else console.log(`    \x1b[33mAuth        : DISABLED — set AUTH_TOKEN before exposing this beyond localhost\x1b[0m`);
   console.log("");
+  if (config.autoConnectObsidian) {
+    const obsidian = db.mcp.get("mcp_obsidian");
+    if (!obsidian) {
+      console.warn("    Obsidian    : MCP server is not configured");
+      return;
+    }
+    try {
+      const connected = await mcpManager.connect(obsidian);
+      db.mcp.update(obsidian.id, { status: "active", tools: connected.tools });
+      console.log(`    Obsidian    : active ✓ (${connected.tools.length} MCP tools)`);
+    } catch (error) {
+      db.mcp.update(obsidian.id, { status: "error" });
+      console.error(`    Obsidian    : failed — ${error.message}`);
+    }
+  }
 });
 
-async function bye() { await shutdownAll(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000); }
+async function bye() { await mcpManager.shutdownAll(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000); }
 process.on("SIGINT", bye);
 process.on("SIGTERM", bye);

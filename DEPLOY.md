@@ -216,13 +216,28 @@ vault (a folder of `.md` files) to agents: `list_notes`, `read_note`, `search_no
 
 2. **Restart** so the mount applies: `docker compose up -d`.
 
-3. **Turn it on** — dashboard → **MCP Servers** → **Start** the `obsidian` server (or
-   `POST /api/mcp/servers/mcp_obsidian/connect`). Its 5 tools appear and become reachable through
-   the `agentic-os` bridge.
+3. **Check it** — Agentic OS starts the `obsidian` MCP server automatically. Open
+   dashboard → **Obsidian Library** or **MCP Servers** and confirm that its 5 tools
+   are active. Set `AUTO_CONNECT_OBSIDIAN=false` only when you intentionally want
+   to keep the vault offline.
 
 4. **Use it in a mission.** e.g. tell Hermes *"Search my vault for 'roadmap' and append a summary
    to Projects/Status.md"* — it runs `search_notes` + `append_note`. All paths are confined to the
    vault (no traversal outside).
+
+5. **Connect Hermes to the Agentic OS bridge.** The bridge exposes dedicated
+   `obsidian_status`, `obsidian_list_notes`, `obsidian_read_note`,
+   `obsidian_search_notes`, `obsidian_create_note`, and `obsidian_append_note`
+   tools and records every call in the Obsidian Library page:
+
+   ```bash
+   cd /home/admilana/agentic-os
+   bash scripts/configure-hermes-agentic-mcp.sh
+   ```
+
+   This uses Hermes' official `mcp_servers` configuration and runs the bridge
+   inside the authenticated `agentic-os` container, so no API token is copied
+   into Hermes configuration.
 
 > Want the vault to sync across devices too? I can add self-hosted Obsidian **LiveSync** (CouchDB)
 > to the compose file — just ask.

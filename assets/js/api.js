@@ -57,6 +57,15 @@ export const api = {
     remove: (id) => j(`/api/mcp/servers/${id}`, { method: "DELETE" }),
     call: (id, tool, args) => j(`/api/mcp/servers/${id}/call`, { method: "POST", body: { tool, args } }),
   },
+  knowledge: {
+    status: () => j("/api/knowledge/status"),
+    list: (query = "") => j(`/api/knowledge/notes${query ? `?q=${encodeURIComponent(query)}` : ""}`),
+    read: (path) => j(`/api/knowledge/notes/read?path=${encodeURIComponent(path)}`),
+    search: (query, limit = 20) => j(`/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+    usage: (limit = 50) => j(`/api/knowledge/usage?limit=${limit}`),
+    create: (body) => j("/api/knowledge/notes", { method: "POST", body }),
+    append: (body) => j("/api/knowledge/notes/append", { method: "POST", body }),
+  },
   integrations: {
     list: () => j("/api/integrations"),
     connect: (provider, config) => j(`/api/integrations/${provider}/connect`, { method: "POST", body: { config } }),
