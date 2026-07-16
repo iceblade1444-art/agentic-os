@@ -59,6 +59,31 @@ os.replace(tmp, path)
 PY
 }
 
+enable_platform_toolset() {
+  local config_path="$1" platform="$2" toolset="$3"
+  "$HERMES_PYTHON" - "$config_path" "$platform" "$toolset" <<'PY'
+from pathlib import Path
+import os
+import stat
+import sys
+import yaml
+
+path = Path(sys.argv[1])
+platform = sys.argv[2]
+toolset = sys.argv[3]
+config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+platforms = config.setdefault("platform_toolsets", {})
+enabled = platforms.setdefault(platform, [])
+if toolset not in enabled:
+    enabled.append(toolset)
+mode = stat.S_IMODE(path.stat().st_mode)
+tmp = path.with_name(path.name + ".fleet.tmp")
+tmp.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True), encoding="utf-8")
+os.chmod(tmp, mode)
+os.replace(tmp, path)
+PY
+}
+
 python3 - "$HOME/.hermes/SOUL.md" "$TEMPLATE_ROOT/orchestrator/SOUL_APPEND.md" <<'PY'
 from pathlib import Path
 import re
@@ -80,8 +105,8 @@ chmod 600 "$HOME/.hermes/SOUL.md"
   "Primary Agentic OS orchestrator. Decomposes goals, routes work to specialist profiles, tracks approvals, and synthesizes results for the user in Telegram." >/dev/null
 
 set_profile_toolsets "$HOME/.hermes/config.yaml" hermes-cli kanban
-"$HERMES_BIN" tools enable kanban --platform cli >/dev/null
-"$HERMES_BIN" tools enable kanban --platform telegram >/dev/null
+enable_platform_toolset "$HOME/.hermes/config.yaml" cli kanban
+enable_platform_toolset "$HOME/.hermes/config.yaml" telegram kanban
 "$HERMES_PYTHON" - "$HOME/.hermes/config.yaml" <<'PY'
 from pathlib import Path
 import sys
