@@ -12,7 +12,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 const BASE = (process.env.AGENTIC_OS_URL || "http://127.0.0.1:8787").replace(/\/$/, "");
-const TOKEN = process.env.AGENTIC_OS_TOKEN || "";
+// Production commonly uses the main AUTH_TOKEN for both the web app and its
+// private Hermes bridge. AGENTIC_OS_TOKEN remains available for key separation.
+const TOKEN = process.env.AGENTIC_OS_TOKEN || process.env.AUTH_TOKEN || "";
 
 async function api(path, opts = {}) {
   const headers = {
