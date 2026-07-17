@@ -33,3 +33,9 @@ test("Hermes fleet installer keeps Telegram on the orchestrator only", () => {
   assert.match(script, /state-snapshots/);
   assert.doesNotMatch(script, /-p "\$name" gateway start/);
 });
+
+test("Hermes MCP bridge inherits the Agentic OS production auth token", () => {
+  const bridge = fs.readFileSync(new URL("../server/mcp/agentic-os-server.js", import.meta.url), "utf8");
+  assert.match(bridge, /process\.env\.AGENTIC_OS_TOKEN \|\| process\.env\.AUTH_TOKEN/);
+  assert.match(bridge, /headers\.Authorization = "Bearer " \+ TOKEN/);
+});
