@@ -5,7 +5,7 @@ import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui
 import { mountMilaDock } from "./mila-dock.js";
 
 import dashboard from "./pages/dashboard.js";
-import agents, { openCreateAgent } from "./pages/agents.js";
+import agents from "./pages/agents.js";
 import missions from "./pages/missions.js";
 import hermes from "./pages/hermes.js";
 import mila from "./pages/mila.js";
@@ -24,7 +24,7 @@ const NAV = [
     { route: "mila", icon: "mic", label: "Mila Live" },
     { route: "agents", icon: "agents", label: "Agents" },
     { route: "chat", icon: "chat", label: "Chat" },
-    { route: "workflows", icon: "workflow", label: "Workflows" },
+    { route: "kanban", icon: "workflow", label: "Kanban" },
     { route: "tools", icon: "tools", label: "Tools" },
   ]},
   { group: "Context", items: [
@@ -43,7 +43,7 @@ const NAV = [
 ];
 
 const PAGES = {
-  "": dashboard, agents, missions, hermes, mila, chat, workflows, settings, components,
+  "": dashboard, agents, missions, hermes, mila, chat, kanban: workflows, workflows, settings, components,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
@@ -70,7 +70,7 @@ function sidebarHTML() {
       ${g.items.map((it) => `
         <a class="nav-item ${it.route === cur ? "active" : ""}" href="#/${it.route}">
           ${icon(it.icon)}<span>${it.label}</span>
-          ${it.route === "agents" ? `<span class="nav-tag">${store.state.agents.length}</span>` : ""}
+          ${it.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
         </a>`).join("")}
     </div>`).join("");
   return `<aside class="sidebar" id="sidebar">
@@ -100,7 +100,7 @@ function topbarHTML() {
       <button class="icon-btn" id="themeBtn" title="Toggle theme">${icon(t === "dark" ? "sun" : "moon")}</button>
       <button class="icon-btn" title="Help">${icon("help")}</button>
       <button class="icon-btn" id="bellBtn" title="Notifications" style="position:relative">${icon("bell")}<span class="dot"></span></button>
-      <a class="btn btn-primary" href="#/agents" id="newAgentTop">${icon("plus")}<span>Create agent</span></a>
+      <a class="btn btn-primary" href="#/kanban/new" id="newAgentTop">${icon("plus")}<span>New task</span></a>
     </div>
   </header>`;
 }
@@ -138,8 +138,11 @@ function buildCommands() {
   const cmds = [];
   NAV.forEach((g) => g.items.forEach((it) => cmds.push({ group: "Pages", icon: it.icon, text: it.label, hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
   cmds.push({ group: "Pages", icon: "layers", text: "Component Library", hint: "#/components", run: () => (location.hash = "#/components") });
-  store.state.agents.slice(0, 8).forEach((a) => cmds.push({ group: "Agents", icon: a.icon || "bot", text: a.name, hint: a.type, run: () => (location.hash = "#/agents") }));
-  cmds.push({ group: "Actions", icon: "plus", text: "Create agent", run: () => { location.hash = "#/agents"; setTimeout(() => openCreateAgent(), 60); } });
+  [
+    ["Hermes", "Primary orchestrator", "brain", "default"], ["Scout", "Research", "search", "scout"],
+    ["Scribe", "Writing", "edit", "scribe"], ["Reach", "Growth", "up", "reach"], ["Dev", "Engineering", "code", "dev"],
+  ].forEach(([name, role, agentIcon, profile]) => cmds.push({ group: "Agents", icon: agentIcon, text: name, hint: role, run: () => (location.hash = `#/kanban/new/${profile}`) }));
+  cmds.push({ group: "Actions", icon: "plus", text: "New Kanban task", run: () => (location.hash = "#/kanban/new") });
   cmds.push({ group: "Actions", icon: "chat", text: "New chat", run: () => (location.hash = "#/chat") });
   cmds.push({ group: "Actions", icon: t === "dark" ? "sun" : "moon", text: "Toggle theme", run: toggleTheme });
   cmds.push({ group: "Actions", icon: "settings", text: "Open settings", run: () => (location.hash = "#/settings") });

@@ -8,3 +8,7 @@
   documentation after verified changes.
 - Never expose secrets, force-push shared branches, bypass approvals, or change the
   production server directly unless the card explicitly authorizes deployment.
+- On every dispatched run: call `kanban_show`, comment the implementation plan,
+  heartbeat during long builds, and call `kanban_complete` with changed files,
+  tests, commit or PR, deployment state, and residual risk. Use `kanban_block`
+  rather than bypassing a missing permission, dependency, or decision.

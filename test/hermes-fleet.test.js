@@ -11,8 +11,11 @@ test("Hermes fleet ships four persistent specialist identities", () => {
     const soul = fs.readFileSync(path.join(root, "hermes", "fleet", role, "SOUL.md"), "utf8");
     const agents = fs.readFileSync(path.join(root, "hermes", "fleet", role, "AGENTS.md"), "utf8");
     assert.match(soul, new RegExp(`^# ${role}`, "im"));
+    assert.match(soul, /specialist, not the primary assistant/i);
     assert.match(agents, /Kanban/i);
     assert.match(agents, /Obsidian/i);
+    assert.match(agents, /kanban_show/);
+    assert.match(agents, /kanban_complete/);
   }
 });
 
@@ -24,6 +27,9 @@ test("Hermes fleet installer keeps Telegram on the orchestrator only", () => {
   assert.match(script, /set_profile_toolsets "\$HOME\/\.hermes\/config\.yaml" hermes-cli kanban/);
   assert.match(script, /set_profile_toolsets "\$profile_home\/config\.yaml" hermes-cli/);
   assert.match(script, /kanban\.max_in_progress 2/);
+  assert.match(script, /kanban\.auto_decompose true/);
+  assert.match(script, /kanban\.default_assignee default/);
+  assert.match(script, /kanban\.dispatch_in_gateway true/);
   assert.match(script, /state-snapshots/);
   assert.doesNotMatch(script, /-p "\$name" gateway start/);
 });

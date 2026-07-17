@@ -119,9 +119,14 @@ if missing:
     raise SystemExit("Kanban toolset was not enabled for: " + ", ".join(missing))
 PY
 "$HERMES_BIN" config set kanban.orchestrator_profile default >/dev/null
+"$HERMES_BIN" config set kanban.default_assignee default >/dev/null
+"$HERMES_BIN" config set kanban.auto_decompose true >/dev/null
+"$HERMES_BIN" config set kanban.auto_decompose_per_tick 2 >/dev/null
+"$HERMES_BIN" config set kanban.dispatch_in_gateway true >/dev/null
 "$HERMES_BIN" config set kanban.max_in_progress 2 >/dev/null
 "$HERMES_BIN" config set kanban.max_in_progress_per_profile 1 >/dev/null
 "$HERMES_BIN" config set kanban.auto_promote_children true >/dev/null
+"$HERMES_BIN" config set dashboard.kanban.lane_by_profile true >/dev/null
 
 configure_profile() {
   local name="$1" description="$2" memory_mb="$3"
