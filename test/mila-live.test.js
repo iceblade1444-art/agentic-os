@@ -3,13 +3,43 @@ import fs from "node:fs";
 import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
-import { isTranscriptPlausible } from "../assets/js/mila-live.js";
+import { buildAutomaticActivityDetection, buildLiveSetup, isTranscriptPlausible } from "../assets/js/mila-live.js";
+import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../assets/js/mila-session.js";
 
 test("Mila transcript filter rejects the wrong script for selected Russian", () => {
   assert.equal(isTranscriptPlausible("Как твои дела?", "ru-RU"), true);
   assert.equal(isTranscriptPlausible("आपने का मिला", "ru-RU"), false);
   assert.equal(isTranscriptPlausible("Agentic OS работает", "ru-RU"), true);
   assert.equal(isTranscriptPlausible("Agentic OS ishlayapti", "uz-UZ"), true);
+});
+
+test("Mila Live setup uses a warm voice and explicit activity detection", () => {
+  const setup = buildLiveSetup({ model: "gemini-live", systemInstruction: "Be helpful", listeningProfile: "noisy" });
+  assert.equal(setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Sulafat");
+  assert.equal(setup.realtimeInputConfig.activityHandling, "START_OF_ACTIVITY_INTERRUPTS");
+  assert.deepEqual(setup.realtimeInputConfig.automaticActivityDetection, buildAutomaticActivityDetection("noisy"));
+  assert.equal(setup.realtimeInputConfig.automaticActivityDetection.startOfSpeechSensitivity, "START_SENSITIVITY_LOW");
+  assert.equal(setup.realtimeInputConfig.turnCoverage, "TURN_INCLUDES_ONLY_ACTIVITY");
+  assert.deepEqual(setup.inputAudioTranscription, {});
+  assert.deepEqual(setup.outputAudioTranscription, {});
+});
+
+test("Mila preferences are validated and shape the voice behavior prompt", () => {
+  const preferences = normalizeMilaPreferences({
+    voiceName: "not-a-voice", style: "friend", pace: "slow", listeningProfile: "deliberate",
+    responseLength: "brief", userName: " Бахадыр ",
+  });
+  assert.equal(preferences.voiceName, "Sulafat");
+  assert.equal(preferences.userName, "Бахадыр");
+  const prompt = buildMilaSystemInstruction({
+    language: "ru-RU", preferences, currentTime: "2026-07-17T10:00:00.000Z",
+  });
+  assert.match(prompt, /live voice assistant/);
+  assert.match(prompt, /Silently repair obvious speech-to-text mistakes/);
+  assert.match(prompt, /changes settings, files, accounts, money, deployments/);
+  assert.match(prompt, /ask for confirmation/);
+  assert.match(prompt, /trusted, thoughtful friend/);
+  assert.match(prompt, /one to three sentences/);
 });
 
 test("Mila attachment prompt includes bounded text context and image names", () => {
@@ -27,10 +57,11 @@ test("Mila attachment prompt includes bounded text context and image names", () 
 test("Mila workspace exposes language, attachment and transcript actions", () => {
   const source = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
   const hub = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
-  for (const id of ["milaLanguage", "milaAttach", "milaFile", "milaCopy", "milaExport", "milaDropOverlay"]) {
+  for (const id of ["milaLanguage", "milaPreferences", "milaAttach", "milaFile", "milaCopy", "milaExport", "milaDropOverlay"]) {
     assert.match(source, new RegExp(`id=\\"${id}\\"`));
   }
   assert.match(source, /prepareMilaAttachment/);
+  assert.match(source, /Mila voice preferences/);
   assert.match(hub, /transcriptionLanguage/);
 });
 

@@ -2,6 +2,55 @@ const LIVE_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.gene
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
+const AUDIO_CHUNK_SIZE = 1024;
+
+const ACTIVITY_PROFILES = {
+  balanced: {
+    disabled: false,
+    startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+    prefixPaddingMs: 80,
+    endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+    silenceDurationMs: 650,
+  },
+  noisy: {
+    disabled: false,
+    startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+    prefixPaddingMs: 140,
+    endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+    silenceDurationMs: 800,
+  },
+  deliberate: {
+    disabled: false,
+    startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+    prefixPaddingMs: 100,
+    endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+    silenceDurationMs: 1200,
+  },
+};
+
+export function buildAutomaticActivityDetection(profile = "balanced") {
+  return { ...(ACTIVITY_PROFILES[profile] || ACTIVITY_PROFILES.balanced) };
+}
+
+export function buildLiveSetup(options = {}) {
+  return {
+    model: `models/${options.model}`,
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } } },
+    },
+    systemInstruction: { parts: [{ text: options.systemInstruction || "" }] },
+    realtimeInputConfig: {
+      automaticActivityDetection: buildAutomaticActivityDetection(options.listeningProfile),
+      activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+      turnCoverage: "TURN_INCLUDES_ONLY_ACTIVITY",
+    },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
+    contextWindowCompression: { slidingWindow: {} },
+    tools: [{ functionDeclarations: options.tools || [] }],
+  };
+}
 
 export function isTranscriptPlausible(text, language = "auto") {
   const value = String(text || "");
@@ -230,7 +279,7 @@ export class MilaLiveSession {
     this.audioContext = new AudioContextClass({ latencyHint: "interactive" });
     await this.audioContext.resume();
     this.inputSource = this.audioContext.createMediaStreamSource(this.mediaStream);
-    this.processor = this.audioContext.createScriptProcessor(2048, 1, 1);
+    this.processor = this.audioContext.createScriptProcessor(AUDIO_CHUNK_SIZE, 1, 1);
     this.silentGain = this.audioContext.createGain();
     this.silentGain.gain.value = 0;
     this.inputSource.connect(this.processor);
@@ -256,20 +305,7 @@ export class MilaLiveSession {
     });
     const timeout = setTimeout(() => this.readyReject?.(new Error("Mila Live connection timed out")), 12000);
     socket.onopen = () => {
-      socket.send(JSON.stringify({
-        setup: {
-          model: `models/${this.options.model}`,
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.options.voiceName || "Aoede" } } },
-          },
-          systemInstruction: { parts: [{ text: this.options.systemInstruction }] },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          contextWindowCompression: { slidingWindow: {} },
-          tools: [{ functionDeclarations: this.options.tools || [] }],
-        },
-      }));
+      socket.send(JSON.stringify({ setup: buildLiveSetup(this.options) }));
     };
     socket.onmessage = (event) => this._handleFrame(event.data);
     socket.onerror = () => this.readyReject?.(new Error("Gemini Live WebSocket failed"));

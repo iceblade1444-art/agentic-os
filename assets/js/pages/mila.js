@@ -1,9 +1,12 @@
 import { icon } from "../icons.js";
-import { esc, openModal, toast } from "../ui.js";
+import { closeOverlay, esc, openModal, toast } from "../ui.js";
 import {
   MILA_ATTACHMENT_ACCEPT, formatAttachmentSize, prepareMilaAttachment,
 } from "../mila-attachments.js";
-import { MILA_LANGUAGES, milaHub } from "../mila-session.js";
+import {
+  MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
+  MILA_STYLES, MILA_VOICES, milaHub,
+} from "../mila-session.js";
 
 let pendingAttachments = [];
 let unsubscribe = null;
@@ -52,6 +55,14 @@ function languageOptions() {
   return MILA_LANGUAGES.map(([code, label]) => `<option value="${code}"${code === milaHub.state.language ? " selected" : ""}>${label}</option>`).join("");
 }
 
+function optionsHTML(items, selected) {
+  return items.map((item) => `<option value="${esc(item.id)}"${item.id === selected ? " selected" : ""}>${esc(item.label)}${item.description ? ` · ${esc(item.description)}` : ""}</option>`).join("");
+}
+
+function segmentsHTML(name, items, selected) {
+  return items.map((item) => `<label><input type="radio" name="${esc(name)}" value="${esc(item.id)}"${item.id === selected ? " checked" : ""}/><span>${esc(item.label)}</span></label>`).join("");
+}
+
 function transcriptMarkdown(state) {
   return state.history.map((message) => {
     if (message.role === "system") return `> ${message.text}`;
@@ -70,6 +81,7 @@ export default {
         <label class="mila-language-wrap tip" data-tip="Speech recognition language"><span>${icon("chat")}</span><select id="milaLanguage" aria-label="Speech recognition language">${languageOptions()}</select></label>
         <span class="badge neutral" id="milaStatus"><span class="dot"></span>Checking</span>
         <span class="badge neutral mono" id="milaTimer">00:00</span>
+        <button class="icon-btn tip" id="milaPreferences" data-tip="Voice preferences" aria-label="Voice preferences">${icon("sparkles")}</button>
         <a class="icon-btn tip" data-tip="Mila integration" href="#/integrations">${icon("settings")}</a>
       </div>
 
@@ -79,6 +91,7 @@ export default {
           <div class="mila-identity">
             <span class="mila-mark">${icon("mic")}</span>
             <div class="stack"><strong>Mila</strong><span class="muted text-sm" id="milaModel">Voice backend</span></div>
+            <span class="badge neutral mila-profile" id="milaProfile">Warm · Assistant</span>
             <span class="badge neutral mila-stt" id="milaSttMode">Gemini STT</span>
             <a class="mila-handoff" href="#/hermes">${icon("brain")}Hermes</a>
           </div>
@@ -144,6 +157,7 @@ export default {
     const attachmentHost = root.querySelector("#milaAttachments");
     const fileInput = root.querySelector("#milaFile");
     const stage = root.querySelector("#milaStage");
+    const preferencesButton = root.querySelector("#milaPreferences");
     let lastTranscriptKey = "";
     let lastWarning = milaHub.state.transcriptWarning;
 
@@ -151,6 +165,44 @@ export default {
       title: name || "Image", width: 900,
       body: `<div class="mila-image-modal"><img src="${esc(src)}" alt="${esc(name || "Attached image")}"/></div>`,
     });
+    const openPreferences = () => {
+      if (milaHub.active) return toast("info", "Voice preferences", "End the current call before changing its voice profile");
+      const prefs = milaHub.state.preferences;
+      openModal({
+        title: "Mila voice preferences",
+        width: 620,
+        body: `<div class="mila-settings">
+          <div class="mila-settings-grid">
+            <div class="field"><label class="label" for="milaVoiceName">Voice</label><select class="select" id="milaVoiceName">${optionsHTML(MILA_VOICES, prefs.voiceName)}</select></div>
+            <div class="field"><label class="label" for="milaListeningProfile">Listening</label><select class="select" id="milaListeningProfile">${optionsHTML(MILA_LISTENING_PROFILES, prefs.listeningProfile)}</select></div>
+          </div>
+          <fieldset class="mila-setting-group"><legend>Conversation style</legend><div class="mila-segments four">${segmentsHTML("milaStyle", MILA_STYLES, prefs.style)}</div></fieldset>
+          <div class="mila-settings-grid">
+            <fieldset class="mila-setting-group"><legend>Speaking pace</legend><div class="mila-segments">${segmentsHTML("milaPace", MILA_PACES, prefs.pace)}</div></fieldset>
+            <fieldset class="mila-setting-group"><legend>Voice answers</legend><div class="mila-segments two">${segmentsHTML("milaResponseLength", MILA_RESPONSE_LENGTHS, prefs.responseLength)}</div></fieldset>
+          </div>
+          <div class="field mila-name-field"><label class="label" for="milaUserName">Your name</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
+          <div class="mila-settings-note">Changes apply when the next live call starts.</div>
+        </div>`,
+        footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="milaSavePreferences">${icon("check")}Save</button>`,
+        onMount: (modal) => {
+          modal.querySelector("#milaSavePreferences").onclick = () => {
+            const selected = (name) => modal.querySelector(`input[name="${name}"]:checked`)?.value;
+            const saved = milaHub.setPreferences({
+              voiceName: modal.querySelector("#milaVoiceName").value,
+              listeningProfile: modal.querySelector("#milaListeningProfile").value,
+              style: selected("milaStyle"),
+              pace: selected("milaPace"),
+              responseLength: selected("milaResponseLength"),
+              userName: modal.querySelector("#milaUserName").value,
+            });
+            if (!saved) return toast("warning", "Voice preferences", "End the current call before saving changes");
+            closeOverlay();
+            toast("success", "Mila updated", "The new voice profile is ready for the next call");
+          };
+        },
+      });
+    };
     const wirePreviews = (host) => host.querySelectorAll("[data-preview-image]").forEach((button) => {
       button.onclick = () => openPreview(button.querySelector("img").src, button.dataset.name);
     });
@@ -185,12 +237,16 @@ export default {
       stage.dataset.phase = state.phase;
       root.querySelector("#milaTimer").textContent = state.elapsedLabel;
       root.querySelector("#milaModel").textContent = state.model;
+      const voice = MILA_VOICES.find((item) => item.id === state.preferences.voiceName)?.label || state.preferences.voiceName;
+      const style = MILA_STYLES.find((item) => item.id === state.preferences.style)?.label || state.preferences.style;
+      root.querySelector("#milaProfile").textContent = `${voice} · ${style}`;
       const stt = root.querySelector("#milaSttMode");
       stt.textContent = state.transcriptionMode === "browser" ? "Browser STT" : "Gemini STT";
       stt.className = `badge mila-stt ${state.transcriptionMode === "browser" ? "success" : "neutral"}`;
       caption.textContent = state.partials.assistant || state.partials.user || "";
       end.classList.toggle("hidden", !state.active);
       language.disabled = state.active;
+      preferencesButton.disabled = state.active;
       language.value = state.language;
       mic.dataset.tip = state.active ? (state.phase === "muted" ? "Unmute" : "Mute") : "Start live call";
       mic.setAttribute("aria-label", mic.dataset.tip);
@@ -247,6 +303,7 @@ export default {
     };
     end.onclick = () => milaHub.stop();
     language.onchange = () => milaHub.setLanguage(language.value);
+    preferencesButton.onclick = openPreferences;
     root.querySelector("#milaComposer").onsubmit = (event) => { event.preventDefault(); submitMessage(); };
     root.querySelector("#milaAttach").onclick = () => fileInput.click();
     fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ""; };
