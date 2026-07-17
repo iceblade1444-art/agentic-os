@@ -104,6 +104,18 @@ export const api = {
       }
     },
   },
+  kanban: {
+    board: () => j("/api/kanban/board"),
+    profiles: () => j("/api/kanban/profiles"),
+    orchestration: () => j("/api/kanban/orchestration"),
+    updateOrchestration: (body) => j("/api/kanban/orchestration", { method: "PUT", body }),
+    createTask: (body) => j("/api/kanban/tasks", { method: "POST", body }),
+    task: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}`),
+    updateTask: (id, body) => j(`/api/kanban/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    comment: (id, body) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/comments`, { method: "POST", body }),
+    decompose: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/decompose`, { method: "POST" }),
+    dispatch: () => j("/api/kanban/dispatch", { method: "POST" }),
+  },
   hermes: { status: () => j("/api/hermes/control/status") },
   llm: { status: () => j("/api/llm/status") },
 };

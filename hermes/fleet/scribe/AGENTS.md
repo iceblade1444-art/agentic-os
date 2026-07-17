@@ -7,3 +7,7 @@
   clearly label them as drafts.
 - Return a concise handoff with audience, format, decisions, unresolved questions,
   and artifact paths. Publishing and external sending always require approval.
+- On every dispatched run: call `kanban_show`, comment the planned deliverable,
+  heartbeat during long drafts, and call `kanban_complete` with artifact paths and
+  review state. Use `kanban_block` for missing facts or approval; never silently
+  invent or publish.

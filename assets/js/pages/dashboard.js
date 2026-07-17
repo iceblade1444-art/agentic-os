@@ -1,7 +1,6 @@
 import { store, timeAgo } from "../store.js";
 import { icon } from "../icons.js";
 import { agentIcon, statusBadge, sparkline, lineChart, donut, esc, randomSeries } from "../ui.js";
-import { openCreateAgent } from "./agents.js";
 
 const HELLO = () => {
   const h = new Date().getHours();
@@ -76,8 +75,8 @@ export default {
           <span class="hero-chip">${icon("guardrails")} Secure &amp; Scalable</span>
         </div>
         <div class="hero-cta">
-          <button class="btn btn-primary lg" id="dashNew">${icon("plus")}<span>Create agent</span></button>
-          <a class="btn btn-secondary lg" href="#/workflows">${icon("workflow")}<span>Build a workflow</span></a>
+          <a class="btn btn-primary lg" id="dashNew" href="#/kanban/new">${icon("plus")}<span>New task</span></a>
+          <a class="btn btn-secondary lg" href="#/kanban">${icon("workflow")}<span>Open Kanban</span></a>
         </div>
       </div>
       <div class="hero-orb">${orbSVG()}</div>
@@ -161,7 +160,6 @@ export default {
   },
 
   mount(root) {
-    root.querySelector("#dashNew").onclick = () => openCreateAgent();
     root.querySelectorAll("#rangeTabs button").forEach((b) =>
       b.addEventListener("click", () => {
         root.querySelectorAll("#rangeTabs button").forEach((x) => x.classList.remove("active"));

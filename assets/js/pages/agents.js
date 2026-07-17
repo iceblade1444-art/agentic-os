@@ -1,200 +1,104 @@
-import { store, timeAgo } from "../store.js";
+import { api } from "../api.js";
 import { icon } from "../icons.js";
-import {
-  agentIcon, statusBadge, esc, toast, openModal, openDrawer, closeOverlay,
-  openMenu, confirmDialog, qs, qsa, sparkline, randomSeries,
-} from "../ui.js";
+import { closeOverlay, esc, openModal } from "../ui.js";
 
-const TYPES = ["Conversational", "Workflow", "Tool-based", "Autonomous"];
-const MODELS = ["GPT-4o", "GPT-4o mini", "Claude Opus 4.8", "Claude Sonnet 5", "Claude Haiku 4.5", "Llama 3.1 70B"];
-const COLORS = ["violet", "blue", "green", "amber", "pink", "cyan"];
-const ICONS = ["bot", "search", "code", "database", "edit", "mail", "chat", "brain", "terminal", "sparkles"];
+const META = {
+  default: { label: "Hermes", role: "Primary orchestrator", icon: "brain", color: "violet" },
+  scout: { label: "Scout", role: "Research and intelligence", icon: "search", color: "blue" },
+  scribe: { label: "Scribe", role: "Writing and documentation", icon: "edit", color: "cyan" },
+  reach: { label: "Reach", role: "Growth and monetization", icon: "up", color: "amber" },
+  dev: { label: "Dev", role: "Engineering and automation", icon: "code", color: "green" },
+};
 
-let filter = { q: "", status: "all" };
+let host = null;
+let profiles = [];
+let tasks = [];
+let poll = null;
 
-/* ---------- Create / edit modal ---------- */
-export function openCreateAgent(existing) {
-  const a = existing || { name: "", type: "Conversational", model: "gpt-4o", description: "", instructions: "", color: "violet", icon: "bot", tags: [] };
-  const body = `
-    <div class="field"><label class="label">Name</label><input class="input" id="f-name" placeholder="My New Agent" value="${esc(a.name)}"/></div>
-    <div class="grid cols-2">
-      <div class="field"><label class="label">Type</label><select class="select" id="f-type">${TYPES.map((t) => `<option ${t === a.type ? "selected" : ""}>${t}</option>`).join("")}</select></div>
-      <div class="field"><label class="label">Model</label><select class="select" id="f-model">${MODELS.map((m) => `<option ${m === a.model ? "selected" : ""}>${m}</option>`).join("")}</select></div>
-    </div>
-    <div class="field"><label class="label">Description</label><textarea class="textarea" id="f-desc" placeholder="Describe what your agent does…">${esc(a.description)}</textarea></div>
-    <div class="field"><label class="label">Instructions</label><textarea class="textarea" id="f-inst" placeholder="You are a helpful assistant…">${esc(a.instructions)}</textarea></div>
-    <div class="grid cols-2">
-      <div class="field"><label class="label">Accent</label><div class="row gap-2" id="f-colors">${COLORS.map((c) => `<button type="button" class="color-swatch ${c === a.color ? "sel" : ""}" data-c="${c}" style="width:26px;height:26px;border-radius:8px;border:2px solid ${c === a.color ? "var(--primary)" : "transparent"};background:${store.colors[c]}"></button>`).join("")}</div></div>
-      <div class="field"><label class="label">Icon</label><select class="select" id="f-icon">${ICONS.map((i) => `<option ${i === a.icon ? "selected" : ""}>${i}</option>`).join("")}</select></div>
-    </div>`;
-  const footer = `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="f-save">${icon(existing ? "save" : "plus")}${existing ? "Save changes" : "Create agent"}</button>`;
+const meta = (name) => META[name] || { label: name, role: "Hermes profile", icon: "bot", color: "violet" };
+const count = (name, statuses) => tasks.filter((task) => task.assignee === name && statuses.includes(task.status)).length;
 
+function statusFor(name) {
+  if (count(name, ["running"])) return ["Working", "warning"];
+  if (count(name, ["blocked"])) return ["Blocked", "error"];
+  if (count(name, ["triage", "todo", "scheduled", "ready", "review"])) return ["Queued", "info"];
+  return ["Ready", "success"];
+}
+
+function draw() {
+  if (!host) return;
+  const rows = host.querySelector("#fleetRows");
+  const summary = host.querySelector("#fleetSummary");
+  if (summary) summary.textContent = `${profiles.length} persistent profiles · ${count("default", ["running"]) + count("scout", ["running"]) + count("scribe", ["running"]) + count("reach", ["running"]) + count("dev", ["running"])} working`;
+  rows.innerHTML = profiles.map((profile) => {
+    const view = meta(profile.name);
+    const [status, tone] = statusFor(profile.name);
+    const running = count(profile.name, ["running"]);
+    const queued = count(profile.name, ["triage", "todo", "scheduled", "ready", "review"]);
+    const done = count(profile.name, ["done"]);
+    return `<tr data-profile="${esc(profile.name)}">
+      <td><div class="cell-main"><span class="kanban-agent-icon ${esc(view.color)}">${icon(view.icon)}</span><div class="stack"><strong>${esc(view.label)}</strong><span class="cell-sub">${esc(view.role)}</span></div></div></td>
+      <td><span class="badge ${tone}"><span class="dot"></span>${status}</span></td>
+      <td class="muted">${esc(profile.model || "Configured")}</td>
+      <td class="muted">${esc(profile.provider || "Hermes")}</td>
+      <td class="mono">${running}</td><td class="mono">${queued}</td><td class="mono">${done}</td>
+      <td><a class="icon-btn tip" data-assign="${esc(profile.name)}" data-tip="Assign task" aria-label="Assign task" href="#/kanban/new/${esc(profile.name)}">${icon("plus")}</a></td>
+    </tr>`;
+  }).join("");
+  rows.querySelectorAll("tr[data-profile]").forEach((row) => {
+    row.onclick = (event) => { if (!event.target.closest("[data-assign]")) openProfile(row.dataset.profile); };
+  });
+}
+
+async function load() {
+  try {
+    const [profileResult, board] = await Promise.all([api.kanban.profiles(), api.kanban.board()]);
+    profiles = profileResult.profiles || [];
+    tasks = (board.columns || []).flatMap((column) => column.tasks || []);
+    draw();
+  } catch (error) {
+    const rows = host?.querySelector("#fleetRows");
+    if (rows) rows.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-ico">${icon("alert")}</div><h4>Hermes fleet unavailable</h4><p>${esc(error.message)}</p></div></td></tr>`;
+  }
+}
+
+function openProfile(name) {
+  const profile = profiles.find((item) => item.name === name);
+  if (!profile) return;
+  const view = meta(name);
+  const [status, tone] = statusFor(name);
+  const running = count(name, ["running"]);
+  const queued = count(name, ["triage", "todo", "scheduled", "ready", "review"]);
+  const blocked = count(name, ["blocked"]);
   openModal({
-    title: existing ? "Edit agent" : "Create new agent", width: 540, body, footer,
-    onMount: (m) => {
-      let color = a.color;
-      m.querySelectorAll(".color-swatch").forEach((b) => (b.onclick = () => {
-        color = b.dataset.c;
-        m.querySelectorAll(".color-swatch").forEach((x) => (x.style.borderColor = "transparent"));
-        b.style.borderColor = "var(--primary)";
-      }));
-      m.querySelector("#f-save").onclick = () => {
-        const name = m.querySelector("#f-name").value.trim();
-        if (!name) { m.querySelector("#f-name").classList.add("error"); toast("error", "Name is required"); return; }
-        const data = {
-          name, type: m.querySelector("#f-type").value, model: m.querySelector("#f-model").value,
-          description: m.querySelector("#f-desc").value.trim(), instructions: m.querySelector("#f-inst").value.trim(),
-          color, icon: m.querySelector("#f-icon").value,
-        };
-        store.set((s) => {
-          if (existing) { Object.assign(s.agents.find((x) => x.id === existing.id), data); }
-          else {
-            s.agents.unshift({ id: store.uid("agt"), ...data, status: "active", tasks: 0, successRate: 100, lastRun: Date.now(), cpu: 0, mem: 0, tags: [], tools: [], createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) });
-          }
-        });
+    title: `${view.label} · ${view.role}`, width: 640,
+    body: `<div class="kanban-profile-head"><span class="kanban-agent-icon ${view.color}">${icon(view.icon)}</span><div><strong>${esc(profile.model || "Configured model")}</strong><span>${esc(profile.provider || "Hermes profile")}</span></div><span class="badge ${tone}">${status}</span></div>
+      <p class="kanban-profile-description">${esc(profile.description || "No routing description configured.")}</p>
+      <div class="kanban-profile-stats"><span><strong>${running}</strong>Running</span><span><strong>${queued}</strong>Queued</span><span><strong>${blocked}</strong>Blocked</span><span><strong>${profile.skill_count || 0}</strong>Skills</span></div>`,
+    footer: `<a class="btn btn-secondary" href="#/hermes" data-close>${icon("settings")}Configure</a><button class="btn btn-primary" id="fleetAssign">${icon("plus")}Assign task</button>`,
+    onMount: (modal) => {
+      modal.querySelector("#fleetAssign").onclick = () => {
         closeOverlay();
-        toast("success", existing ? "Agent updated" : "Agent created", name);
-        if (location.hash.replace(/^#\/?/, "").startsWith("agents") || location.hash === "" || location.hash === "#/") {
-          import("../app.js"); // ensure loaded
-          window.dispatchEvent(new HashChangeEvent("hashchange"));
-        }
+        location.hash = `#/kanban/new/${name}`;
       };
     },
   });
 }
 
-/* ---------- Detail drawer ---------- */
-export function openAgentDrawer(id) {
-  const a = store.state.agents.find((x) => x.id === id);
-  if (!a) return;
-  openDrawer({
-    title: "Agent details",
-    body: `
-      <div class="row gap-3 mb-4">${agentIcon(a, 48)}<div class="stack"><span class="text-lg fw-700">${esc(a.name)}</span><span class="muted">${esc(a.type)} Agent</span></div><div class="spacer"></div>${statusBadge(a.status)}</div>
-      <p class="muted mb-4">${esc(a.description || "No description.")}</p>
-      <div class="card" style="background:var(--surface-2);margin-bottom:16px">
-        ${row("ID", `<span class="mono text-sm">${a.id}</span>`)}
-        ${row("Model", a.model)}
-        ${row("Created", a.createdAt || "—")}
-        ${row("Tasks", a.tasks)}
-        ${row("Success rate", a.successRate + "%")}
-        ${row("Tools", (a.tools?.length || 0) + " tools")}
-        ${row("Tags", (a.tags || []).map((t) => `<span class="badge neutral">${esc(t)}</span>`).join(" ") || "—")}
-      </div>
-      <div class="section-title">Instructions</div>
-      <div class="codeblock" style="margin-bottom:16px"><pre>${esc(a.instructions || "—")}</pre></div>
-      <div class="row gap-2">
-        <button class="btn btn-primary" id="d-run">${icon("play")}Run</button>
-        <button class="btn btn-secondary" id="d-edit">${icon("edit")}Edit</button>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost" id="d-del" style="color:var(--error)">${icon("trash")}Delete</button>
-      </div>`,
-    onMount: (d) => {
-      d.querySelector("#d-run").onclick = () => { toast("success", "Agent run started", a.name); };
-      d.querySelector("#d-edit").onclick = () => { closeOverlay(); openCreateAgent(a); };
-      d.querySelector("#d-del").onclick = () => { closeOverlay(); deleteAgent(a.id); };
-    },
-  });
-}
-const row = (k, v) => `<div class="row between" style="padding:9px 0;border-bottom:1px solid var(--border)"><span class="muted text-sm">${k}</span><span class="fw-600">${v}</span></div>`;
-
-function deleteAgent(id) {
-  const a = store.state.agents.find((x) => x.id === id);
-  confirmDialog({
-    title: "Delete agent", message: `Are you sure you want to delete “${a.name}”? This action cannot be undone.`,
-    confirmText: "Delete", onConfirm: () => {
-      store.set((s) => { s.agents = s.agents.filter((x) => x.id !== id); });
-      toast("success", "Agent deleted", a.name);
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    },
-  });
-}
-
-/* ---------- Page ---------- */
 export default {
   title: "Agents",
-  render() {
-    const s = store.state;
-    let list = s.agents;
-    if (filter.status !== "all") list = list.filter((a) => a.status === filter.status);
-    if (filter.q) list = list.filter((a) => (a.name + a.type + a.model).toLowerCase().includes(filter.q.toLowerCase()));
-
-    return `
-    <div class="page-head">
-      <div><div class="page-title">Agents</div><div class="page-sub">${s.agents.length} agents · ${s.agents.filter((a) => a.status === "active").length} active</div></div>
-      <div class="spacer"></div>
-      <button class="btn btn-primary" id="newAgent">${icon("plus")}New agent</button>
-    </div>
-
-    <div class="card" style="padding:0">
-      <div class="row gap-3 wrap" style="padding:14px 16px;border-bottom:1px solid var(--border)">
-        <div class="search" style="max-width:320px;flex:1"><span>${icon("search")}</span><input id="agentSearch" placeholder="Search agents…" value="${esc(filter.q)}"/></div>
-        <div class="pill-tabs" id="statusFilter">
-          ${["all", "active", "running", "error"].map((st) => `<button class="${filter.status === st ? "active" : ""}" data-s="${st}">${st[0].toUpperCase() + st.slice(1)}</button>`).join("")}
-        </div>
-        <div class="spacer"></div>
-        <span class="dim text-sm">${list.length} shown</span>
-      </div>
-      <div class="table-wrap">
-        <table class="tbl">
-          <thead><tr>
-            <th class="sortable" data-k="name">Name</th><th>Status</th><th>Type</th><th>Model</th>
-            <th class="sortable" data-k="tasks">Tasks</th><th class="sortable" data-k="successRate">Success</th><th>Last run</th><th></th>
-          </tr></thead>
-          <tbody id="agentRows">
-            ${list.length ? list.map((a) => rowHTML(a)).join("") : `<tr><td colspan="8">${emptyRow()}</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  },
-
+  render: () => `<div class="agent-fleet">
+    <div class="page-head"><div><div class="page-title">Hermes Fleet</div><div class="page-sub" id="fleetSummary">Loading persistent profiles…</div></div><div class="spacer"></div><a class="btn btn-secondary" href="#/hermes">${icon("settings")}Hermes profiles</a><a class="btn btn-primary" href="#/kanban/new">${icon("plus")}Assign task</a></div>
+    <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Agent</th><th>Status</th><th>Model</th><th>Provider</th><th>Running</th><th>Queued</th><th>Done</th><th></th></tr></thead><tbody id="fleetRows"><tr><td colspan="8"><div class="skeleton" style="height:180px"></div></td></tr></tbody></table></div></div>
+  </div>`,
   mount(root) {
-    root.querySelector("#newAgent").onclick = () => openCreateAgent();
-    const search = root.querySelector("#agentSearch");
-    search.oninput = (e) => { filter.q = e.target.value; refresh(root); };
-    root.querySelectorAll("#statusFilter button").forEach((b) => (b.onclick = () => { filter.status = b.dataset.s; window.dispatchEvent(new HashChangeEvent("hashchange")); }));
-    wireRows(root);
+    host = root;
+    load();
+    poll = setInterval(load, 5000);
+  },
+  unmount() {
+    clearInterval(poll);
+    poll = null;
+    host = null;
   },
 };
-
-function rowHTML(a) {
-  return `<tr data-id="${a.id}" style="cursor:pointer">
-    <td><div class="cell-main">${agentIcon(a, 32)}<div class="stack"><span class="fw-600">${esc(a.name)}</span><span class="cell-sub">${(a.tags || []).slice(0, 2).join(", ")}</span></div></div></td>
-    <td>${statusBadge(a.status)}</td>
-    <td class="muted">${esc(a.type)}</td>
-    <td class="muted">${esc(a.model)}</td>
-    <td class="mono">${a.tasks}</td>
-    <td><div class="row gap-2">${a.successRate}%<span class="meter"><span style="width:${a.successRate}%;background:${a.successRate > 95 ? "var(--success)" : a.successRate > 88 ? "var(--warning)" : "var(--error)"}"></span></span></div></td>
-    <td class="muted nowrap">${timeAgo(a.lastRun)}</td>
-    <td><button class="icon-btn row-menu" data-id="${a.id}">${icon("more")}</button></td>
-  </tr>`;
-}
-function emptyRow() {
-  return `<div class="empty"><div class="empty-ico">${icon("agents")}</div><h4>No agents found</h4><p>Try adjusting your search or filters.</p></div>`;
-}
-function refresh(root) {
-  const s = store.state; let list = s.agents;
-  if (filter.status !== "all") list = list.filter((a) => a.status === filter.status);
-  if (filter.q) list = list.filter((a) => (a.name + a.type + a.model).toLowerCase().includes(filter.q.toLowerCase()));
-  const tb = root.querySelector("#agentRows");
-  tb.innerHTML = list.length ? list.map((a) => rowHTML(a)).join("") : `<tr><td colspan="8">${emptyRow()}</td></tr>`;
-  wireRows(root);
-}
-function wireRows(root) {
-  root.querySelectorAll("#agentRows tr[data-id]").forEach((tr) => {
-    tr.addEventListener("click", (e) => { if (e.target.closest(".row-menu")) return; openAgentDrawer(tr.dataset.id); });
-  });
-  root.querySelectorAll(".row-menu").forEach((btn) => (btn.onclick = (e) => {
-    e.stopPropagation();
-    const id = btn.dataset.id; const a = store.state.agents.find((x) => x.id === id);
-    openMenu(btn, [
-      { text: "View details", icon: "eye", onClick: () => openAgentDrawer(id) },
-      { text: "Run agent", icon: "play", onClick: () => toast("success", "Agent run started", a.name) },
-      { text: "Edit", icon: "edit", onClick: () => openCreateAgent(a) },
-      { text: a.status === "active" ? "Pause" : "Activate", icon: a.status === "active" ? "pause" : "play", onClick: () => { store.set((s) => { s.agents.find((x) => x.id === id).status = a.status === "active" ? "paused" : "active"; }); window.dispatchEvent(new HashChangeEvent("hashchange")); } },
-      { sep: true },
-      { text: "Delete", icon: "trash", danger: true, onClick: () => deleteAgent(id) },
-    ]);
-  }));
-}
