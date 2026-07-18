@@ -178,4 +178,8 @@ export const api = {
   },
   hermes: { status: () => j("/api/hermes/control/status") },
   llm: { status: () => j("/api/llm/status") },
+  operations: {
+    status: () => j("/api/operations/status"),
+    backup: () => j("/api/operations/backup", { method: "POST" }),
+  },
 };

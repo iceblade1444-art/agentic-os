@@ -289,6 +289,20 @@ token. The installer intentionally clears `TELEGRAM_BOT_TOKEN` in every speciali
 - [ ] Rotated the SSH password you shared earlier; using SSH keys
 - [ ] `.env` and `data/` stay out of git (already in `.gitignore`)
 
+## Operations monitor and automatic backups
+
+Install the user-level services once after the first successful deployment:
+
+```bash
+cd ~/agentic-os
+bash scripts/install-agentic-os-operations.sh
+```
+
+This creates a five-minute health timer, a daily backup timer at 03:15, and a
+path unit used by the **Observability > Create backup** button. The first backup
+runs during installation. Details, retention and notification settings are in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
+
 ---
 
 ## Updating later

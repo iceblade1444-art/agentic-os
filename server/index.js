@@ -14,6 +14,7 @@ import knowledge from "./routes/knowledge.js";
 import kanban from "./routes/kanban.js";
 import claudeCode from "./routes/claude-code.js";
 import milaActions from "./routes/mila-actions.js";
+import operations from "./routes/operations.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
@@ -63,7 +64,7 @@ app.use("/api", rateLimit({ windowMs: 60000, max: 600 }));
 app.get("/api/health", (req, res) =>
   res.json({
     ok: true, name: "agentic-os", version: "1.0.0",
-    features: { llm: true, mcp: true, integrations: true },
+    features: { llm: true, mcp: true, integrations: true, operations: true },
     providers: {
       openai: !!(config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey),
       anthropic: !!(config.anthropic.key || db.integrations.byProvider("anthropic")?.config?.apiKey),
@@ -89,6 +90,7 @@ app.use("/api/knowledge", knowledge);
 app.use("/api/kanban", kanban);
 app.use("/api/claude-code", claudeCode);
 app.use("/api/mila", milaActions);
+app.use("/api/operations", operations);
 app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 

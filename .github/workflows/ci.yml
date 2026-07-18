@@ -18,6 +18,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm audit --omit=dev
+      - run: python3 -m py_compile scripts/agentic-os-operations.py
+      - run: bash -n scripts/install-agentic-os-operations.sh deploy.sh
+      - name: Exercise operations backup
+        run: |
+          root="$(mktemp -d)"
+          mkdir -p "$root/app/data" "$root/app/vault" "$root/app/agentos-runtime/logs"
+          printf '{}\n' > "$root/app/data/db.json"
+          printf '# test\n' > "$root/app/vault/test.md"
+          HOME="$root" OPS_STATE_DIR="$root/state" OPS_BACKUP_DIR="$root/backups" \
+            python3 scripts/agentic-os-operations.py backup --root "$root/app"
+          test -f "$root/state/operations.json"
+          test -n "$(find "$root/backups" -name manifest.json -print -quit)"
 
   runtime:
     runs-on: ubuntu-latest
