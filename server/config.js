@@ -22,8 +22,9 @@ export const config = {
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
   claudeCode: {
     bin: env.CLAUDE_CODE_BIN || "claude",
+    baseUrl: strip(env.CLAUDE_CODE_BASE_URL, "https://api.anthropic.com"),
     workdir: env.CLAUDE_CODE_WORKDIR || "/app/work",
-    model: env.CLAUDE_CODE_MODEL || "fable",
+    model: env.CLAUDE_CODE_MODEL || "sonnet",
     timeoutMs: Math.max(30000, Number(env.CLAUDE_CODE_TIMEOUT_MS) || 900000),
   },
   creator: {
