@@ -524,6 +524,9 @@ Dockerfile · .env.example · package.json
   checks, streaming LLM chat, Kanban, Obsidian, Hermes and Claude workspace. Personal UI state
   such as chat history and appearance remains client-side in a separate `localStorage` namespace
   for every authenticated user; it does not yet synchronize between that user's devices.
+- **Observability is host-backed:** after installing the operations units, the dashboard reports
+  real API, Docker, Hermes, disk and backup health. Daily backups include app data, Obsidian and
+  runtime workspaces with configurable retention. See [Operations](docs/OPERATIONS.md).
 - Integration secrets and LLM keys live **server-side** (`.env` and `DATA_DIR/db.json`, both
   git-ignored). The server static-serves only `assets/` + `index.html` — never `.env` or `server/`.
 - **Auth & hardening:** set `AUTH_TOKEN` to require login on `/api/*` (browser session cookie or a

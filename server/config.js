@@ -20,6 +20,8 @@ export const config = {
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
+  operationsStateFile: env.OPS_STATE_FILE || "/run/agentic-os/operations.json",
+  operationsBackupRequestFile: env.OPS_BACKUP_REQUEST_FILE || "/run/agentic-os/backup.request",
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
   claudeCode: {
     bin: env.CLAUDE_CODE_BIN || "claude",

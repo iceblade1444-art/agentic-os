@@ -1,0 +1,80 @@
+# Operations, monitoring and backups
+
+Agentic OS keeps host administration outside the web container. The container
+does not receive the Docker socket, systemd access or a shell bridge.
+
+## Services
+
+Run the installer once on the production host:
+
+```bash
+cd ~/agentic-os
+bash scripts/install-agentic-os-operations.sh
+```
+
+It installs these user-level units:
+
+| Unit | Purpose |
+| --- | --- |
+| `agentic-os-monitor.timer` | Runs health checks every five minutes |
+| `agentic-os-backup.timer` | Creates a backup daily at 03:15 with a randomized delay |
+| `agentic-os-backup.path` | Watches for a backup requested from the dashboard |
+| `agentic-os-monitor.service` | Checks HTTP, containers, Hermes services, disk and backup age |
+| `agentic-os-backup.service` | Archives persistent application data and applies retention |
+
+Timers use `Persistent=true`, so a missed run starts after the server comes back.
+The dashboard reads `$HOME/.local/state/agentic-os/operations.json` through the
+authenticated `/api/operations/status` endpoint. A manual request only creates
+`backup.request`; the host path unit performs the privileged work.
+
+## Backup contents
+
+Each backup directory contains:
+
+- the server `.env` with mode `0600`;
+- the deployed Git commit;
+- `data.tgz` with users and server state;
+- `vault.tgz` with the Obsidian library;
+- `agentos-runtime.tgz` with agent memory, logs, projects and workspaces;
+- `manifest.json` with timestamp, size and archive names.
+
+Backups are stored in `$HOME/backups/agentic-os`. `node_modules`, `.git` and
+Python cache directories are excluded. Defaults keep 14 days and at most 14
+copies. Configure the host through `.env`:
+
+```dotenv
+OPS_BACKUP_RETENTION_DAYS=14
+OPS_BACKUP_MAX_COUNT=14
+OPS_PUBLIC_HEALTH_URL=https://agent.example.com/api/health
+```
+
+The public URL check is optional but recommended: it detects nginx, DNS and TLS
+failures that an internal container probe cannot see.
+
+## Notifications
+
+Notifications are sent only when overall health changes or a backup fails. Use
+either a Slack-compatible webhook, Telegram, or both:
+
+```dotenv
+OPS_ALERT_WEBHOOK_URL=
+OPS_TELEGRAM_BOT_TOKEN=
+OPS_TELEGRAM_CHAT_ID=
+```
+
+After editing `.env`, restart the timers' next run or trigger a check:
+
+```bash
+systemctl --user start agentic-os-monitor.service
+```
+
+Do not commit notification tokens. They remain in the server `.env`.
+
+## Useful commands
+
+```bash
+systemctl --user list-timers --all | grep agentic-os
+systemctl --user status agentic-os-monitor.service
+systemctl --user status agentic-os-backup.service
+python3 scripts/agentic-os-operations.py status
+```

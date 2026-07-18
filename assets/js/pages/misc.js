@@ -266,33 +266,85 @@ export const integrations = {
 };
 
 /* ============================ OBSERVABILITY ============================ */
+let operationsState = null;
+let operationsError = "";
+let operationsLoading = false;
+
 export const observability = {
   title: "Observability",
   render() {
-    const logs = [
-      { lvl: "info", agent: "Research Agent", msg: "Tool call: search_web(query='ai agents')", at: Date.now() - 12e4 },
-      { lvl: "info", agent: "Data Analyst", msg: "Executed SQL in 240ms · 1,250 rows", at: Date.now() - 3e5 },
-      { lvl: "warn", agent: "Content Writer", msg: "Rate limit approaching (85% of quota)", at: Date.now() - 6e5 },
-      { lvl: "error", agent: "Content Writer", msg: "Tool call failed: seo_check timed out", at: Date.now() - 9e5 },
-      { lvl: "info", agent: "Support Agent", msg: "Resolved ticket #1234", at: Date.now() - 12e5 },
-    ];
-    return head("Observability", "Live traces, logs and performance metrics") + `
-      <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Requests (24h)", "14,208", "activity")}
-        ${statMini("Avg latency", "1.2s", "clock")}
-        ${statMini("Error rate", "0.8%", "warn")}
-        ${statMini("P95 latency", "3.4s", "up")}
-      </div>
-      <div class="grid" style="grid-template-columns:2fr 1fr;margin-bottom:16px">
-        <div class="card pad-lg"><div class="card-head"><h3>Requests & latency</h3></div>${lineChart({ series: [{ name: "req", color: "var(--violet-500)", data: randomSeries(12, 60, 40) }, { name: "lat", color: "var(--cyan)", data: randomSeries(12, 40, 30) }], labels: ["", "", "", "", "", "", "", "", "", "", "", ""], w: 680, h: 220, showAxis: true })}</div>
-        <div class="card pad-lg"><div class="card-head"><h3>Status mix</h3></div><div style="display:grid;place-items:center">${donut({ segments: [{ label: "2xx", value: 92, color: "var(--success)" }, { label: "4xx", value: 6, color: "var(--warning)" }, { label: "5xx", value: 2, color: "var(--error)" }], size: 170, thickness: 22, centerLabel: "99.2%", centerSub: "success" })}</div></div>
-      </div>
-      <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Recent logs</h3></div><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Level</th><th>Agent</th><th>Message</th><th>Time</th></tr></thead>
-        <tbody>${logs.map((l) => `<tr><td><span class="badge ${l.lvl === "error" ? "error" : l.lvl === "warn" ? "warning" : "info"}">${l.lvl}</span></td><td class="fw-600">${esc(l.agent)}</td><td class="mono text-sm muted">${esc(l.msg)}</td><td class="muted nowrap">${timeAgo(l.at)}</td></tr>`).join("")}</tbody>
-      </table></div></div>`;
+    const actions = api.on ? `<div class="row gap-2"><button class="btn btn-secondary" id="opsRefresh">${icon("refresh")}Refresh</button>${api.auth.canAdmin ? `<button class="btn btn-primary" id="opsBackup">${icon("database")}Create backup</button>` : ""}</div>` : "";
+    if (!api.on) return head("Observability", "Server health, backups and incidents", actions) + demoNote("Start the Node backend to read host operations state.");
+    if (operationsError) return head("Observability", "Server health, backups and incidents", actions) + errCard(operationsError);
+    if (!operationsState) return head("Observability", "Server health, backups and incidents", actions) + loadingCard("Loading host health…");
+    return head("Observability", `Last checked ${opsAge(operationsState.checkedAt)}`, actions) + operationsHTML(operationsState);
+  },
+  mount(root) {
+    if (!api.on) return;
+    root.querySelector("#opsRefresh")?.addEventListener("click", () => loadOperations(true));
+    root.querySelector("#opsBackup")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.classList.add("loading");
+      try {
+        await api.operations.backup();
+        toast("success", "Backup queued", "The host service will start it immediately.");
+        [4000, 12000, 30000].forEach((delay) => setTimeout(() => loadOperations(true), delay));
+      } catch (error) { toast("error", "Could not queue backup", error.message); }
+      button.classList.remove("loading");
+    });
+    if (!operationsState && !operationsLoading) loadOperations();
   },
 };
+
+async function loadOperations(force = false) {
+  if (operationsLoading && !force) return;
+  operationsLoading = true;
+  try { operationsState = await api.operations.status(); operationsError = ""; }
+  catch (error) { operationsError = error.message || "Operations state unavailable"; }
+  operationsLoading = false;
+  rerender();
+}
+
+function operationsHTML(state) {
+  if (!state.available) return `<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Host monitor is not installed</div><div class="a-desc">Install the Agentic OS operations systemd units on the server to enable checks and backups.</div></div></div>`;
+  const backup = state.backup || {};
+  const disk = (state.checks || []).find((check) => check.id === "disk");
+  const incidents = state.incidents || [];
+  return `
+    <div class="grid cols-4 mb-4">
+      ${statMini("System status", opsStatusText(state.status), state.status === "healthy" ? "check" : "warn")}
+      ${statMini("Active incidents", state.activeIncidents || 0, "alert")}
+      ${statMini("Last backup", opsAge(backup.lastSuccessAt), "database")}
+      ${statMini("Server storage", disk?.metrics?.usedPercent != null ? `${disk.metrics.usedPercent}%` : "Unknown", "database")}
+    </div>
+    <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr);margin-bottom:16px">
+      <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Host checks</h3><span class="badge ${opsTone(state.status)}">${esc(opsStatusText(state.status))}</span></div><div class="table-wrap"><table class="tbl">
+        <thead><tr><th>Service</th><th>Status</th><th>Detail</th><th>Checked</th></tr></thead>
+        <tbody>${(state.checks || []).map((check) => `<tr><td class="fw-600">${esc(check.name)}</td><td><span class="badge ${opsTone(check.status)}"><span class="dot"></span>${esc(opsStatusText(check.status))}</span></td><td class="muted">${esc(check.detail || "")}</td><td class="muted nowrap">${opsAge(check.checkedAt)}</td></tr>`).join("")}</tbody>
+      </table></div></div>
+      <div class="card pad-lg"><div class="card-head"><h3>Backups</h3><span class="badge ${opsTone(backup.status)}">${esc(opsStatusText(backup.status))}</span></div>
+        <div class="stack gap-3">
+          ${opsFact("Last successful", opsAge(backup.lastSuccessAt))}
+          ${opsFact("Archive size", opsBytes(backup.sizeBytes))}
+          ${opsFact("Stored copies", String(backup.count || 0))}
+          ${opsFact("Retention", `${backup.retentionDays || 14} days / ${backup.maxCount || 14} copies`)}
+          ${opsFact("Daily schedule", `${state.schedule?.backupDailyAt || "03:15"} · ${state.schedule?.timezone || "server time"}`)}
+        </div>
+        ${backup.error ? `<div class="field-error mt-3">${esc(backup.error)}</div>` : ""}
+      </div>
+    </div>
+    <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Incidents</h3><span class="hint">Latest ${Math.min(incidents.length, 50)}</span></div>
+      ${incidents.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Check</th><th>Message</th><th>First seen</th></tr></thead><tbody>${incidents.map((incident) => `<tr><td><span class="badge ${incident.status === "resolved" ? "success" : opsTone(incident.severity)}">${esc(incident.status || "active")}</span></td><td class="fw-600">${esc(incident.name || incident.checkId)}</td><td class="muted">${esc(incident.message || "")}</td><td class="muted nowrap">${opsAge(incident.firstSeenAt)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty" style="min-height:180px"><div class="empty-ico">${icon("check")}</div><h4>No incidents recorded</h4><p>All monitored services are operating normally.</p></div>`}
+    </div>`;
+}
+
+function opsFact(label, value) {
+  return `<div class="row between" style="padding-bottom:10px;border-bottom:1px solid var(--border)"><span class="muted">${esc(label)}</span><span class="fw-600">${esc(value)}</span></div>`;
+}
+function opsTone(status) { return status === "healthy" || status === "success" ? "success" : status === "critical" || status === "error" ? "error" : status === "degraded" || status === "running" ? "warning" : "neutral"; }
+function opsStatusText(status) { return ({ healthy: "Healthy", degraded: "Degraded", critical: "Critical", success: "Protected", running: "Running", error: "Failed", unknown: "Unknown" })[status] || status || "Unknown"; }
+function opsAge(value) { const stamp = value ? new Date(value).getTime() : NaN; return Number.isFinite(stamp) ? timeAgo(stamp) : "Never"; }
+function opsBytes(value) { if (!Number.isFinite(Number(value)) || Number(value) <= 0) return "Unknown"; const units = ["B", "KB", "MB", "GB", "TB"]; let amount = Number(value), index = 0; while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; } return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`; }
 
 /* ============================ GUARDRAILS ============================ */
 export const guardrails = {

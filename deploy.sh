@@ -62,6 +62,10 @@ for _ in $(seq 1 15); do
 done
 [ "${READY:-0}" = 1 ] || echo "(not ready — check: docker compose logs -f)"
 echo
+if systemctl --user is-enabled agentic-os-monitor.timer >/dev/null 2>&1; then
+  systemctl --user start --no-block agentic-os-monitor.service
+  echo "· queued post-deploy operations check"
+fi
 echo "──────────────────────────────────────────────"
 echo " Agentic OS is up on host port ${HOST_PORT}"
 echo " Login secret remains in the server-side .env (not printed)."
