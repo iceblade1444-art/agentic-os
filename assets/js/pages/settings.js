@@ -91,7 +91,7 @@ function teamSection() {
   if (teamError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">Could not load team</div><div class="a-desc">${esc(teamError)}</div></div></div>`;
   if (!teamUsers) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>Loading team...</span></div></div>`;
   return `<div class="card pad-lg">
-    <div class="row between mb-4"><div><div class="section-title">Workspace team</div><div class="hint">New registrations start as Member. Role or access changes revoke existing sessions.</div></div><span class="badge info">${teamUsers.length} accounts</span></div>
+    <div class="row between mb-4"><div><div class="section-title">Workspace team</div><div class="hint">New registrations start as Member. Role or access changes revoke existing sessions.</div></div><span class="badge info">${teamUsers.length} ${teamUsers.length === 1 ? "account" : "accounts"}</span></div>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>User</th><th>Role</th><th>Access</th></tr></thead><tbody>
       ${teamUsers.map((user) => `<tr>
         <td><div class="fw-600">${esc(user.name)}</div><div class="cell-sub">${esc(user.email || "Server owner")}</div></td>
