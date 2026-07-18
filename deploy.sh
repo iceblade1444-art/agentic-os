@@ -35,6 +35,12 @@ if [ ! -s "$CLAUDE_CONFIG_FILE" ]; then
 fi
 chmod 600 "$CLAUDE_CONFIG_FILE"
 
+# Restart the optional host-side Hermes text bridge after code updates.
+if systemctl --user is-enabled agentic-os-hermes-chat.service >/dev/null 2>&1; then
+  systemctl --user restart agentic-os-hermes-chat.service
+  echo "· restarted Hermes text provider bridge"
+fi
+
 # 4) build + start
 echo "· building and starting the container…"
 docker compose up -d --build

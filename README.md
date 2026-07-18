@@ -82,7 +82,7 @@ It runs in **two modes**:
   chart tooltips** (hover any data point).
 - **Accessible** — honours `prefers-reduced-motion`, visible keyboard focus, semantic design
   tokens with contrast checked in both light and dark.
-- **Working chat** with streaming — connects to any **OpenAI-compatible** or **Anthropic**
+- **Working chat** with streaming — uses the local safe **Hermes/openai-codex** bridge by default and also connects to any **OpenAI-compatible** or **Anthropic**
   endpoint (configured in Settings → Model). Falls back to a local demo stream with no key.
 - **Dark & light themes** with a full design-token system (Inter, violet/indigo accent,
   8px grid) taken from the reference UI kit.
@@ -159,7 +159,7 @@ Open the app — the topbar shows **Live** once the backend is detected. Now:
 - **Integrations** — *Connect* validates credentials against the **live provider API**
   (OpenAI, Anthropic, GitHub, Notion; Slack via webhook). Secrets are stored server-side and
   masked in responses.
-- **Chat** — streams through the server LLM proxy using keys from `.env`, so there's no browser
+- **Chat** — streams through the server LLM proxy. The private Hermes Unix-socket bridge works with the existing Hermes OAuth login; optional provider keys from `.env` stay server-side, so there's no browser
   CORS problem. Leave the in-app key blank to use the server's keys.
 
 ### API surface
@@ -167,7 +167,7 @@ Open the app — the topbar shows **Live** once the backend is detected. Now:
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Backend probe (auto-detect) |
-| POST | `/api/llm/chat/completions` | OpenAI-compatible streaming proxy (OpenAI / Anthropic) |
+| POST | `/api/llm/chat/completions` | Streaming proxy (Hermes/openai-codex, OpenAI, Anthropic) |
 | GET | `/api/mcp/servers` | List MCP servers |
 | POST | `/api/mcp/servers/:id/connect` · `/disconnect` | Spawn / stop a server |
 | POST | `/api/mcp/servers/:id/call` | Call a tool `{ tool, args }` |
@@ -176,7 +176,7 @@ Open the app — the topbar shows **Live** once the backend is detected. Now:
 
 ### Environment
 
-Copy `.env.example` → `.env`. Keys: `PORT`, `HOST_PORT`, `BIND_ADDRESS`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+Copy `.env.example` → `.env`. Keys: `PORT`, `HOST_PORT`, `BIND_ADDRESS`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `HERMES_CHAT_SOCKET`,
 `DEFAULT_MODEL`, `GITHUB_TOKEN`, `NOTION_TOKEN`, `SLACK_WEBHOOK_URL`, `DATA_DIR`, `ALLOW_ORIGIN`.
 Anything blank can be set later in the UI (persisted to `DATA_DIR/db.json`, git-ignored).
 
@@ -351,6 +351,24 @@ loopback-only and is not reachable from the container network or public firewall
 ---
 
 ## 🔌 Connect a live LLM (Chat)
+
+### Hermes text provider
+
+Production Chat uses the existing Hermes `openai-codex` login through a private
+Unix socket. The host bridge runs Hermes one-shot mode with the `safe` toolset:
+terminal and file operations are unavailable, prompts and outputs are bounded,
+only two requests can run concurrently, and no TCP port is opened. Install the
+user service once on the server:
+
+```bash
+cd /home/admilana/agentic-os
+bash scripts/install-hermes-chat-bridge.sh
+```
+
+`deploy.sh` restarts the service on future deploys. The Agentic OS container
+sees the host socket as `/run/agentic-os/hermes-chat.sock`. OpenAI or Anthropic
+keys remain optional; when configured, their native streaming APIs take
+priority and Hermes remains the no-extra-key fallback.
 
 ### MILA Voice integration
 

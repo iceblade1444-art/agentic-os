@@ -17,7 +17,7 @@ async function j(url, opts = {}) {
 export const api = {
   get on() { return state.on; },
   get health() { return state.health; },
-  serverHasLLM() { const p = state.health?.providers || {}; return state.on && (p.openai || p.anthropic); },
+  serverHasLLM() { const p = state.health?.providers || {}; return state.on && Object.values(p).some(Boolean); },
   async detect() {
     try {
       const res = await fetch("/api/health");

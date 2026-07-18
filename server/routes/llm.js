@@ -3,6 +3,7 @@
 import { Router } from "express";
 import { Readable } from "node:stream";
 import { config } from "../config.js";
+import { hermesChatComplete, hermesChatStatus } from "../lib/hermes-chat.js";
 import { db } from "../store.js";
 
 const r = Router();
@@ -14,16 +15,31 @@ function keyFor(provider) {
 }
 function pickProvider(model, explicit) {
   if (explicit) return explicit;
+  if (/^claude/i.test(model || "")) {
+    if (keyFor("anthropic")) return "anthropic";
+    if (config.hermesChatSocket) return "hermes";
+    return "anthropic";
+  }
+  if (keyFor("openai")) return "openai";
+  if (keyFor("anthropic")) return "anthropic";
+  if (config.hermesChatSocket) return "hermes";
   return /^claude/i.test(model || "") ? "anthropic" : "openai";
 }
 
-r.get("/status", (req, res) =>
-  res.json({ providers: { openai: !!keyFor("openai"), anthropic: !!keyFor("anthropic") }, defaultModel: config.defaultModel }));
+r.get("/status", async (req, res) => res.json({
+  providers: {
+    openai: { configured: !!keyFor("openai"), ready: !!keyFor("openai") },
+    anthropic: { configured: !!keyFor("anthropic"), ready: !!keyFor("anthropic") },
+    hermes: await hermesChatStatus(),
+  },
+  defaultModel: config.defaultModel,
+}));
 
 r.get("/models", (req, res) => {
   const data = [];
   if (keyFor("openai")) data.push("gpt-4o", "gpt-4o-mini");
   if (keyFor("anthropic")) data.push("claude-sonnet-5", "claude-haiku-4-5-20251001");
+  if (config.hermesChatSocket) data.push("hermes/openai-codex");
   res.json({ object: "list", data: data.map((id) => ({ id, object: "model" })) });
 });
 
@@ -32,6 +48,10 @@ r.post("/complete", async (req, res) => {
   const { model = config.defaultModel, messages, prompt, system, temperature = 0.7, provider } = req.body || {};
   const msgs = messages || [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: prompt || "" }];
   const prov = pickProvider(model, provider);
+  if (prov === "hermes") {
+    try { return res.json(await hermesChatComplete(msgs)); }
+    catch (error) { return res.status(error.status >= 400 && error.status < 600 ? error.status : 502).json({ error: error.message }); }
+  }
   const key = keyFor(prov);
   if (!key) return res.status(400).json({ error: `No API key configured for ${prov}.` });
   try {
@@ -54,13 +74,18 @@ r.post("/chat/completions", async (req, res) => {
   const { model = config.defaultModel, messages = [], temperature = 0.7, provider } = req.body || {};
   const prov = pickProvider(model, provider);
   const key = keyFor(prov);
-  if (!key) return res.status(400).json({ error: `No API key configured for ${prov}. Add it to .env or the Integrations page.` });
+  if (prov !== "hermes" && !key) return res.status(400).json({ error: `No API key configured for ${prov}. Add it to .env or the Integrations page.` });
 
   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   const done = () => { res.write("data: [DONE]\n\n"); res.end(); };
 
   try {
+    if (prov === "hermes") {
+      const result = await hermesChatComplete(messages);
+      for (const chunk of result.text.match(/[\s\S]{1,80}/g) || []) send({ choices: [{ delta: { content: chunk } }] });
+      return done();
+    }
     if (prov === "anthropic") {
       const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n") || undefined;
       const msgs = messages.filter((m) => m.role !== "system");
