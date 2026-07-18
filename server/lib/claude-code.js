@@ -118,6 +118,8 @@ export function createClaudeCodeManager(options = {}) {
   const kanbanBoard = options.kanbanBoard || config.hermesKanbanBoard;
   const gitExecute = options.gitExecute || defaultExecute;
   const githubToken = options.githubToken ?? config.github;
+  const workspaceUid = options.workspaceUid ?? config.claudeCode.workspaceUid;
+  const workspaceGid = options.workspaceGid ?? config.claudeCode.workspaceGid;
   const file = path.join(dataDir, "claude-code-sessions.json");
   let modelProbe = { checkedAt: 0, ready: null, error: "" };
 
@@ -130,18 +132,25 @@ export function createClaudeCodeManager(options = {}) {
     return target;
   }
 
-  function gitEnvironment() {
+  function gitEnvironment(cwd) {
     const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+    let count = 0;
     if (githubToken) {
-      env.GIT_CONFIG_COUNT = "1";
-      env.GIT_CONFIG_KEY_0 = "http.https://github.com/.extraheader";
-      env.GIT_CONFIG_VALUE_0 = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString("base64")}`;
+      env[`GIT_CONFIG_KEY_${count}`] = "http.https://github.com/.extraheader";
+      env[`GIT_CONFIG_VALUE_${count}`] = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString("base64")}`;
+      count += 1;
     }
+    if (cwd) {
+      env[`GIT_CONFIG_KEY_${count}`] = "safe.directory";
+      env[`GIT_CONFIG_VALUE_${count}`] = cwd;
+      count += 1;
+    }
+    env.GIT_CONFIG_COUNT = String(count);
     return env;
   }
 
   async function runGit(args, cwd, timeout = 120000) {
-    const result = await gitExecute("git", args, { cwd, timeout, env: gitEnvironment() });
+    const result = await gitExecute("git", args, { cwd, timeout, env: gitEnvironment(cwd) });
     if (!result.ok) {
       throw Object.assign(new Error(bounded(result.stderr || result.error || "Git command failed", 1000)), { status: 422 });
     }
@@ -162,6 +171,24 @@ export function createClaudeCodeManager(options = {}) {
     const current = fs.existsSync(exclude) ? fs.readFileSync(exclude, "utf8") : "";
     if (!current.split(/\r?\n/).includes(".agentic-context/")) fs.appendFileSync(exclude, `${current.endsWith("\n") || !current ? "" : "\n"}.agentic-context/\n`);
   }
+
+  const applyWorkspaceOwnership = options.applyWorkspaceOwnership || ((root) => {
+    if (typeof process.getuid !== "function" || process.getuid() !== 0) return;
+    if (!Number.isInteger(workspaceUid) || !Number.isInteger(workspaceGid) || workspaceUid < 0 || workspaceGid < 0) return;
+    const stack = [root];
+    while (stack.length) {
+      const current = stack.pop();
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink()) {
+        fs.lchownSync(current, workspaceUid, workspaceGid);
+        continue;
+      }
+      fs.chownSync(current, workspaceUid, workspaceGid);
+      if (stat.isDirectory()) {
+        for (const name of fs.readdirSync(current)) stack.push(path.join(current, name));
+      }
+    }
+  });
 
   function load() {
     try {
@@ -241,6 +268,7 @@ export function createClaudeCodeManager(options = {}) {
     try {
       await runGit(args, workRoot, 300000);
       excludeAgentContext(target);
+      applyWorkspaceOwnership(target);
       return { project: await projectStatus(target) };
     } catch (error) {
       if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
