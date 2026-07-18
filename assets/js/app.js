@@ -50,6 +50,7 @@ const PAGES = {
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
 };
+const ADMIN_ROUTES = new Set(["mcp", "integrations", "secrets"]);
 
 /* ---------------- Theme ---------------- */
 export function applyTheme(t) {
@@ -69,7 +70,7 @@ function sidebarHTML() {
   const groups = NAV.map((g) => `
     ${g.group ? `<div class="nav-label">${g.group}</div>` : ""}
     <div class="nav-group">
-      ${g.items.map((it) => `
+      ${g.items.filter((it) => api.auth.canAdmin || !ADMIN_ROUTES.has(it.route)).map((it) => `
         <a class="nav-item ${it.route === cur ? "active" : ""}" href="#/${it.route}">
           ${icon(it.icon)}<span>${it.label}</span>
           ${it.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
@@ -102,7 +103,7 @@ function topbarHTML() {
       <button class="icon-btn" id="themeBtn" title="Toggle theme">${icon(t === "dark" ? "sun" : "moon")}</button>
       <button class="icon-btn" title="Help">${icon("help")}</button>
       <button class="icon-btn" id="bellBtn" title="Notifications" style="position:relative">${icon("bell")}<span class="dot"></span></button>
-      <a class="btn btn-primary" href="#/kanban/new" id="newAgentTop">${icon("plus")}<span>New task</span></a>
+      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/kanban/new" id="newAgentTop">${icon("plus")}<span>New task</span></a>` : ""}
     </div>
   </header>`;
 }
@@ -229,7 +230,7 @@ let mountedPage = null;
 
 function route() {
   const r = currentRoute();
-  const page = PAGES[r] || notFound;
+  const page = (!api.auth.canAdmin && ADMIN_ROUTES.has(r)) ? forbidden : (PAGES[r] || notFound);
   const view = qs("#view");
   if (!view) return;
   mountedPage?.unmount?.();
@@ -245,11 +246,16 @@ function route() {
 }
 
 const notFound = { title: "Not found", render: () => `<div class="empty"><div class="empty-ico">${icon("search")}</div><h4>Page not found</h4><p>The page you’re looking for doesn’t exist.</p><a class="btn btn-primary" href="#/">Back home</a></div>` };
+const forbidden = { title: "Access denied", render: () => `<div class="empty"><div class="empty-ico">${icon("shield")}</div><h4>Admin access required</h4><p>This system area is available to Creator and Admin accounts.</p><a class="btn btn-primary" href="#/">Back home</a></div>` };
 
 /* ---------------- Bootstrap ---------------- */
 async function boot() {
   applyThemeSilent(store.state.settings.theme || "dark");
   await api.detect();
+  if (!api.needsAuth) {
+    store.setScope(api.auth.user?.id || "local");
+    applyThemeSilent(store.state.settings.theme || "dark");
+  }
   window.addEventListener("hashchange", route);
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); }
@@ -278,21 +284,39 @@ function syncAuthenticatedProfile() {
 function renderLogin() {
   const app = qs("#app");
   app.removeAttribute("aria-busy");
-  app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm">
+  const canRegister = api.auth.registration;
+  app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
     <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 14px">${icon("rocket")}</div>
     <h1 style="text-align:center;font-size:22px;font-weight:800;letter-spacing:-.02em">Agentic OS</h1>
-    <p class="muted" style="text-align:center;margin:6px 0 22px">Enter the admin password to continue.</p>
-    <div class="field"><input class="input" id="loginPw" type="password" placeholder="Password" autocomplete="current-password"/></div>
+    <p class="muted" id="loginLead" style="text-align:center;margin:6px 0 18px">Sign in to your workspace.</p>
+    ${canRegister ? `<div class="login-tabs" role="tablist"><button type="button" class="active" data-auth-mode="login">Sign in</button><button type="button" data-auth-mode="register">Create account</button></div>` : ""}
+    <div class="field auth-register-only"><label class="label" for="loginName">Name</label><input class="input" id="loginName" autocomplete="name"/></div>
+    <div class="field"><label class="label" for="loginEmail">Email <span class="auth-login-only muted">(leave blank for Creator)</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
+    <div class="field"><label class="label" for="loginPw">Password</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
     <div id="loginErr"></div>
-    <button class="btn btn-primary block" type="submit">${icon("lock")}Sign in</button>
+    <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>Sign in</span></button>
   </form></div>`;
   const form = qs("#loginForm");
-  qs("#loginPw").focus();
+  const setMode = (mode) => {
+    form.dataset.mode = mode;
+    form.querySelectorAll("[data-auth-mode]").forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
+    qs("#loginLead").textContent = mode === "register" ? "Create a Member account for this workspace." : "Sign in to your workspace.";
+    qs("#authSubmit span").textContent = mode === "register" ? "Create account" : "Sign in";
+    qs("#loginPw").autocomplete = mode === "register" ? "new-password" : "current-password";
+    qs("#loginErr").innerHTML = "";
+    (mode === "register" ? qs("#loginName") : qs("#loginEmail")).focus();
+  };
+  form.querySelectorAll("[data-auth-mode]").forEach((button) => button.onclick = () => setMode(button.dataset.authMode));
+  qs("#loginEmail").focus();
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const btn = form.querySelector("button"); btn.classList.add("loading");
-    try { await api.auth.login(qs("#loginPw").value); location.reload(); }
-    catch (err) { qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || "Login failed")}</div>`; btn.classList.remove("loading"); qs("#loginPw").focus(); }
+    const btn = qs("#authSubmit"); btn.classList.add("loading");
+    const body = { email: qs("#loginEmail").value.trim(), password: qs("#loginPw").value };
+    try {
+      if (form.dataset.mode === "register") await api.auth.register({ ...body, name: qs("#loginName").value.trim() });
+      else await api.auth.login(body);
+      location.reload();
+    } catch (err) { qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || "Login failed")}</div>`; btn.classList.remove("loading"); qs("#loginPw").focus(); }
   };
 }
 function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", t); }

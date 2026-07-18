@@ -1,5 +1,6 @@
 // Tiny reactive store with localStorage persistence.
-const KEY = "agentic-os:v1";
+const BASE_KEY = "agentic-os:v1";
+let storageKey = BASE_KEY;
 
 const uid = (p = "id") => p + "_" + Math.random().toString(36).slice(2, 9);
 const now = Date.now();
@@ -96,13 +97,13 @@ function seed() {
   };
 }
 
-function load() {
+function load(key = storageKey) {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch (e) { /* ignore */ }
   const data = seed();
-  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
   return data;
 }
 
@@ -113,7 +114,21 @@ export const store = {
   uid,
   subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   emit() { listeners.forEach((fn) => fn(this.state)); },
-  persist() { try { localStorage.setItem(KEY, JSON.stringify(this.state)); } catch (e) {} },
+  setScope(userId = "local") {
+    const scope = String(userId || "local").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || "local";
+    const nextKey = scope === "local" ? BASE_KEY : `${BASE_KEY}:${scope}`;
+    if (nextKey === storageKey) return;
+    try {
+      if (!localStorage.getItem(nextKey) && scope === "creator") {
+        const legacy = localStorage.getItem(BASE_KEY);
+        if (legacy) localStorage.setItem(nextKey, legacy);
+      }
+    } catch { /* storage can be unavailable in private mode */ }
+    storageKey = nextKey;
+    this.state = load(nextKey);
+    this.emit();
+  },
+  persist() { try { localStorage.setItem(storageKey, JSON.stringify(this.state)); } catch (e) {} },
   set(mutator) { mutator(this.state); this.persist(); this.emit(); },
   reset() { this.state = seed(); this.persist(); this.emit(); },
 };

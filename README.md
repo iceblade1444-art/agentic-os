@@ -521,9 +521,9 @@ Dockerfile · .env.example · package.json
 - Fonts (Inter, JetBrains Mono) load from Google Fonts; the UI falls back to system fonts if
   offline. To self-host, download the fonts and swap the `<link>` in `index.html`.
 - **What's real with the backend running:** MCP tool discovery & calls, integration credential
-  checks, and streaming LLM chat. **Still client-side (`localStorage`):** agents, workflows and
-  chat history — they need no server. Add auth and move them into `server/store.js` for
-  multi-user / multi-device persistence.
+  checks, streaming LLM chat, Kanban, Obsidian, Hermes and Claude workspace. Personal UI state
+  such as chat history and appearance remains client-side in a separate `localStorage` namespace
+  for every authenticated user; it does not yet synchronize between that user's devices.
 - Integration secrets and LLM keys live **server-side** (`.env` and `DATA_DIR/db.json`, both
   git-ignored). The server static-serves only `assets/` + `index.html` — never `.env` or `server/`.
 - **Auth & hardening:** set `AUTH_TOKEN` to require login on `/api/*` (browser session cookie or a
@@ -534,11 +534,12 @@ Dockerfile · .env.example · package.json
 ### Authenticated profile
 
 The sidebar profile comes from `/api/auth/me`, never from demo browser data. The
-current owner login is displayed as **Creator**; set `CREATOR_NAME` and
-`CREATOR_EMAIL` to customize it. Signed sessions already carry `id`, `name`,
-`email`, `role`, and `avatar`, so future registered accounts will display their
-own name automatically. Public self-registration is not implemented yet: the
-current release still has one owner login protected by `AUTH_TOKEN`.
+owner login is displayed as **Creator**; set `CREATOR_NAME` and `CREATOR_EMAIL`
+to customize it. Set `ALLOW_REGISTRATION=true` to let people create Member
+accounts. Creator/Admin can assign Admin, Member or Viewer access in
+**Settings > Team**. Passwords are protected with `scrypt`, and role or account
+status changes revoke active sessions. See [Access control](docs/ACCESS_CONTROL.md)
+for the role matrix and shared/personal data boundaries.
 
 ## 🙏 Design credits
 
