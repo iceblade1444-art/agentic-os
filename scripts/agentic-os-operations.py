@@ -35,6 +35,29 @@ def parse_time(value: str | None) -> dt.datetime | None:
         return None
 
 
+def load_project_env(root: Path) -> None:
+    """Load missing values from the deployment .env for direct host invocations."""
+    env_file = root / ".env"
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ[key] = value
+
+
 class Operations:
     def __init__(self, root: Path):
         self.root = root.resolve()
@@ -289,7 +312,9 @@ def main() -> None:
     parser.add_argument("command", choices=["monitor", "backup", "status"])
     parser.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
     args = parser.parse_args()
-    operations = Operations(Path(args.root))
+    root = Path(args.root)
+    load_project_env(root)
+    operations = Operations(root)
     if args.command == "monitor":
         value = operations.monitor()
     elif args.command == "backup":
