@@ -1,15 +1,35 @@
-import { Router } from "express";
+import crypto from "node:crypto";
+import { Router, raw } from "express";
 
 import { config } from "../config.js";
-import { hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
+import { authenticatedUser } from "../lib/auth.js";
+import { hermesKanbanRawRequest, hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 
 const r = Router();
 const BOARD = config.hermesKanbanBoard;
 const STATUSES = new Set(["triage", "todo", "scheduled", "ready", "blocked", "review", "done", "archived"]);
 const PROFILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 const taskPath = (id, suffix = "") => kanbanPath(`/tasks/${encodeURIComponent(id)}${suffix}`, BOARD);
 const bounded = (value, max) => String(value || "").trim().slice(0, max);
+
+function attachmentName(req) {
+  let value;
+  try { value = decodeURIComponent(req.get("X-File-Name") || ""); }
+  catch { value = ""; }
+  const name = value.replace(/\\/g, "/").split("/").at(-1)?.replace(/[\u0000-\u001f\u007f"]/g, "").replace(/^\.+/, "").trim().slice(0, 200);
+  if (!name) throw Object.assign(new Error("Attachment filename is required"), { status: 400 });
+  return name;
+}
+
+function multipartAttachment(file, filename, contentType, uploadedBy) {
+  const boundary = `agentic-os-${crypto.randomBytes(12).toString("hex")}`;
+  const safeType = /^[\w!#$&^_.+\-/]{1,120}$/.test(contentType || "") ? contentType : "application/octet-stream";
+  const head = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${safeType}\r\n\r\n`);
+  const actor = Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="uploaded_by"\r\n\r\n${uploadedBy}\r\n--${boundary}--\r\n`);
+  return { boundary, body: Buffer.concat([head, file, actor]) };
+}
 
 function handle(handler) {
   return async (req, res) => {
@@ -66,6 +86,47 @@ r.post("/tasks", handle(async (req) => {
 }));
 
 r.get("/tasks/:id", handle((req) => hermesKanbanRequest(taskPath(req.params.id))));
+r.get("/tasks/:id/log", handle((req) => hermesKanbanRequest(taskPath(req.params.id, "/log?tail=100000"))));
+
+r.post("/tasks/:id/attachments", raw({ type: () => true, limit: MAX_ATTACHMENT_BYTES }), async (req, res) => {
+  try {
+    if (!Buffer.isBuffer(req.body) || !req.body.length) throw Object.assign(new Error("Attachment is empty"), { status: 400 });
+    const filename = attachmentName(req);
+    const actor = bounded(authenticatedUser(req)?.name || "Agentic OS", 80);
+    const upload = multipartAttachment(req.body, filename, req.get("X-File-Type"), actor);
+    const response = await hermesKanbanRawRequest(taskPath(req.params.id, "/attachments"), {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${upload.boundary}`,
+        "Content-Length": upload.body.length,
+      },
+      body: upload.body,
+      timeoutMs: 30000,
+    });
+    res.json(JSON.parse(response.text || "{}"));
+  } catch (error) {
+    res.status(error.type === "entity.too.large" ? 413 : error.status >= 400 && error.status < 600 ? error.status : 502).json({ error: error.message });
+  }
+});
+
+r.get("/attachments/:id", async (req, res) => {
+  try {
+    if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error("Invalid attachment id"), { status: 400 });
+    const response = await hermesKanbanRawRequest(kanbanPath(`/attachments/${req.params.id}`, BOARD), { timeoutMs: 30000 });
+    const type = response.headers?.["content-type"];
+    const disposition = response.headers?.["content-disposition"];
+    if (type) res.setHeader("Content-Type", type);
+    if (disposition) res.setHeader("Content-Disposition", disposition);
+    res.send(response.body || Buffer.from(response.text || ""));
+  } catch (error) {
+    res.status(error.status >= 400 && error.status < 600 ? error.status : 502).json({ error: error.message });
+  }
+});
+
+r.delete("/attachments/:id", handle((req) => {
+  if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error("Invalid attachment id"), { status: 400 });
+  return hermesKanbanRequest(kanbanPath(`/attachments/${req.params.id}`, BOARD), { method: "DELETE" });
+}));
 
 r.patch("/tasks/:id", handle((req) => {
   const body = {};

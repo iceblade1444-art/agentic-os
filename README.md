@@ -275,6 +275,22 @@ sessions, config, logs, analytics, cron, profiles, skills, MCP, webhooks, channe
 backups and system operations. HTTP and WebSocket traffic pass through `server/lib/hermes-proxy.js`;
 the upstream port is never linked from the browser.
 
+### Hermes Kanban operations
+
+The **Kanban** route is the shared operating board for Hermes and every persistent specialist.
+Open a card to inspect four live views: **Overview** contains the latest or final handoff and child
+results, **Runs** contains every worker attempt plus its bounded stdout/stderr log, **Files** stores
+task attachments, and **Activity** combines comments with lifecycle events. Running cards refresh
+their status, heartbeat, run history, and visible log every three seconds while the detail dialog is
+open.
+
+Attachments use Hermes' native per-board storage rather than Agentic OS local state. Uploads are
+limited to 25 MB per file, pass through the authenticated Node backend, and appear as absolute file
+paths in the assigned worker's task context. Downloads and deletion are also proxied through the
+protected backend; the Hermes dashboard token and server filesystem paths are never sent as
+credentials to the browser. Files may be attached while creating a card or later from its **Files**
+tab.
+
 ### Claude Code desktop workspace
 
 **Claude Workspace** is the coding surface inside the authenticated Agentic OS shell. It is a

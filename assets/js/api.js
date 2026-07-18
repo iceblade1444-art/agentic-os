@@ -111,10 +111,34 @@ export const api = {
     updateOrchestration: (body) => j("/api/kanban/orchestration", { method: "PUT", body }),
     createTask: (body) => j("/api/kanban/tasks", { method: "POST", body }),
     task: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}`),
+    taskLog: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/log`),
     updateTask: (id, body) => j(`/api/kanban/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
     comment: (id, body) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/comments`, { method: "POST", body }),
     decompose: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/decompose`, { method: "POST" }),
     dispatch: () => j("/api/kanban/dispatch", { method: "POST" }),
+    async uploadAttachment(id, file) {
+      const res = await fetch(`/api/kanban/tasks/${encodeURIComponent(id)}/attachments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-File-Name": encodeURIComponent(file.name),
+          "X-File-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+      return data;
+    },
+    async downloadAttachment(id) {
+      const res = await fetch(`/api/kanban/attachments/${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "HTTP " + res.status);
+      }
+      return { blob: await res.blob(), disposition: res.headers.get("Content-Disposition") || "" };
+    },
+    deleteAttachment: (id) => j(`/api/kanban/attachments/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   claude: {
     status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),
