@@ -46,6 +46,22 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   assert.equal(calls.at(-1).options.env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
 });
 
+test("Claude workspace reports structured CLI errors instead of a false ready state", async (t) => {
+  const dirs = fixture();
+  t.after(() => fs.rmSync(dirs.root, { recursive: true, force: true }));
+  const execute = async () => ({
+    ok: true,
+    stdout: JSON.stringify({ is_error: true, result: "Selected model is unavailable." }),
+    stderr: "",
+  });
+  const manager = createClaudeCodeManager({ dataDir: dirs.data, workRoot: dirs.work, execute });
+  const created = manager.createSession({ title: "Model error", workdir: path.join(dirs.work, "demo") });
+  const completed = await manager.message(created.id, { text: "Inspect index.js" });
+  assert.equal(completed.status, "error");
+  assert.equal(completed.messages.at(-1).ok, false);
+  assert.equal(completed.messages.at(-1).text, "Selected model is unavailable.");
+});
+
 test("Claude workspace confines file access to its mounted work root", (t) => {
   const dirs = fixture();
   t.after(() => fs.rmSync(dirs.root, { recursive: true, force: true }));
@@ -160,8 +176,8 @@ test("Claude desktop UI is wired into the authenticated Agentic OS shell", () =>
   assert.match(page, /api\.claude\.delegate/);
   assert.match(page, /api\.claude\.importProject/);
   assert.match(page, /claudeProjectSync/);
-  assert.doesNotMatch(page, /value="fable"/);
-  assert.match(page, /value="sonnet" selected/);
+  assert.match(page, /value="claude-fable-5"/);
+  assert.match(page, /value="claude-sonnet-4-6" selected/);
   assert.match(server, /\/api\/claude-code/);
   assert.match(compose, /CLAUDE_CONFIG_DIR.*:\/root\/\.claude/);
   assert.match(compose, /CLAUDE_CONFIG_FILE.*:\/root\/\.claude\.json/);
