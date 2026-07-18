@@ -108,14 +108,23 @@ export function createClaudeCodeManager(options = {}) {
   const dataDir = path.resolve(options.dataDir || config.dataDir);
   const workRoot = path.resolve(options.workRoot || config.claudeCode.workdir);
   const bin = options.bin || config.claudeCode.bin;
-  const baseUrl = options.baseUrl || config.claudeCode.baseUrl;
-  const defaultModel = options.model || config.claudeCode.model;
+  const baseUrl = options.baseUrl ?? config.claudeCode.baseUrl;
+  const apiKey = options.apiKey ?? config.claudeCode.apiKey;
+  const defaultModel = options.model ?? config.claudeCode.model;
   const timeoutMs = options.timeoutMs || config.claudeCode.timeoutMs;
   const rawExecute = options.execute || defaultExecute;
-  const execute = (command, args, executeOptions = {}) => rawExecute(command, args, {
-    ...executeOptions,
-    env: { ...process.env, ANTHROPIC_BASE_URL: baseUrl },
-  });
+  const execute = (command, args, executeOptions = {}) => {
+    const env = { ...process.env };
+    // Claude Code OAuth must not inherit the API proxy used by Agentic OS's
+    // separate Anthropic connector. Dedicated values remain available for
+    // installations that intentionally use an API key or custom gateway.
+    delete env.ANTHROPIC_API_KEY;
+    delete env.ANTHROPIC_BASE_URL;
+    delete env.CLAUDE_CODE_BASE_URL;
+    if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+    if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
+    return rawExecute(command, args, { ...executeOptions, env });
+  };
   const kanbanRequest = options.kanbanRequest || hermesKanbanRequest;
   const kanbanBoard = options.kanbanBoard || config.hermesKanbanBoard;
   const gitExecute = options.gitExecute || defaultExecute;
@@ -374,10 +383,13 @@ export function createClaudeCodeManager(options = {}) {
       let parsed = {};
       try { parsed = JSON.parse(result.stdout || "{}"); } catch {}
       const modelError = bounded(parsed.result || result.stderr || result.error, 500);
+      const resolved = Object.keys(parsed.modelUsage || {}).filter((name) => !/haiku/i.test(name)).at(-1)
+        || Object.keys(parsed.modelUsage || {}).at(-1) || "";
       modelProbe = {
         checkedAt: Date.now(),
         ready: result.ok && parsed.is_error !== true,
         error: result.ok && parsed.is_error !== true ? "" : modelError || "Claude model check failed",
+        resolved,
       };
     }
     const modelReady = modelProbe.ready !== false;
@@ -495,6 +507,7 @@ export function createClaudeCodeManager(options = {}) {
           durationMs: Number(parsed.duration_ms) || null,
           turns: Number(parsed.num_turns) || null,
           costUsd: Number(parsed.total_cost_usd) || null,
+          models: Object.keys(parsed.modelUsage || {}).slice(0, 8),
         },
       });
       target.messages = target.messages.slice(-MAX_MESSAGES);

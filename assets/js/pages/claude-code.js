@@ -144,8 +144,9 @@ function drawHeader() {
   qs("#claudeWorkdir", host).textContent = active?.workdir?.replace(status?.workRoot || "", "workspace") || "Select a session";
   const runtime = qs("#claudeRuntime", host);
   runtime.className = `claude-runtime ${status?.ready ? "ready" : "offline"}`;
-  runtime.title = status?.error || status?.version || "Claude Code runtime";
-  runtime.innerHTML = `<span></span>${status?.ready ? `Ready · ${esc(status.version || "Claude Code")}` : "Claude unavailable"}`;
+  const activeModel = status?.model?.resolved || status?.defaultModel || "Claude";
+  runtime.title = status?.error || `${status?.version || "Claude Code"} · ${activeModel}`;
+  runtime.innerHTML = `<span></span>${status?.ready ? `Ready · ${esc(activeModel)}` : "Claude unavailable"}`;
   qs("#claudeDelete", host).disabled = !active || active.status === "running";
 }
 
@@ -365,7 +366,7 @@ export default {
       <section class="claude-conversation" id="claudeConversation"></section>
       <footer class="claude-compose-wrap">
         <div class="claude-attachments" id="claudeAttachments"></div>
-        <div class="claude-composer"><button class="icon-btn" id="claudeAttach" title="Attach context">${icon("attach")}</button><input id="claudeFileInput" type="file" multiple hidden/><textarea id="claudeComposer" rows="1" placeholder="Ask Claude to inspect, build or fix…"></textarea><select id="claudeMode" title="Permission mode"><option value="acceptEdits">Edit</option><option value="plan">Plan</option></select><select id="claudeEffort" title="Reasoning effort"><option value="medium">Medium</option><option value="high" selected>High</option><option value="max">Max</option></select><select id="claudeModel" title="Claude model"><option value="claude-sonnet-4-6" selected>Sonnet 4.6</option><option value="claude-fable-5">Fable 5 Extra</option><option value="claude-opus-4-8">Opus 4.8</option><option value="claude-haiku-4-5-20251001">Haiku 4.5</option></select><button class="claude-send" id="claudeSend" title="Send">${icon("send")}</button></div>
+        <div class="claude-composer"><button class="icon-btn" id="claudeAttach" title="Attach context">${icon("attach")}</button><input id="claudeFileInput" type="file" multiple hidden/><textarea id="claudeComposer" rows="1" placeholder="Ask Claude to inspect, build or fix…"></textarea><select id="claudeMode" title="Permission mode"><option value="acceptEdits">Edit</option><option value="plan">Plan</option></select><select id="claudeEffort" title="Reasoning effort"><option value="medium">Medium</option><option value="high" selected>High</option><option value="max">Max</option></select><select id="claudeModel" title="Claude model"><option value="sonnet" selected>Sonnet</option><option value="fable">Fable Extra</option><option value="opus">Opus</option><option value="haiku">Haiku</option></select><button class="claude-send" id="claudeSend" title="Send">${icon("send")}</button></div>
       </footer>
     </main>
     <aside class="claude-inspector">

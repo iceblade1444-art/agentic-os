@@ -318,9 +318,13 @@ Production installs the pinned Claude Code CLI in the image and persists both it
 directory and root-level login file through `CLAUDE_CONFIG_DIR` and `CLAUDE_CONFIG_FILE`.
 `deploy.sh` restores the login file from Claude's latest backup when needed, so authentication
 survives container recreation. Project work is persisted by `./agentos-runtime/work:/app/work`. Configure the default model with
-`CLAUDE_CODE_MODEL`, keep the CLI root endpoint in `CLAUDE_CODE_BASE_URL`, and verify the account
-after deployment from the runtime indicator. `ANTHROPIC_BASE_URL` retains `/v1` for the separate
-Agentic OS REST proxy and is intentionally not passed through to Claude Code.
+`CLAUDE_CODE_MODEL` using a stable CLI alias such as `sonnet`, then verify the resolved model from
+the runtime indicator after deployment. For the recommended `claude auth login` flow, leave
+`CLAUDE_CODE_API_KEY` and `CLAUDE_CODE_BASE_URL` empty. The separate Agentic OS Anthropic connector
+may still use `ANTHROPIC_API_KEY` and an `/v1` `ANTHROPIC_BASE_URL`; those generic variables are
+deliberately removed from Claude Code subprocesses so they cannot override the persisted OAuth
+subscription. Set the dedicated Claude Code variables only when intentionally using an API key or
+compatible gateway instead of OAuth.
 
 On the production server, install and start the dashboard once:
 
