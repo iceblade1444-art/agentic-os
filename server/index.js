@@ -1,6 +1,7 @@
 // Agentic OS server — serves the SPA and the /api backend (LLM proxy, MCP, integrations).
 import express from "express";
 import cors from "cors";
+import fs from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,7 +61,11 @@ app.get("/api/health", (req, res) =>
   res.json({
     ok: true, name: "agentic-os", version: "1.0.0",
     features: { llm: true, mcp: true, integrations: true },
-    providers: { openai: !!config.openai.key, anthropic: !!config.anthropic.key },
+    providers: {
+      openai: !!(config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey),
+      anthropic: !!(config.anthropic.key || db.integrations.byProvider("anthropic")?.config?.apiKey),
+      hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
+    },
     auth: authEnabled(),
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);

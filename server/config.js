@@ -19,6 +19,7 @@ export const config = {
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
+  hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
   claudeCode: {
     bin: env.CLAUDE_CODE_BIN || "claude",
