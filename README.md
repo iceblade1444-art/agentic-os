@@ -298,9 +298,10 @@ file instead of modifying the project's committed `.gitignore`. Imported files a
 `CLAUDE_CODE_WORKSPACE_UID:GID` (default `1000:1000`) for host access; Git's trusted-directory
 override is scoped to the selected bounded workspace rather than enabled globally.
 
-Production installs the pinned Claude Code CLI in the image and mounts
-`/home/admilana/.claude:/root/.claude` so login survives container recreation. Project work is
-persisted by `./agentos-runtime/work:/app/work`. Configure the default model with
+Production installs the pinned Claude Code CLI in the image and persists both its settings
+directory and root-level login file through `CLAUDE_CONFIG_DIR` and `CLAUDE_CONFIG_FILE`.
+`deploy.sh` restores the login file from Claude's latest backup when needed, so authentication
+survives container recreation. Project work is persisted by `./agentos-runtime/work:/app/work`. Configure the default model with
 `CLAUDE_CODE_MODEL`, keep the CLI root endpoint in `CLAUDE_CODE_BASE_URL`, and verify the account
 after deployment from the runtime indicator. `ANTHROPIC_BASE_URL` retains `/v1` for the separate
 Agentic OS REST proxy and is intentionally not passed through to Claude Code.

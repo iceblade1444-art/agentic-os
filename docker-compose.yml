@@ -23,7 +23,8 @@ services:
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
       - ./agentos-runtime/work:/app/work
       - ./agentos-runtime/projects:/app/projects
-      - /home/admilana/.claude:/root/.claude
+      - ${CLAUDE_CONFIG_DIR:-/home/admilana/.claude}:/root/.claude
+      - ${CLAUDE_CONFIG_FILE:-/home/admilana/.claude.json}:/root/.claude.json
       - /home/admilana/.local/state/agentic-os:/run/agentic-os
     depends_on:
       - agentos-runtime
