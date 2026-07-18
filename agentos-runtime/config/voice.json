@@ -9,7 +9,7 @@
     "local_file": {
       "enabled": true,
       "mode": "file_to_command",
-      "input_file": "C:/Users/User/AgentOS/voice/input.txt",
+      "input_file": "voice/input.txt",
       "description": "Read recognized text from a file written by an external STT tool."
     },
     "gemini_live": {

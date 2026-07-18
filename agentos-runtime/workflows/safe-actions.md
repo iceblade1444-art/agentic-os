@@ -34,31 +34,31 @@ Examples:
 Check risk without creating an approval:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py risk check send_email "Send outreach email"
+python agentosctl.py risk check send_email "Send outreach email"
 ```
 
 Request an action. If risky, this creates an approval record:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py risk request deploy "Deploy dashboard to production"
+python agentosctl.py risk request deploy "Deploy dashboard to production"
 ```
 
 List pending approvals:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py approval list --status pending
+python agentosctl.py approval list --status pending
 ```
 
 Approve:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py approval approve approval_xxxxx
+python agentosctl.py approval approve approval_xxxxx
 ```
 
 Deny:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py approval deny approval_xxxxx
+python agentosctl.py approval deny approval_xxxxx
 ```
 
 ## Agent rule

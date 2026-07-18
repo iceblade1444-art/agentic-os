@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from agentos_env import load_workspace_dotenv
 
-DEFAULT_WORKSPACE = Path("C:/Users/User/AgentOS")
+DEFAULT_WORKSPACE = Path(__file__).resolve().parent
 CORE_DIRS = [
     "agents",
     "workflows",
@@ -537,7 +537,7 @@ def load_voice_provider_module(workspace: Path, provider: str):
     return module
 
 
-def voice_provider_status(name: str, cfg: dict) -> dict:
+def voice_provider_status(name: str, cfg: dict, workspace: Path | None = None) -> dict:
     enabled = bool(cfg.get("enabled", True))
     allow_env_credentials = bool(cfg.get("allow_env_credentials", False))
     key_envs = [cfg.get("api_key_env"), cfg.get("fallback_api_key_env")]
@@ -552,7 +552,10 @@ def voice_provider_status(name: str, cfg: dict) -> dict:
         reasons.append("missing_credentials")
     if name == "local_file" and enabled:
         input_file = cfg.get("input_file")
-        if input_file and not Path(input_file).exists():
+        input_path = Path(input_file) if input_file else None
+        if input_path and workspace and not input_path.is_absolute():
+            input_path = workspace / input_path
+        if input_path and not input_path.exists():
             reasons.append("input_file_missing")
     ready = not reasons
     return {
@@ -569,7 +572,7 @@ def voice_provider_status(name: str, cfg: dict) -> dict:
 
 def voice_health(workspace: Path) -> dict:
     config = load_voice_config_raw(workspace)
-    providers = [voice_provider_status(name, cfg) for name, cfg in sorted(config.get("providers", {}).items())]
+    providers = [voice_provider_status(name, cfg, workspace) for name, cfg in sorted(config.get("providers", {}).items())]
     ready = sum(1 for item in providers if item["ready"])
     return {
         "status": "ok",
@@ -611,7 +614,7 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
     if provider not in providers:
         return {"status": "error", "error": "unknown_voice_provider", "provider": provider}
     cfg = providers[provider]
-    health = voice_provider_status(provider, cfg)
+    health = voice_provider_status(provider, cfg, workspace)
     base = {
         "provider": provider,
         "mode": cfg.get("mode", "unknown"),
@@ -626,7 +629,7 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
     if provider == "local_file":
         if not health["ready"]:
             return {**base, "status": "blocked"}
-        input_file = Path(cfg.get("input_file", workspace / "voice" / "input.txt"))
+        input_file = local_file_input_path(workspace)
         recognized = input_file.read_text(encoding="utf-8").strip()
         command = command_bridge_result(workspace, recognized)
         return {**base, "status": "passed" if command.get("intent") != "unknown" else "failed", "input_file": str(input_file), "recognized_text": recognized, "command": command}
@@ -646,7 +649,8 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
 def local_file_input_path(workspace: Path) -> Path:
     config = load_voice_config_raw(workspace)
     local_file = config.get("providers", {}).get("local_file", {})
-    return Path(local_file.get("input_file") or workspace / "voice" / "input.txt")
+    path = Path(local_file.get("input_file") or workspace / "voice" / "input.txt")
+    return path if path.is_absolute() else workspace / path
 
 
 def write_voice_sample(workspace: Path, text: str) -> dict:
@@ -708,7 +712,7 @@ def voice_session(workspace: Path, provider: str, text: str) -> dict:
     if provider not in providers:
         return {"status": "error", "error": "unknown_voice_provider", "provider": provider}
     cfg = providers[provider]
-    health = voice_provider_status(provider, cfg)
+    health = voice_provider_status(provider, cfg, workspace)
     base = {
         "provider": provider,
         "mode": cfg.get("mode", "unknown"),
@@ -2426,7 +2430,7 @@ def release_check(workspace: Path) -> dict:
     optional_blockers = []
     voice = load_voice_config_raw(workspace)
     gemini = voice.get("providers", {}).get("gemini_live", {})
-    gemini_status = voice_provider_status("gemini_live", gemini) if gemini else {"ready": False, "reasons": ["not_configured"]}
+    gemini_status = voice_provider_status("gemini_live", gemini, workspace) if gemini else {"ready": False, "reasons": ["not_configured"]}
     if not gemini_status.get("ready"):
         optional_blockers.append("gemini_live")
     status = "ready_local" if all(checks.values()) else "needs_attention"

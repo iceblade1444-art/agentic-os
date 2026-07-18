@@ -900,23 +900,23 @@ body{min-height:100dvh}
         <h2>Voice Adapter</h2>
         <div class="item">
           <strong>Local script</strong><br>
-          <code>python C:/Users/User/AgentOS/scripts/voice_command.py --text "создай goal Voice demo"</code><br>
+          <code>python scripts/voice_command.py --text "создай goal Voice demo"</code><br>
           <span class="sub">Safe flow: recognized text → /api/command → response file → optional TTS command.</span>
         </div>
         <div class="item">
           <strong>Mock/offline test</strong><br>
-          <code>python C:/Users/User/AgentOS/scripts/voice_command.py --text "покажи digest" --mock-server</code>
+          <code>python scripts/voice_command.py --text "покажи digest" --mock-server</code>
         </div>
         <div class="item">
           <strong>Gemini Live voice-to-voice</strong><br>
-          <code>python C:/Users/User/AgentOS/scripts/push_to_talk.py --provider gemini_live --once</code><br>
-          <code>python C:/Users/User/AgentOS/scripts/push_to_talk.py --provider gemini_live --status</code><br>
-          <span class="sub">Gemini Live can be better for true voice-to-voice latency and interruption handling. Keep raw keys in <code>C:/Users/User/AgentOS/.env</code> or OS environment variables, never in dashboard payloads. Copy <code>.env.example</code> for local overrides and restart the dashboard after editing.</span>
+          <code>python scripts/push_to_talk.py --provider gemini_live --once</code><br>
+          <code>python scripts/push_to_talk.py --provider gemini_live --status</code><br>
+          <span class="sub">Gemini Live can be better for true voice-to-voice latency and interruption handling. Keep raw keys in <code>.env</code> or OS environment variables, never in dashboard payloads. Copy <code>.env.example</code> for local overrides and restart the dashboard after editing.</span>
         </div>
         <pre class="item" id="voiceConfig">Loading voice provider config...</pre>
         <div class="item">
           <h3>Voice Provider Editor</h3>
-          <p class="sub">Safe toggles only. The browser never stores API keys; use <code>C:/Users/User/AgentOS/.env</code>, GEMINI_API_KEY/GOOGLE_API_KEY env vars, and voice.local.example.json for local setup.</p>
+          <p class="sub">Safe toggles only. The browser never stores API keys; use <code>.env</code>, GEMINI_API_KEY/GOOGLE_API_KEY env vars, and voice.local.example.json for local setup.</p>
           <div id="voiceProviderEditor">Loading provider toggles...</div>
           <div class="item">
             <label class="sub" for="voiceSampleText">Local-file sample text</label>

@@ -1,5 +1,5 @@
 {
-  "description": "Local overrides example. Copy to voice.local.json for safe toggles only. Put real keys in C:/Users/User/AgentOS/.env or OS environment variables, never in JSON config.",
+  "description": "Local overrides example. Copy to voice.local.json for safe toggles only. Put real keys in agentos-runtime/.env or OS environment variables, never in JSON config.",
   "providers": {
     "gemini_live": {
       "enabled": false,

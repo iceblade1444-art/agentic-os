@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from urllib import request
 
-ROOT = Path('C:/Users/User/AgentOS')
+ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / 'agentosctl.py'
 BASE = 'http://127.0.0.1:8765'
 LEDGERS = [

@@ -63,13 +63,13 @@ See:
 Run the local readiness check:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py release check --pretty
+python agentosctl.py release check --pretty
 ```
 
 Start the Mission Control dashboard:
 
 ```bash
-bash C:/Users/User/AgentOS/scripts/start_dashboard.sh
+bash scripts/start_dashboard.sh
 ```
 
 or on Windows:
@@ -87,19 +87,19 @@ http://127.0.0.1:8765/
 Prepare a local-file voice sample:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py voice sample --text "покажи digest"
+python agentosctl.py voice sample --text "покажи digest"
 ```
 
 Run a bounded local-file voice loop:
 
 ```bash
-python C:/Users/User/AgentOS/agentosctl.py voice loop --provider local_file --cycles 3 --interval 1
+python agentosctl.py voice loop --provider local_file --cycles 3 --interval 1
 ```
 
 or use:
 
 ```bash
-bash C:/Users/User/AgentOS/scripts/start_voice_loop.sh
+bash scripts/start_voice_loop.sh
 ```
 
 Safety notes:
@@ -122,7 +122,7 @@ C:\Users\User\AgentOS\scripts\start_mila.bat
 Start Mila from Git Bash:
 
 ```bash
-bash C:/Users/User/AgentOS/scripts/start_mila.sh
+bash scripts/start_mila.sh
 ```
 
 Install Windows autostart after you have confirmed `.env` is configured:

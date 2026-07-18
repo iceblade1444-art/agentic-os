@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib import request
 from urllib.parse import urlparse, parse_qs
 
-ROOT = Path('C:/Users/User/AgentOS')
+ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / 'agentosctl.py'
 BASE = 'http://127.0.0.1:8765'
 EXPORT_DIR = ROOT / 'artifacts' / 'agent-worker' / 'runtime-traces'

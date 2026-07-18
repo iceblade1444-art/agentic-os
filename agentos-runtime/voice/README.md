@@ -13,7 +13,7 @@ recognized text -> voice_command.py -> POST /api/command -> AgentOS action -> re
 ## Script
 
 ```text
-C:/Users/User/AgentOS/scripts/voice_command.py
+scripts/voice_command.py
 ```
 
 ## Examples
@@ -21,19 +21,19 @@ C:/Users/User/AgentOS/scripts/voice_command.py
 ### Live dashboard API
 
 ```bash
-python C:/Users/User/AgentOS/scripts/voice_command.py --text "создай goal Voice demo"
+python scripts/voice_command.py --text "создай goal Voice demo"
 ```
 
 ### Offline/mock parser
 
 ```bash
-python C:/Users/User/AgentOS/scripts/voice_command.py --text "покажи digest" --mock-server
+python scripts/voice_command.py --text "покажи digest" --mock-server
 ```
 
 ### Read recognized text from file
 
 ```bash
-python C:/Users/User/AgentOS/scripts/voice_command.py --input-file C:/Users/User/AgentOS/voice/input.txt
+python scripts/voice_command.py --input-file voice/input.txt
 ```
 
 ### Optional TTS hook
@@ -41,18 +41,18 @@ python C:/Users/User/AgentOS/scripts/voice_command.py --input-file C:/Users/User
 Any local command can be used as a TTS hook if it accepts text and output path placeholders:
 
 ```bash
-python C:/Users/User/AgentOS/scripts/voice_command.py \
+python scripts/voice_command.py \
   --text "покажи digest" \
   --tts-command "my-tts-command {text} {output}" \
-  --tts-output C:/Users/User/AgentOS/voice/response.mp3
+  --tts-output voice/response.mp3
 ```
 
 ## Output files
 
 ```text
-C:/Users/User/AgentOS/voice/last_command.txt
-C:/Users/User/AgentOS/voice/last_response.txt
-C:/Users/User/AgentOS/voice/last_result.json
+voice/last_command.txt
+voice/last_response.txt
+voice/last_result.json
 ```
 
 ## Supported command intents
@@ -69,20 +69,20 @@ create goal ...
 ## Provider wrapper
 
 ```bash
-python C:/Users/User/AgentOS/scripts/push_to_talk.py --mock-text "создай goal Demo" --mock-server --once
-python C:/Users/User/AgentOS/scripts/push_to_talk.py --provider gemini_live --status
+python scripts/push_to_talk.py --mock-text "создай goal Demo" --mock-server --once
+python scripts/push_to_talk.py --provider gemini_live --status
 ```
 
 Gemini Live provider boundary:
 
 ```text
-C:/Users/User/AgentOS/voice/providers/gemini_live.py
+voice/providers/gemini_live.py
 ```
 
 Local override example:
 
 ```text
-C:/Users/User/AgentOS/config/voice.local.example.json
+config/voice.local.example.json
 ```
 
 ## Next step

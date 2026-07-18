@@ -74,6 +74,22 @@ def test_agentosctl_voice_test_local_file_reads_input_file(tmp_path):
     assert data["command"]["intent"] == "show_digest"
 
 
+def test_relative_local_file_path_resolves_from_workspace_for_cli_and_api(tmp_path):
+    input_file = write_voice_config(tmp_path)
+    config_path = tmp_path / "config" / "voice.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["providers"]["local_file"]["input_file"] = "voice/input.txt"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    cli_result = run_cli(tmp_path, "voice", "test", "--provider", "local_file")
+    api_result = call_api(tmp_path, "/api/voice-test/providers/local_file")
+
+    assert cli_result.returncode == 0, cli_result.stderr
+    assert api_result.returncode == 0, api_result.stderr
+    assert json.loads(cli_result.stdout)["input_file"] == str(input_file)
+    assert json.loads(api_result.stdout)["input_file"] == str(input_file)
+
+
 def test_agentosctl_voice_test_gemini_live_returns_blocked_when_not_ready(tmp_path):
     write_voice_config(tmp_path)
 

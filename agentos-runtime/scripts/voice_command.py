@@ -15,7 +15,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
-DEFAULT_WORKSPACE = Path("C:/Users/User/AgentOS")
+AGENTOS_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_WORKSPACE = AGENTOS_ROOT
 DEFAULT_SERVER = "http://127.0.0.1:8765"
 
 
@@ -30,7 +31,7 @@ def read_text_input(args) -> str:
 
 
 def call_mock_server(workspace: Path, text: str) -> dict:
-    backend_dir = DEFAULT_WORKSPACE / "dashboard" / "backend"
+    backend_dir = AGENTOS_ROOT / "dashboard" / "backend"
     sys.path.insert(0, str(backend_dir))
     from app import run_command  # type: ignore
 
