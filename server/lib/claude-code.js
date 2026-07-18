@@ -22,6 +22,55 @@ const running = new Set();
 const uid = (prefix) => `${prefix}_${crypto.randomBytes(6).toString("hex")}`;
 const bounded = (value, max) => String(value || "").trim().slice(0, max);
 
+export function parseGitHubRepository(value) {
+  let source = bounded(value, 500);
+  if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+(?:\.git)?$/.test(source)) source = `https://github.com/${source}`;
+  if (source.startsWith("git@github.com:")) source = `https://github.com/${source.slice("git@github.com:".length)}`;
+  let parsed;
+  try { parsed = new URL(source); }
+  catch { throw Object.assign(new Error("Enter a valid GitHub repository URL"), { status: 400 }); }
+  if (!["github.com", "www.github.com"].includes(parsed.hostname.toLowerCase()) || parsed.search || parsed.hash || parsed.username || parsed.password) {
+    throw Object.assign(new Error("Only direct github.com repository URLs are allowed"), { status: 400 });
+  }
+  const parts = parsed.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "").split("/");
+  if (parts.length !== 2 || !parts.every((part) => /^[a-zA-Z0-9_.-]{1,100}$/.test(part)) || parts.some((part) => part === "." || part === "..")) {
+    throw Object.assign(new Error("GitHub URL must contain one owner and one repository"), { status: 400 });
+  }
+  const [owner, repo] = parts;
+  return {
+    owner,
+    repo,
+    cloneUrl: `https://github.com/${owner}/${repo}.git`,
+    webUrl: `https://github.com/${owner}/${repo}`,
+  };
+}
+
+function safeFolderName(value, fallback) {
+  const name = bounded(value, 80) || fallback;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(name) || SKIP_NAMES.has(name)) {
+    throw Object.assign(new Error("Project folder may use letters, numbers, dots, dashes and underscores"), { status: 400 });
+  }
+  return name;
+}
+
+function safeBranch(value) {
+  const branch = bounded(value, 160);
+  if (!branch) return "";
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,159}$/.test(branch) || branch.includes("..") || branch.includes("//")) {
+    throw Object.assign(new Error("Branch name is not valid"), { status: 400 });
+  }
+  return branch;
+}
+
+function parseGitStatus(raw) {
+  const lines = String(raw || "").trimEnd().split("\n").filter(Boolean);
+  const header = lines[0]?.startsWith("## ") ? lines.shift().slice(3) : "";
+  const branch = header.split("...")[0].replace(/^No commits yet on /, "").trim() || "detached";
+  const ahead = Number(header.match(/ahead (\d+)/)?.[1] || 0);
+  const behind = Number(header.match(/behind (\d+)/)?.[1] || 0);
+  return { branch, ahead, behind, dirty: lines.length > 0, changes: lines.length };
+}
+
 function defaultExecute(bin, args, options = {}) {
   return new Promise((resolve) => {
     execFile(bin, args, {
@@ -67,6 +116,8 @@ export function createClaudeCodeManager(options = {}) {
   });
   const kanbanRequest = options.kanbanRequest || hermesKanbanRequest;
   const kanbanBoard = options.kanbanBoard || config.hermesKanbanBoard;
+  const gitExecute = options.gitExecute || defaultExecute;
+  const githubToken = options.githubToken ?? config.github;
   const file = path.join(dataDir, "claude-code-sessions.json");
   let modelProbe = { checkedAt: 0, ready: null, error: "" };
 
@@ -77,6 +128,39 @@ export function createClaudeCodeManager(options = {}) {
       throw Object.assign(new Error("Workspace must stay inside the configured Claude work root"), { status: 400 });
     }
     return target;
+  }
+
+  function gitEnvironment() {
+    const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+    if (githubToken) {
+      env.GIT_CONFIG_COUNT = "1";
+      env.GIT_CONFIG_KEY_0 = "http.https://github.com/.extraheader";
+      env.GIT_CONFIG_VALUE_0 = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${githubToken}`).toString("base64")}`;
+    }
+    return env;
+  }
+
+  async function runGit(args, cwd, timeout = 120000) {
+    const result = await gitExecute("git", args, { cwd, timeout, env: gitEnvironment() });
+    if (!result.ok) {
+      throw Object.assign(new Error(bounded(result.stderr || result.error || "Git command failed", 1000)), { status: 422 });
+    }
+    return String(result.stdout || "").trim();
+  }
+
+  function ensureGitProject(workdir) {
+    const root = resolveWorkspace(workdir);
+    if (root === workRoot || !fs.existsSync(path.join(root, ".git"))) {
+      throw Object.assign(new Error("Select an imported Git repository"), { status: 400 });
+    }
+    return root;
+  }
+
+  function excludeAgentContext(root) {
+    const exclude = path.join(root, ".git", "info", "exclude");
+    if (!fs.existsSync(path.dirname(exclude))) return;
+    const current = fs.existsSync(exclude) ? fs.readFileSync(exclude, "utf8") : "";
+    if (!current.split(/\r?\n/).includes(".agentic-context/")) fs.appendFileSync(exclude, `${current.endsWith("\n") || !current ? "" : "\n"}.agentic-context/\n`);
   }
 
   function load() {
@@ -126,9 +210,54 @@ export function createClaudeCodeManager(options = {}) {
       .map((entry) => {
         const full = path.join(workRoot, entry.name);
         const stat = fs.statSync(full);
-        return { name: entry.name, workdir: full, updatedAt: stat.mtimeMs };
+        return { name: entry.name, workdir: full, updatedAt: stat.mtimeMs, git: fs.existsSync(path.join(full, ".git")) };
       });
-    return [{ name: "Shared workspace", workdir: workRoot, updatedAt: fs.statSync(workRoot).mtimeMs }, ...children];
+    return [{ name: "Shared workspace", workdir: workRoot, updatedAt: fs.statSync(workRoot).mtimeMs, git: false }, ...children];
+  }
+
+  async function projectStatus(workdir) {
+    const root = ensureGitProject(workdir);
+    excludeAgentContext(root);
+    const status = parseGitStatus(await runGit(["status", "--porcelain=v1", "--branch"], root, 30000));
+    let remote = "";
+    try {
+      const raw = await runGit(["remote", "get-url", "origin"], root, 15000);
+      remote = parseGitHubRepository(raw).webUrl;
+    } catch { remote = ""; }
+    return { ...status, git: true, workdir: root, name: path.basename(root), remote };
+  }
+
+  async function importProject(input = {}) {
+    const repository = parseGitHubRepository(input.url);
+    const folder = safeFolderName(input.folder, repository.repo);
+    const branch = safeBranch(input.branch);
+    const target = resolveWorkspace(path.join(workRoot, folder));
+    if (target === workRoot || fs.existsSync(target)) {
+      throw Object.assign(new Error(`Project folder already exists: ${folder}`), { status: 409 });
+    }
+    const args = ["clone", "--origin", "origin", "--depth", "1"];
+    if (branch) args.push("--branch", branch, "--single-branch");
+    args.push(repository.cloneUrl, target);
+    try {
+      await runGit(args, workRoot, 300000);
+      excludeAgentContext(target);
+      return { project: await projectStatus(target) };
+    } catch (error) {
+      if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  async function syncProject(workdir) {
+    const root = ensureGitProject(workdir);
+    const before = await projectStatus(root);
+    if (before.dirty) throw Object.assign(new Error("Commit or discard local changes before syncing"), { status: 409 });
+    await runGit(["fetch", "--prune", "origin"], root, 300000);
+    let upstream;
+    try { upstream = await runGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root, 30000); }
+    catch { throw Object.assign(new Error("The current branch has no upstream branch"), { status: 409 }); }
+    await runGit(["merge", "--ff-only", upstream], root, 120000);
+    return { project: await projectStatus(root), updated: true };
   }
 
   function listFiles(workdir, relative = "") {
@@ -175,6 +304,7 @@ export function createClaudeCodeManager(options = {}) {
 
   function materializeAttachments(session, attachments = []) {
     const root = resolveWorkspace(session.workdir);
+    if (fs.existsSync(path.join(root, ".git"))) excludeAgentContext(root);
     const output = path.join(root, ".agentic-context");
     let total = 0;
     const saved = [];
@@ -392,7 +522,11 @@ export function createClaudeCodeManager(options = {}) {
     return { task: created.task || created, session: publicSession(session, true) };
   }
 
-  return { status, listProjects, listSessions, getSession, createSession, removeSession, listFiles, readFile, message, delegate, resolveWorkspace };
+  return {
+    status, listProjects, projectStatus, importProject, syncProject,
+    listSessions, getSession, createSession, removeSession, listFiles, readFile,
+    message, delegate, resolveWorkspace,
+  };
 }
 
 export const claudeCode = createClaudeCodeManager();

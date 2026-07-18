@@ -1108,16 +1108,29 @@ body.compact .card.pad-lg { padding: 16px; }
 }
 .claude-rail-head strong { min-width: 0; display: flex; flex: 1; align-items: center; gap: 9px; font-size: 14px; }
 .claude-rail-head strong svg { width: 17px; height: 17px; color: var(--warning); }
+.claude-project-row { margin: 10px 12px 0; display: grid; grid-template-columns: minmax(0, 1fr) 32px 32px; align-items: center; gap: 5px; }
+.claude-project-row .icon-btn { width: 32px; height: 38px; border: 1px solid var(--border); background: var(--surface-2); }
+.claude-project-row .icon-btn:disabled { opacity: .4; }
 .claude-project-select, .claude-session-search {
   height: 38px; margin: 10px 12px 0; display: flex; align-items: center; gap: 8px;
   padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-3);
   background: var(--surface-2);
 }
+.claude-project-row .claude-project-select { min-width: 0; margin: 0; }
 .claude-project-select svg, .claude-session-search svg { width: 14px; height: 14px; flex: none; }
 .claude-project-select select, .claude-session-search input {
   width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text);
   font: inherit; font-size: 11px;
 }
+.claude-project-meta { min-height: 23px; margin: 4px 14px 0; display: flex; align-items: center; gap: 7px; overflow: hidden; color: var(--text-3); font-size: 8px; }
+.claude-project-meta span { display: inline-flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.claude-project-meta svg { width: 11px; height: 11px; flex: none; }
+.claude-project-meta .clean { color: var(--success); }
+.claude-project-meta .dirty { color: var(--warning); }
+.claude-project-meta a { display: grid; place-items: center; color: var(--text-3); }
+.claude-project-meta a:hover { color: var(--text); }
+.claude-import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.claude-import-grid .field { min-width: 0; }
 .claude-session-label { padding: 15px 16px 7px; color: var(--text-3); font-size: 9px; font-weight: 750; text-transform: uppercase; }
 .claude-sessions { min-height: 0; flex: 1; overflow-y: auto; padding: 0 7px 10px; }
 .claude-session {

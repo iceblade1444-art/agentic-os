@@ -1,11 +1,12 @@
 import { api } from "../api.js";
 import { icon } from "../icons.js";
-import { esc, openModal, qs, toast } from "../ui.js";
+import { closeOverlay, esc, openModal, qs, toast } from "../ui.js";
 
 let host = null;
 let status = null;
 let sessions = [];
 let projects = [];
+let projectState = null;
 let profiles = [];
 let active = null;
 let filePath = "";
@@ -29,6 +30,94 @@ const profileMeta = {
   reach: ["Reach", "Growth", "up"],
   dev: ["Dev", "Engineering", "code"],
 };
+
+function selectedProject() {
+  const workdir = qs("#claudeProject", host)?.value;
+  return projects.find((item) => item.workdir === workdir) || null;
+}
+
+function projectOptions(selected) {
+  return projects.map((item) => `<option value="${esc(item.workdir)}"${item.workdir === selected ? " selected" : ""}>${esc(item.name)}</option>`).join("");
+}
+
+function drawProjectStatus() {
+  const slot = qs("#claudeProjectMeta", host);
+  const sync = qs("#claudeProjectSync", host);
+  if (!slot || !sync) return;
+  sync.disabled = !projectState?.git;
+  if (!projectState?.git) {
+    slot.innerHTML = `<span>${icon("layers")}Local workspace</span>`;
+    return;
+  }
+  const change = projectState.dirty ? `${projectState.changes} change${projectState.changes === 1 ? "" : "s"}` : "Clean";
+  const movement = [projectState.ahead ? `↑${projectState.ahead}` : "", projectState.behind ? `↓${projectState.behind}` : ""].filter(Boolean).join(" ");
+  slot.innerHTML = `<span>${icon("branch")}${esc(projectState.branch)}</span><span class="${projectState.dirty ? "dirty" : "clean"}">${esc(change)}</span>${movement ? `<span>${esc(movement)}</span>` : ""}${projectState.remote ? `<a href="${esc(projectState.remote)}" target="_blank" rel="noopener" title="Open on GitHub">${icon("external")}</a>` : ""}`;
+}
+
+async function refreshProjectStatus(workdir = selectedProject()?.workdir) {
+  const project = projects.find((item) => item.workdir === workdir);
+  projectState = null;
+  if (!project?.git) return drawProjectStatus();
+  try { projectState = await api.claude.projectStatus(project.workdir); }
+  catch (error) { toast("error", "Git status unavailable", error.message); }
+  drawProjectStatus();
+}
+
+async function refreshProjects(selected) {
+  const result = await api.claude.projects();
+  projects = result.projects || [];
+  const value = projects.some((item) => item.workdir === selected) ? selected : status?.workRoot;
+  qs("#claudeProject", host).innerHTML = projectOptions(value);
+  qs("#claudeProject", host).value = value;
+  await refreshProjectStatus(value);
+}
+
+function openProjectImport() {
+  openModal({
+    title: "Import GitHub project", width: 560,
+    body: `<div class="field"><label class="label" for="claudeRepoUrl">Repository</label><input class="input" id="claudeRepoUrl" placeholder="owner/repository or https://github.com/owner/repository" autocomplete="off"/></div>
+      <div class="claude-import-grid"><div class="field"><label class="label" for="claudeRepoBranch">Branch</label><input class="input" id="claudeRepoBranch" placeholder="Default branch" autocomplete="off"/></div><div class="field"><label class="label" for="claudeRepoFolder">Folder</label><input class="input" id="claudeRepoFolder" placeholder="Repository name" autocomplete="off"/></div></div>`,
+    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="claudeImportProject">${icon("branch")}Import</button>`,
+    onMount: (modal) => {
+      const url = modal.querySelector("#claudeRepoUrl");
+      url.focus();
+      modal.querySelector("#claudeImportProject").onclick = async () => {
+        if (!url.value.trim()) return toast("error", "Repository is required");
+        const button = modal.querySelector("#claudeImportProject");
+        button.classList.add("loading");
+        try {
+          const result = await api.claude.importProject({
+            url: url.value.trim(),
+            branch: modal.querySelector("#claudeRepoBranch").value.trim(),
+            folder: modal.querySelector("#claudeRepoFolder").value.trim(),
+          });
+          closeOverlay();
+          await refreshProjects(result.project.workdir);
+          const session = await api.claude.createSession({ title: `${result.project.name} workspace`, workdir: result.project.workdir });
+          sessions.unshift(session);
+          await selectSession(session.id);
+          toast("success", "GitHub project imported", `${result.project.branch} · ready for Claude`);
+        } catch (error) { toast("error", "Import failed", error.message); }
+        finally { button.classList.remove("loading"); }
+      };
+    },
+  });
+}
+
+async function syncSelectedProject() {
+  const project = selectedProject();
+  if (!project?.git) return;
+  const button = qs("#claudeProjectSync", host);
+  button.classList.add("loading");
+  try {
+    const result = await api.claude.syncProject(project.workdir);
+    projectState = result.project;
+    drawProjectStatus();
+    if (active?.workdir === project.workdir) drawFiles();
+    toast("success", "Project synchronized", `${result.project.branch} is up to date`);
+  } catch (error) { toast("error", "Sync stopped", error.message); }
+  finally { button.classList.remove("loading"); }
+}
 
 function sessionRows() {
   const query = qs("#claudeSessionSearch", host)?.value?.trim().toLowerCase() || "";
@@ -166,6 +255,9 @@ async function selectSession(id) {
   try {
     active = await api.claude.session(id);
     filePath = "";
+    const picker = qs("#claudeProject", host);
+    if ([...picker.options].some((option) => option.value === active.workdir)) picker.value = active.workdir;
+    await refreshProjectStatus(active.workdir);
     drawSessions(); drawHeader(); drawConversation(); drawAttachments(); drawLinkedTasks();
     await refreshTaskStates();
     const selected = host.querySelector(".claude-side-tab.active")?.dataset.side || "files";
@@ -235,7 +327,9 @@ async function load() {
     sessions = sessionResult.sessions || [];
     projects = projectResult.projects || [];
     profiles = profileResult.profiles || [];
-    qs("#claudeProject", host).innerHTML = projects.map((item) => `<option value="${esc(item.workdir)}">${esc(item.name)}</option>`).join("");
+    const initialProject = sessions[0]?.workdir || status.workRoot;
+    qs("#claudeProject", host).innerHTML = projectOptions(initialProject);
+    await refreshProjectStatus(initialProject);
     drawSessions(); drawHeader();
     if (sessions.length) await selectSession(sessions[0].id); else { drawConversation(); drawFiles(); drawLinkedTasks(); }
   } catch (error) {
@@ -260,7 +354,8 @@ export default {
   render: () => `<div class="claude-workspace">
     <aside class="claude-rail">
       <div class="claude-rail-head"><strong>${icon("code")}Claude</strong><button class="icon-btn" id="claudeNew" title="New session">${icon("plus")}</button></div>
-      <label class="claude-project-select">${icon("layers")}<select id="claudeProject"><option>Loading projects…</option></select></label>
+      <div class="claude-project-row"><label class="claude-project-select">${icon("layers")}<select id="claudeProject"><option>Loading projects…</option></select></label><button class="icon-btn" id="claudeProjectSync" title="Synchronize Git project" disabled>${icon("refresh")}</button><button class="icon-btn" id="claudeProjectImport" title="Import GitHub project">${icon("plus")}</button></div>
+      <div class="claude-project-meta" id="claudeProjectMeta"><span>${icon("layers")}Local workspace</span></div>
       <label class="claude-session-search">${icon("search")}<input id="claudeSessionSearch" placeholder="Search sessions"/></label>
       <div class="claude-session-label">Recent</div><div class="claude-sessions" id="claudeSessions"></div>
       <a class="claude-kanban-link" href="#/kanban">${icon("workflow")}Open shared Kanban${icon("arrowright")}</a>
@@ -281,6 +376,9 @@ export default {
   mount(root) {
     host = root;
     qs("#claudeNew", host).onclick = createSession;
+    qs("#claudeProjectImport", host).onclick = openProjectImport;
+    qs("#claudeProjectSync", host).onclick = syncSelectedProject;
+    qs("#claudeProject", host).onchange = (event) => refreshProjectStatus(event.target.value);
     qs("#claudeRefresh", host).onclick = () => active ? selectSession(active.id) : load();
     qs("#claudeDelete", host).onclick = async () => {
       if (!active || !window.confirm(`Delete session “${active.title}”?`)) return;
@@ -304,5 +402,5 @@ export default {
       else await refreshTaskStates();
     }, 5000);
   },
-  unmount() { clearInterval(poll); poll = null; host = null; active = null; attachments = []; },
+  unmount() { clearInterval(poll); poll = null; host = null; active = null; projectState = null; attachments = []; },
 };
