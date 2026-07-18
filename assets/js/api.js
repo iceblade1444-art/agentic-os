@@ -119,6 +119,9 @@ export const api = {
   claude: {
     status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),
     projects: () => j("/api/claude-code/projects"),
+    projectStatus: (workdir) => j(`/api/claude-code/projects/status?workdir=${encodeURIComponent(workdir)}`),
+    importProject: (body) => j("/api/claude-code/projects/import", { method: "POST", body }),
+    syncProject: (workdir) => j("/api/claude-code/projects/sync", { method: "POST", body: { workdir } }),
     sessions: () => j("/api/claude-code/sessions"),
     session: (id) => j(`/api/claude-code/sessions/${encodeURIComponent(id)}`),
     createSession: (body) => j("/api/claude-code/sessions", { method: "POST", body }),

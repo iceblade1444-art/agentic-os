@@ -288,6 +288,14 @@ Claude Code remains the interactive coding workspace; Hermes remains the primary
 The **Agents** tab delegates a visible task to Hermes, Scout, Scribe, Reach, or Dev and tracks that
 task in the same progress panel and shared Kanban. The browser never receives Claude credentials.
 
+The project picker can import a public or private `github.com/owner/repository` directly into the
+mounted `/app/work` directory. Private clones reuse the server-side `GITHUB_TOKEN`; it is passed to
+Git through process environment configuration and is never returned to the browser or included in
+Git command arguments. **Synchronize** performs `fetch` followed by a fast-forward-only merge and
+stops when the selected repository has local changes, so Claude's unfinished work is never replaced.
+Attachments live under `.agentic-context/`, which Agentic OS adds to the repository-local Git exclude
+file instead of modifying the project's committed `.gitignore`.
+
 Production installs the pinned Claude Code CLI in the image and mounts
 `/home/admilana/.claude:/root/.claude` so login survives container recreation. Project work is
 persisted by `./agentos-runtime/work:/app/work`. Configure the default model with

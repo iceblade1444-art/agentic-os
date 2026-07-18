@@ -10,6 +10,9 @@ const send = (handler) => async (req, res) => {
 
 r.get("/status", send((req) => claudeCode.status({ probe: req.query.probe === "true" })));
 r.get("/projects", send(() => ({ projects: claudeCode.listProjects() })));
+r.get("/projects/status", send((req) => claudeCode.projectStatus(req.query.workdir)));
+r.post("/projects/import", send((req) => claudeCode.importProject(req.body || {})));
+r.post("/projects/sync", send((req) => claudeCode.syncProject(req.body?.workdir)));
 r.get("/sessions", send(() => ({ sessions: claudeCode.listSessions() })));
 r.post("/sessions", send((req) => claudeCode.createSession({ title: req.body?.title, workdir: req.body?.workdir })));
 r.get("/files", send((req) => claudeCode.listFiles(req.query.workdir, req.query.path)));
