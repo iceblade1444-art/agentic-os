@@ -26,7 +26,7 @@ function defaultExecute(bin, args, options = {}) {
   return new Promise((resolve) => {
     execFile(bin, args, {
       cwd: options.cwd,
-      env: process.env,
+      env: options.env || process.env,
       timeout: options.timeout,
       maxBuffer: 12 * 1024 * 1024,
     }, (error, stdout, stderr) => resolve({
@@ -57,9 +57,14 @@ export function createClaudeCodeManager(options = {}) {
   const dataDir = path.resolve(options.dataDir || config.dataDir);
   const workRoot = path.resolve(options.workRoot || config.claudeCode.workdir);
   const bin = options.bin || config.claudeCode.bin;
+  const baseUrl = options.baseUrl || config.claudeCode.baseUrl;
   const defaultModel = options.model || config.claudeCode.model;
   const timeoutMs = options.timeoutMs || config.claudeCode.timeoutMs;
-  const execute = options.execute || defaultExecute;
+  const rawExecute = options.execute || defaultExecute;
+  const execute = (command, args, executeOptions = {}) => rawExecute(command, args, {
+    ...executeOptions,
+    env: { ...process.env, ANTHROPIC_BASE_URL: baseUrl },
+  });
   const kanbanRequest = options.kanbanRequest || hermesKanbanRequest;
   const kanbanBoard = options.kanbanBoard || config.hermesKanbanBoard;
   const file = path.join(dataDir, "claude-code-sessions.json");

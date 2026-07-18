@@ -19,13 +19,18 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   const dirs = fixture();
   t.after(() => fs.rmSync(dirs.root, { recursive: true, force: true }));
   const calls = [];
-  const execute = async (_bin, args) => {
-    calls.push(args);
+  const execute = async (_bin, args, options) => {
+    calls.push({ args, options });
     if (args[0] === "--version") return { ok: true, stdout: "2.1.214 (Claude Code)\n", stderr: "" };
     if (args[0] === "auth") return { ok: true, stdout: JSON.stringify({ loggedIn: true, authMethod: "claude.ai", email: "must-not-leak@example.com", subscriptionType: "max" }), stderr: "" };
     return { ok: true, stdout: JSON.stringify({ session_id: "cli_session_1", result: "Implemented and tested.", duration_ms: 2500, num_turns: 2 }), stderr: "" };
   };
-  const manager = createClaudeCodeManager({ dataDir: dirs.data, workRoot: dirs.work, execute });
+  const manager = createClaudeCodeManager({
+    dataDir: dirs.data,
+    workRoot: dirs.work,
+    baseUrl: "https://api.anthropic.com",
+    execute,
+  });
 
   const status = await manager.status();
   assert.equal(status.ready, true);
@@ -36,8 +41,9 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   assert.equal(completed.status, "ready");
   assert.equal(completed.messages.at(-1).text, "Implemented and tested.");
   assert.equal(manager.listSessions()[0].messageCount, 2);
-  assert.ok(calls.at(-1).includes("--permission-mode"));
-  assert.ok(calls.at(-1).includes("--model"));
+  assert.ok(calls.at(-1).args.includes("--permission-mode"));
+  assert.ok(calls.at(-1).args.includes("--model"));
+  assert.equal(calls.at(-1).options.env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
 });
 
 test("Claude workspace confines file access to its mounted work root", (t) => {
@@ -78,6 +84,8 @@ test("Claude desktop UI is wired into the authenticated Agentic OS shell", () =>
   assert.match(page, /claude-conversation/);
   assert.match(page, /data-side="agents"/);
   assert.match(page, /api\.claude\.delegate/);
+  assert.doesNotMatch(page, /value="fable"/);
+  assert.match(page, /value="sonnet" selected/);
   assert.match(server, /\/api\/claude-code/);
   assert.match(compose, /\.claude:\/root\/\.claude/);
   assert.match(compose, /agentos-runtime\/work:\/app\/work/);

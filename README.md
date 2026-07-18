@@ -291,7 +291,9 @@ task in the same progress panel and shared Kanban. The browser never receives Cl
 Production installs the pinned Claude Code CLI in the image and mounts
 `/home/admilana/.claude:/root/.claude` so login survives container recreation. Project work is
 persisted by `./agentos-runtime/work:/app/work`. Configure the default model with
-`CLAUDE_CODE_MODEL` and verify the account after deployment from the runtime indicator.
+`CLAUDE_CODE_MODEL`, keep the CLI root endpoint in `CLAUDE_CODE_BASE_URL`, and verify the account
+after deployment from the runtime indicator. `ANTHROPIC_BASE_URL` retains `/v1` for the separate
+Agentic OS REST proxy and is intentionally not passed through to Claude Code.
 
 On the production server, install and start the dashboard once:
 
