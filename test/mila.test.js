@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { milaConnectionCode, milaStatus, milaVoiceToken } from "../server/lib/mila.js";
+import { milaConnectionCode, milaDevices, milaRevokeDevice, milaStatus, milaVoiceToken } from "../server/lib/mila.js";
 
 test("MILA status uses the server-held admin token", async () => {
   let request;
@@ -38,6 +38,23 @@ test("MILA connection code forwards only the requested account label", async () 
     { fetchImpl },
   );
   assert.equal(result.code, "AB12CD34");
+});
+
+test("MILA device management stays behind the server-held admin token", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ ok: true, devices: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  const cfg = { baseUrl: "https://mila.example", adminToken: "admin-secret" };
+  await milaDevices(cfg, { fetchImpl });
+  await milaRevokeDevice(cfg, "a".repeat(32), { fetchImpl });
+  assert.deepEqual(calls.map((call) => [call.url, call.options.method]), [
+    ["https://mila.example/admin/devices", "GET"],
+    [`https://mila.example/admin/devices/${"a".repeat(32)}`, "DELETE"],
+  ]);
+  assert.equal(calls.every((call) => call.options.headers["X-Admin-Token"] === "admin-secret"), true);
+  assert.throws(() => milaRevokeDevice(cfg, "bad"), /Invalid MILA device ID/);
 });
 
 test("MILA voice token exchange keeps long-lived credentials server-side", async () => {

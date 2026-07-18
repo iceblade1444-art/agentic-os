@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
-import { milaConnectionCode, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
+import { milaConnectionCode, milaDevices, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
 import { requireRoles } from "../lib/auth.js";
 
 const r = Router();
@@ -55,11 +55,13 @@ r.post("/slack/send", requireAdmin, async (req, res) => {
 
 const milaConfig = () => db.integrations.byProvider("mila")?.config || {};
 const milaAction = (handler) => async (req, res) => {
-  try { res.json(await handler(milaConfig(), req.body || {})); }
+  try { res.json(await handler(milaConfig(), req.body || {}, req)); }
   catch (e) { res.status(502).json({ error: e.message }); }
 };
 
 r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
+r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
+r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));
 r.post("/mila/voice-token", milaAction((cfg) => milaVoiceToken(cfg)));
 r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body) => milaConnectionCode(cfg, body.label)));
 r.post("/mila/subscription", requireAdmin, milaAction((cfg, body) => milaSetSubscription(cfg, body)));

@@ -64,6 +64,11 @@ export const milaStatus = (cfg, options) => milaRequest(cfg, "/admin/status", op
 export const milaConnectionCode = (cfg, label, options) => milaRequest(cfg, "/admin/connection-code", {
   ...options, method: "POST", body: { label },
 });
+export const milaDevices = (cfg, options) => milaRequest(cfg, "/admin/devices", options);
+export const milaRevokeDevice = (cfg, id, options) => {
+  if (!/^[a-f0-9]{32}$/.test(String(id || ""))) throw new Error("Invalid MILA device ID");
+  return milaRequest(cfg, `/admin/devices/${id}`, { ...options, method: "DELETE" });
+};
 
 // Mint a constrained Gemini Live token without exposing MILA's admin token,
 // account session, or long-lived provider key to the browser.
