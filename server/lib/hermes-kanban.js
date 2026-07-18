@@ -17,10 +17,15 @@ function dashboardRequest(pathname, { method = "GET", headers = {}, body, timeou
       }, (response) => {
         const chunks = [];
         response.on("data", (chunk) => chunks.push(chunk));
-        response.on("end", () => resolve({
-          status: response.statusCode || 0,
-          text: Buffer.concat(chunks).toString("utf8"),
-        }));
+        response.on("end", () => {
+          const body = Buffer.concat(chunks);
+          resolve({
+            status: response.statusCode || 0,
+            text: body.toString("utf8"),
+            body,
+            headers: response.headers,
+          });
+        });
       });
       request.on("timeout", () => request.destroy(new Error("Hermes Kanban request timed out")));
       request.on("error", reject);
@@ -34,7 +39,15 @@ function dashboardRequest(pathname, { method = "GET", headers = {}, body, timeou
     headers,
     body,
     signal: AbortSignal.timeout(timeoutMs),
-  }).then(async (response) => ({ status: response.status, text: await response.text() }));
+  }).then(async (response) => {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return {
+      status: response.status,
+      text: buffer.toString("utf8"),
+      body: buffer,
+      headers: Object.fromEntries(response.headers.entries()),
+    };
+  });
 }
 
 async function sessionToken(force = false, requestImpl = dashboardRequest) {
@@ -53,31 +66,45 @@ export function withKanbanBoard(pathname, board = config.hermesKanbanBoard) {
   return `${url.pathname}${url.search}`;
 }
 
-export async function hermesKanbanRequest(pathname, options = {}, requestImpl = dashboardRequest) {
+export async function hermesKanbanRawRequest(pathname, options = {}, requestImpl = dashboardRequest) {
   if (!String(pathname).startsWith(`${API_PREFIX}/`)) throw new Error("Invalid Hermes Kanban path");
-  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
   const run = async (forceToken = false) => {
     const token = await sessionToken(forceToken, requestImpl);
     return requestImpl(pathname, {
       method: options.method || "GET",
       headers: {
         Authorization: `Bearer ${token}`,
-        ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
+        ...(options.headers || {}),
       },
-      body: payload,
+      body: options.body,
+      timeoutMs: options.timeoutMs,
     });
   };
 
   let response = await run(false);
   if (response.status === 401 || response.status === 403) response = await run(true);
-  let data;
-  try { data = response.text ? JSON.parse(response.text) : {}; }
-  catch { data = {}; }
   if (response.status < 200 || response.status >= 300) {
+    let data;
+    try { data = response.text ? JSON.parse(response.text) : {}; }
+    catch { data = {}; }
     const error = new Error(data.detail || data.error || `Hermes Kanban HTTP ${response.status}`);
     error.status = response.status;
     throw error;
   }
+  return response;
+}
+
+export async function hermesKanbanRequest(pathname, options = {}, requestImpl = dashboardRequest) {
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  const response = await hermesKanbanRawRequest(pathname, {
+    method: options.method,
+    headers: payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {},
+    body: payload,
+    timeoutMs: options.timeoutMs,
+  }, requestImpl);
+  let data;
+  try { data = response.text ? JSON.parse(response.text) : {}; }
+  catch { data = {}; }
   return data;
 }
 
