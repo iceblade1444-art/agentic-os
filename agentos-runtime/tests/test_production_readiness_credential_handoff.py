@@ -91,11 +91,12 @@ def test_production_readiness_credential_handoff_missing_credentials_is_read_onl
     ]
     assert "setx GEMINI_API_KEY" in handoff["setup_steps"][1]["windows_user_command"]
     assert "export GEMINI_API_KEY" in handoff["setup_steps"][1]["git_bash_command"]
+    workspace_arg = tmp_path.as_posix()
     assert handoff["verification_commands"] == [
-        "python agentosctl.py --workspace C:/Users/User/AgentOS voice status --pretty",
-        "python agentosctl.py --workspace C:/Users/User/AgentOS voice test --provider gemini_live --pretty",
-        "python agentosctl.py --workspace C:/Users/User/AgentOS voice session --provider gemini_live --text \"покажи digest\" --pretty",
-        "python agentosctl.py --workspace C:/Users/User/AgentOS release check --pretty",
+        f"python agentosctl.py --workspace {workspace_arg} voice status --pretty",
+        f"python agentosctl.py --workspace {workspace_arg} voice test --provider gemini_live --pretty",
+        f"python agentosctl.py --workspace {workspace_arg} voice session --provider gemini_live --text \"покажи digest\" --pretty",
+        f"python agentosctl.py --workspace {workspace_arg} release check --pretty",
     ]
     assert result["links"] == {
         "production_readiness": "/api/production-readiness",

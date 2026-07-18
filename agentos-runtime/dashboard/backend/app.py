@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Minimal stdlib dashboard API for AgentOS.
 
-Run:
-    python C:/Users/User/AgentOS/dashboard/backend/app.py --workspace C:/Users/User/AgentOS --port 8765
+Run from agentos-runtime:
+    python dashboard/backend/app.py --workspace . --port 8765
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ if str(AGENTOS_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENTOS_ROOT))
 from agentos_env import load_workspace_dotenv
 
-DEFAULT_WORKSPACE = Path("C:/Users/User/AgentOS")
+DEFAULT_WORKSPACE = AGENTOS_ROOT
 MILA_NATIVE_LIVE_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 MILA_INPUT_SAMPLE_RATE = 16000
 MILA_OUTPUT_SAMPLE_RATE = 24000
@@ -1652,7 +1652,7 @@ def dashboard_release_check(workspace: Path):
     }
     data, _, _ = load_voice_config_raw(workspace)
     gemini = data.get("providers", {}).get("gemini_live", {})
-    gemini_status = voice_provider_status("gemini_live", gemini) if gemini else {"provider": "gemini_live", "ready": False, "reasons": ["not_configured"]}
+    gemini_status = voice_provider_status("gemini_live", gemini, workspace) if gemini else {"provider": "gemini_live", "ready": False, "reasons": ["not_configured"]}
     optional_blockers = [] if gemini_status.get("ready") else ["gemini_live"]
     return {
         "status": "ready_local" if all(checks.values()) else "needs_attention",
@@ -1883,7 +1883,7 @@ def production_readiness_credential_handoff(workspace: Path):
     })
     data, base_path, local_path = load_voice_config_raw(workspace)
     gemini_cfg = data.get("providers", {}).get("gemini_live", {})
-    current_status = redact_secrets(voice_provider_status("gemini_live", gemini_cfg)) if gemini_cfg else {
+    current_status = redact_secrets(voice_provider_status("gemini_live", gemini_cfg, workspace)) if gemini_cfg else {
         "provider": "gemini_live",
         "enabled": False,
         "mode": "voice_to_voice",
@@ -1904,7 +1904,7 @@ def production_readiness_credential_handoff(workspace: Path):
     else:
         handoff_status = "provider_not_ready"
         remaining_external_blocker = "gemini_live"
-    workspace_arg = "C:/Users/User/AgentOS"
+    workspace_arg = workspace.as_posix()
     local_example = workspace / "config" / "voice.local.example.json"
     handoff = {
         "provider": "gemini_live",
@@ -6462,7 +6462,7 @@ def redact_secrets(value):
 def voice_config_paths(workspace: Path):
     base = workspace / "config" / "voice.json"
     if not base.exists():
-        base = Path("C:/Users/User/AgentOS/config/voice.json")
+        base = DEFAULT_WORKSPACE / "config" / "voice.json"
     local = workspace / "config" / "voice.local.json"
     return base, local
 
@@ -6498,7 +6498,7 @@ def load_voice_config(workspace: Path):
     return data
 
 
-def voice_provider_status(name: str, cfg: dict):
+def voice_provider_status(name: str, cfg: dict, workspace: Path | None = None):
     enabled = bool(cfg.get("enabled", True))
     allow_env_credentials = bool(cfg.get("allow_env_credentials", False))
     key_envs = [cfg.get("api_key_env"), cfg.get("fallback_api_key_env")]
@@ -6513,7 +6513,10 @@ def voice_provider_status(name: str, cfg: dict):
         reasons.append("missing_credentials")
     if name == "local_file" and enabled:
         input_file = cfg.get("input_file")
-        if input_file and not Path(input_file).exists():
+        input_path = Path(input_file) if input_file else None
+        if input_path and workspace and not input_path.is_absolute():
+            input_path = workspace / input_path
+        if input_path and not input_path.exists():
             reasons.append("input_file_missing")
     ready = not reasons
     return {
@@ -6530,7 +6533,7 @@ def voice_provider_status(name: str, cfg: dict):
 
 def voice_health(workspace: Path):
     data, _, _ = load_voice_config_raw(workspace)
-    providers = [voice_provider_status(name, cfg) for name, cfg in sorted(data.get("providers", {}).items())]
+    providers = [voice_provider_status(name, cfg, workspace) for name, cfg in sorted(data.get("providers", {}).items())]
     ready = sum(1 for item in providers if item["ready"])
     return {
         "status": "ok",
@@ -6545,7 +6548,7 @@ def dashboard_runtime_diagnostics(workspace: Path):
     """Return read-only runtime metadata for the dashboard process."""
     data, base_path, local_path = load_voice_config_raw(workspace)
     gemini_cfg = data.get("providers", {}).get("gemini_live", {})
-    gemini_status = voice_provider_status("gemini_live", gemini_cfg) if gemini_cfg else {
+    gemini_status = voice_provider_status("gemini_live", gemini_cfg, workspace) if gemini_cfg else {
         "provider": "gemini_live",
         "ready": False,
         "reasons": ["not_configured"],
@@ -6699,7 +6702,7 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
     if provider not in providers:
         return {"status": "error", "error": "unknown_voice_provider", "provider": provider}
     cfg = providers[provider]
-    health = voice_provider_status(provider, cfg)
+    health = voice_provider_status(provider, cfg, workspace)
     base = {
         "provider": provider,
         "mode": cfg.get("mode", "unknown"),
@@ -6714,7 +6717,7 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
     if provider == "local_file":
         if not health["ready"]:
             return {**base, "status": "blocked"}
-        input_file = Path(cfg.get("input_file", workspace / "voice" / "input.txt"))
+        input_file = local_file_input_path(workspace)
         recognized = input_file.read_text(encoding="utf-8").strip()
         command = run_command(workspace, recognized)
         return {**base, "status": "passed" if command.get("intent") != "unknown" else "failed", "input_file": str(input_file), "recognized_text": recognized, "command": command}
@@ -6734,7 +6737,8 @@ def voice_provider_test(workspace: Path, provider: str, text: str | None = None)
 def local_file_input_path(workspace: Path):
     data, _, _ = load_voice_config_raw(workspace)
     local_file = data.get("providers", {}).get("local_file", {})
-    return Path(local_file.get("input_file") or workspace / "voice" / "input.txt")
+    path = Path(local_file.get("input_file") or workspace / "voice" / "input.txt")
+    return path if path.is_absolute() else workspace / path
 
 
 def write_voice_sample(workspace: Path, text: str):
@@ -6797,7 +6801,7 @@ def voice_session(workspace: Path, provider: str, text: str):
     if provider not in providers:
         return {"status": "error", "error": "unknown_voice_provider", "provider": provider}
     cfg = providers[provider]
-    health = voice_provider_status(provider, cfg)
+    health = voice_provider_status(provider, cfg, workspace)
     base = {
         "provider": provider,
         "mode": cfg.get("mode", "unknown"),
@@ -6864,7 +6868,7 @@ def mila_live_chat(workspace: Path, text: str, provider: str = "gemini_live"):
     data, _, _ = load_voice_config_raw(workspace)
     providers = data.get("providers", {})
     cfg = providers.get(provider) or providers.get("gemini_live") or {}
-    health = voice_provider_status(provider, cfg) if cfg else {"ready": False, "reasons": ["provider_not_configured"]}
+    health = voice_provider_status(provider, cfg, workspace) if cfg else {"ready": False, "reasons": ["provider_not_configured"]}
     base = {
         "provider": provider,
         "mode": "live_chat",
@@ -6920,14 +6924,17 @@ def mila_command_reply(command: dict):
 
 
 def google_genai_available() -> bool:
-    return importlib.util.find_spec("google.genai") is not None
+    try:
+        return importlib.util.find_spec("google.genai") is not None
+    except (ImportError, ModuleNotFoundError):
+        return False
 
 
 def mila_native_voice_ready(workspace: Path) -> dict:
     load_workspace_dotenv(workspace)
     data, _, _ = load_voice_config_raw(workspace)
     cfg = (data.get("providers", {}) or {}).get("gemini_live", {})
-    status = voice_provider_status("gemini_live", cfg) if cfg else {"ready": False, "reasons": ["gemini_live_not_configured"]}
+    status = voice_provider_status("gemini_live", cfg, workspace) if cfg else {"ready": False, "reasons": ["gemini_live_not_configured"]}
     sdk_ready = google_genai_available()
     return {
         "sdk_ready": sdk_ready,

@@ -11,6 +11,7 @@ import integrations from "./routes/integrations.js";
 import missions from "./routes/missions.js";
 import knowledge from "./routes/knowledge.js";
 import kanban from "./routes/kanban.js";
+import claudeCode from "./routes/claude-code.js";
 import { requireAuth, loginHandler, logoutHandler, meHandler, rateLimit, authEnabled } from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -73,6 +74,7 @@ app.use("/api/integrations", integrations);
 app.use("/api/missions", missions);
 app.use("/api/knowledge", knowledge);
 app.use("/api/kanban", kanban);
+app.use("/api/claude-code", claudeCode);
 app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 

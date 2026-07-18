@@ -116,6 +116,18 @@ export const api = {
     decompose: (id) => j(`/api/kanban/tasks/${encodeURIComponent(id)}/decompose`, { method: "POST" }),
     dispatch: () => j("/api/kanban/dispatch", { method: "POST" }),
   },
+  claude: {
+    status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),
+    projects: () => j("/api/claude-code/projects"),
+    sessions: () => j("/api/claude-code/sessions"),
+    session: (id) => j(`/api/claude-code/sessions/${encodeURIComponent(id)}`),
+    createSession: (body) => j("/api/claude-code/sessions", { method: "POST", body }),
+    removeSession: (id) => j(`/api/claude-code/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    message: (id, body) => j(`/api/claude-code/sessions/${encodeURIComponent(id)}/messages`, { method: "POST", body }),
+    delegate: (id, body) => j(`/api/claude-code/sessions/${encodeURIComponent(id)}/delegate`, { method: "POST", body }),
+    files: (workdir, filePath = "") => j(`/api/claude-code/files?workdir=${encodeURIComponent(workdir)}&path=${encodeURIComponent(filePath)}`),
+    file: (workdir, filePath) => j(`/api/claude-code/file?workdir=${encodeURIComponent(workdir)}&path=${encodeURIComponent(filePath)}`),
+  },
   hermes: { status: () => j("/api/hermes/control/status") },
   llm: { status: () => j("/api/llm/status") },
 };

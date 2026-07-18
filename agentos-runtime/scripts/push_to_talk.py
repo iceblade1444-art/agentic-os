@@ -22,7 +22,7 @@ if str(AGENTOS_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENTOS_ROOT))
 from agentos_env import load_workspace_dotenv
 
-DEFAULT_WORKSPACE = Path("C:/Users/User/AgentOS")
+DEFAULT_WORKSPACE = AGENTOS_ROOT
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
@@ -49,9 +49,13 @@ def load_voice_config(workspace: Path) -> dict:
     return data
 
 
-def load_provider_module(provider: str):
-    module_path = DEFAULT_WORKSPACE / "voice" / "providers" / f"{provider}.py"
-    if not module_path.exists():
+def load_provider_module(provider: str, workspace: Path = DEFAULT_WORKSPACE):
+    candidates = [
+        workspace / "voice" / "providers" / f"{provider}.py",
+        DEFAULT_WORKSPACE / "voice" / "providers" / f"{provider}.py",
+    ]
+    module_path = next((path for path in candidates if path.exists()), None)
+    if module_path is None:
         raise ValueError(f"provider module not found: {provider}")
     spec = importlib.util.spec_from_file_location(f"agentos_voice_{provider}", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -61,10 +65,10 @@ def load_provider_module(provider: str):
     return module
 
 
-def provider_status(config: dict, provider: str) -> dict:
+def provider_status(config: dict, provider: str, workspace: Path = DEFAULT_WORKSPACE) -> dict:
     provider_cfg = config.get("providers", {}).get(provider, {})
     if provider == "gemini_live":
-        return load_provider_module(provider).provider_status(provider_cfg)
+        return load_provider_module(provider, workspace).provider_status(provider_cfg)
     return {
         "provider": provider,
         "ready": bool(provider_cfg.get("enabled", True)),
@@ -84,10 +88,12 @@ def recognized_text_from_provider(workspace: Path, config: dict, provider: str, 
 
     if provider == "local_file":
         input_file = Path(args.input_file or provider_cfg.get("input_file", workspace / "voice" / "input.txt"))
+        if not input_file.is_absolute():
+            input_file = workspace / input_file
         return input_file.read_text(encoding="utf-8").strip()
 
     if provider == "gemini_live":
-        return load_provider_module(provider).recognize_once(provider_cfg)
+        return load_provider_module(provider, workspace).recognize_once(provider_cfg)
 
     raise NotImplementedError(f"provider not implemented: {provider}")
 
@@ -126,7 +132,7 @@ def main(argv=None) -> int:
     config = load_voice_config(workspace)
     provider = args.provider or ("mock_text" if args.mock_text else config.get("default_provider", "mock_text"))
     if args.status:
-        print(json.dumps(provider_status(config, provider), ensure_ascii=False))
+        print(json.dumps(provider_status(config, provider, workspace), ensure_ascii=False))
         return 0
 
     try:
