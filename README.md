@@ -390,13 +390,29 @@ toolbar can copy the conversation or export it as Markdown. Gemini currently
 limits audio-only Live sessions to 15 minutes and sessions that include image
 frames to 2 minutes; end and restart the call when that limit is reached.
 
-Mila handles the conversation. When a request needs tools, files, research,
-deployment, or another real action, Mila asks for confirmation and calls
-`delegate_to_hermes`. Agentic OS creates a Mission and streams it to Hermes, so
-Hermes remains the primary orchestrator and all existing approval gates still
-apply. Change Mila's speaking rules, supported languages, or handoff policy in
-`assets/js/pages/mila.js`; change PCM/WebSocket handling in
-`assets/js/mila-live.js`; change the secure token exchange in
+Mila handles the conversation and can read live Agentic OS state instead of
+guessing. Gemini Live receives allowlisted tools for Hermes/Kanban, Obsidian and
+Claude Workspace. It can check system status, list or inspect Kanban cards,
+search and read notes, and list Claude sessions without changing anything.
+
+Every write is enforced by `POST /api/mila/actions` as a two-step operation.
+The first tool call only stages the exact normalized payload and returns a
+five-minute, single-use confirmation token. Mila explains the action and asks
+the user to confirm. A second call with that token executes the stored payload;
+changed arguments are ignored, expired or replayed tokens fail, and the browser
+never receives Hermes, Obsidian, Claude or MILA credentials.
+
+Confirmed `delegate_to_hermes` work becomes a visible Kanban task and starts
+Hermes planning. `create_kanban_task` creates a board card,
+`write_obsidian_note` creates or appends approved knowledge, and
+`ask_claude_code` starts a Plan or Edit request in the existing Agentic OS Claude
+Workspace. Claude completion is polled back into the persistent Mila transcript.
+
+To extend the integration, add the Gemini function declaration in
+`assets/js/mila-tools.js`, implement and allowlist its server action in
+`server/lib/mila-actions.js`, then add its user-facing transcript handling in
+`assets/js/mila-session.js`. PCM/WebSocket handling lives in
+`assets/js/mila-live.js`; the secure Gemini token exchange remains in
 `server/lib/mila.js`.
 
 The production mobile endpoint is served under

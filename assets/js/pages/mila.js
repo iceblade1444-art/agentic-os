@@ -76,7 +76,7 @@ export default {
   render() {
     return `<div class="mila-live">
       <div class="page-head mila-head">
-        <div><div class="page-title">Mila Live</div><div class="page-sub">Gemini Live voice · Hermes orchestrator</div></div>
+        <div><div class="page-title">Mila Live</div><div class="page-sub">Gemini Live voice · Hermes · Kanban · Obsidian · Claude</div></div>
         <div class="spacer"></div>
         <label class="mila-language-wrap tip" data-tip="Speech recognition language"><span>${icon("chat")}</span><select id="milaLanguage" aria-label="Speech recognition language">${languageOptions()}</select></label>
         <span class="badge neutral" id="milaStatus"><span class="dot"></span>Checking</span>
@@ -112,8 +112,10 @@ export default {
 
           <div class="mila-quick-actions">
             <button class="btn btn-ghost sm" id="milaSystemPrompt" type="button">${icon("activity")}System status</button>
-            <a class="btn btn-ghost sm" href="#/missions">${icon("rocket")}Missions</a>
-            <a class="btn btn-ghost sm" href="#/hermes">${icon("brain")}Hermes Control</a>
+            <a class="btn btn-ghost sm" href="#/workflows">${icon("branch")}Kanban</a>
+            <a class="btn btn-ghost sm" href="#/knowledge">${icon("book")}Obsidian</a>
+            <a class="btn btn-ghost sm" href="#/claude-code">${icon("code")}Claude</a>
+            <a class="btn btn-ghost sm" href="#/hermes">${icon("brain")}Hermes</a>
           </div>
 
           <div class="mila-compose-zone">

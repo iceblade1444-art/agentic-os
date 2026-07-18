@@ -78,6 +78,9 @@ export const api = {
     milaSubscription: (body) => j("/api/integrations/mila/subscription", { method: "POST", body }),
     milaAppUpdate: (body) => j("/api/integrations/mila/app-update", { method: "POST", body }),
   },
+  mila: {
+    action: (name, args = {}) => j("/api/mila/actions", { method: "POST", body: { name, args } }),
+  },
   missions: {
     list: () => j("/api/missions"),
     create: (body) => j("/api/missions", { method: "POST", body }),
