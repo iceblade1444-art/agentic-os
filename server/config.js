@@ -26,7 +26,7 @@ export const config = {
     workdir: env.CLAUDE_CODE_WORKDIR || "/app/work",
     workspaceUid: Number.isInteger(Number(env.CLAUDE_CODE_WORKSPACE_UID)) ? Number(env.CLAUDE_CODE_WORKSPACE_UID) : 1000,
     workspaceGid: Number.isInteger(Number(env.CLAUDE_CODE_WORKSPACE_GID)) ? Number(env.CLAUDE_CODE_WORKSPACE_GID) : 1000,
-    model: env.CLAUDE_CODE_MODEL || "sonnet",
+    model: env.CLAUDE_CODE_MODEL || "claude-sonnet-4-6",
     timeoutMs: Math.max(30000, Number(env.CLAUDE_CODE_TIMEOUT_MS) || 900000),
   },
   creator: {

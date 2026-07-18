@@ -73,7 +73,7 @@ function parseGitStatus(raw) {
 
 function defaultExecute(bin, args, options = {}) {
   return new Promise((resolve) => {
-    execFile(bin, args, {
+    const child = execFile(bin, args, {
       cwd: options.cwd,
       env: options.env || process.env,
       timeout: options.timeout,
@@ -85,6 +85,8 @@ function defaultExecute(bin, args, options = {}) {
       stdout: String(stdout || ""),
       stderr: String(stderr || ""),
     }));
+    child.stdin?.on("error", () => {});
+    child.stdin?.end();
   });
 }
 
@@ -477,17 +479,18 @@ export function createClaudeCodeManager(options = {}) {
       const result = await execute(bin, args, { cwd: session.workdir, timeout: timeoutMs });
       let parsed = {};
       try { parsed = JSON.parse(result.stdout || "{}"); } catch {}
+      const succeeded = result.ok && parsed.is_error !== true;
       const latest = load();
       const target = find(latest, id);
       target.cliSessionId = bounded(parsed.session_id || target.cliSessionId, 160);
-      target.status = result.ok ? "ready" : "error";
+      target.status = succeeded ? "ready" : "error";
       target.updatedAt = Date.now();
       target.messages.push({
         id: uid("msg"),
         role: "assistant",
         text: bounded(parsed.result || result.stderr || result.error || "Claude Code returned no output", 100000),
         at: Date.now(),
-        ok: result.ok,
+        ok: succeeded,
         meta: {
           durationMs: Number(parsed.duration_ms) || null,
           turns: Number(parsed.num_turns) || null,
