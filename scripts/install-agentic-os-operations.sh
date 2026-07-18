@@ -8,7 +8,6 @@ PYTHON="${OPS_PYTHON:-/usr/bin/python3}"
 
 mkdir -p "$UNIT_DIR" "$STATE_DIR" "$HOME/backups/agentic-os"
 chmod 700 "$STATE_DIR" "$HOME/backups/agentic-os"
-chmod +x "$ROOT/scripts/agentic-os-operations.py"
 
 cat > "$UNIT_DIR/agentic-os-monitor.service" <<EOF
 [Unit]
