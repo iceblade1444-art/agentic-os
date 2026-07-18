@@ -44,6 +44,31 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   assert.ok(calls.at(-1).args.includes("--permission-mode"));
   assert.ok(calls.at(-1).args.includes("--model"));
   assert.equal(calls.at(-1).options.env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
+  assert.equal("ANTHROPIC_API_KEY" in calls.at(-1).options.env, false);
+});
+
+test("Claude OAuth runtime is isolated from the app Anthropic connector", async (t) => {
+  const dirs = fixture();
+  t.after(() => fs.rmSync(dirs.root, { recursive: true, force: true }));
+  const previousKey = process.env.ANTHROPIC_API_KEY;
+  const previousBase = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_API_KEY = "app-connector-key";
+  process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
+  t.after(() => {
+    if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = previousKey;
+    if (previousBase === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = previousBase;
+  });
+  const calls = [];
+  const execute = async (_bin, args, options) => {
+    calls.push({ args, options });
+    if (args[0] === "--version") return { ok: true, stdout: "2.1.214", stderr: "" };
+    return { ok: true, stdout: JSON.stringify({ loggedIn: true }), stderr: "" };
+  };
+  const manager = createClaudeCodeManager({ dataDir: dirs.data, workRoot: dirs.work, baseUrl: "", apiKey: "", execute });
+  await manager.status();
+  assert.equal("ANTHROPIC_API_KEY" in calls[0].options.env, false);
+  assert.equal("ANTHROPIC_BASE_URL" in calls[0].options.env, false);
+  assert.equal("CLAUDE_CODE_BASE_URL" in calls[0].options.env, false);
 });
 
 test("Claude workspace reports structured CLI errors instead of a false ready state", async (t) => {
@@ -176,8 +201,8 @@ test("Claude desktop UI is wired into the authenticated Agentic OS shell", () =>
   assert.match(page, /api\.claude\.delegate/);
   assert.match(page, /api\.claude\.importProject/);
   assert.match(page, /claudeProjectSync/);
-  assert.match(page, /value="claude-fable-5"/);
-  assert.match(page, /value="claude-sonnet-4-6" selected/);
+  assert.match(page, /value="fable"/);
+  assert.match(page, /value="sonnet" selected/);
   assert.match(server, /\/api\/claude-code/);
   assert.match(compose, /CLAUDE_CONFIG_DIR.*:\/root\/\.claude/);
   assert.match(compose, /CLAUDE_CONFIG_FILE.*:\/root\/\.claude\.json/);
