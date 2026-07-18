@@ -555,7 +555,7 @@ function intCardReal(i) {
   return `<div class="card tile" data-intcard="${i.provider}"><div class="row between"><div class="row gap-3"><div class="aico" style="background:${store.colors[i.color] || store.colors.violet}">${icon(i.icon)}</div><div class="stack"><span class="fw-700">${esc(i.name)}</span><span class="hint">${esc(i.desc)}</span></div></div></div>
     ${i.lastResult ? `<div class="hint mt-2">${i.lastResult.ok ? "✓" : "✕"} ${esc(i.lastResult.detail || "")}</div>` : ""}
     <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>Connected</span>` : `<span class="badge neutral">Not connected</span>`}
-      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">Send test</button>` : ""}${i.connected && i.provider === "mila" ? `<button class="btn sm btn-ghost" data-intstatus="mila">Status</button><button class="btn sm btn-primary" data-intcode="mila">New code</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${i.connected ? "Disconnect" : "Connect"}</button></div>
+      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">Send test</button>` : ""}${i.connected && i.provider === "mila" ? `<button class="btn sm btn-ghost" data-intstatus="mila">Status</button><button class="btn sm btn-ghost" data-intdevices="mila">Devices</button><button class="btn sm btn-primary" data-intcode="mila">New code</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${i.connected ? "Disconnect" : "Connect"}</button></div>
     </div></div>`;
 }
 async function intMountReal(root) {
@@ -577,6 +577,8 @@ async function intMountReal(root) {
     };
     const code = card.querySelector("[data-intcode]");
     if (code) code.onclick = () => openMilaCode();
+    const devices = card.querySelector("[data-intdevices]");
+    if (devices) devices.onclick = () => openMilaDevices();
   });
 }
 function openMilaCode() {
@@ -592,6 +594,36 @@ function openMilaCode() {
       } catch (e) { m.querySelector("#milaCodeResult").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Could not create code</div><div class="a-desc">${esc(e.message)}</div></div></div>`; }
       btn.classList.remove("loading");
     }),
+  });
+}
+function milaDeviceTime(value) {
+  if (!value) return "Unknown time";
+  const date = new Date(Number(value));
+  return Number.isNaN(date.getTime()) ? "Unknown time" : date.toLocaleString();
+}
+function openMilaDevices() {
+  openModal({
+    title: "MILA mobile devices", width: 620,
+    body: `<div id="milaDevicesList" class="stack gap-2"><div class="hint">Loading devices…</div></div>`,
+    footer: `<button class="btn btn-secondary" data-close>Close</button>`,
+    onMount: async (m) => {
+      const slot = m.querySelector("#milaDevicesList");
+      const render = (devices) => {
+        if (!devices.length) { slot.innerHTML = `<div class="empty">No MILA devices have been paired yet.</div>`; return; }
+        slot.innerHTML = devices.map((device) => `<div class="card tile"><div class="row between gap-3"><div class="stack"><strong>${esc(device.label || "MILA device")}</strong><span class="hint">Paired ${esc(milaDeviceTime(device.createdAt))}</span>${device.revokedAt ? `<span class="hint">Revoked ${esc(milaDeviceTime(device.revokedAt))}</span>` : ""}</div><div class="row gap-2"><span class="badge ${device.active ? "success" : "neutral"}">${device.active ? "Active" : "Revoked"}</span>${device.active ? `<button class="btn sm btn-secondary" data-mila-revoke="${esc(device.id)}">Revoke</button>` : ""}</div></div></div>`).join("");
+        slot.querySelectorAll("[data-mila-revoke]").forEach((button) => {
+          button.onclick = async () => {
+            if (!window.confirm("Revoke this MILA device? It will need a new one-time code to reconnect.")) return;
+            button.classList.add("loading");
+            try { await api.integrations.milaRevokeDevice(button.dataset.milaRevoke); const result = await api.integrations.milaDevices(); render(result.devices || []); toast("success", "MILA device revoked"); }
+            catch (error) { toast("error", "Could not revoke device", error.message); }
+            finally { button.classList.remove("loading"); }
+          };
+        });
+      };
+      try { const result = await api.integrations.milaDevices(); render(result.devices || []); }
+      catch (error) { slot.innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Could not load devices</div><div class="a-desc">${esc(error.message)}</div></div></div>`; }
+    },
   });
 }
 function intConnect(i) {
