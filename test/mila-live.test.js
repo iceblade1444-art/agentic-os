@@ -62,6 +62,7 @@ test("Mila workspace exposes language, attachment and transcript actions", () =>
   }
   assert.match(source, /prepareMilaAttachment/);
   assert.match(source, /Mila voice preferences/);
+  for (const route of ["#\/workflows", "#\/knowledge", "#\/claude-code", "#\/hermes"]) assert.match(source, new RegExp(route));
   assert.match(hub, /transcriptionLanguage/);
 });
 
