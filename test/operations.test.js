@@ -54,4 +54,6 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(installer, /PathExists=.*backup\.request/);
   assert.match(operator, /OPS_BACKUP_RETENTION_DAYS/);
   assert.match(operator, /OPS_TELEGRAM_BOT_TOKEN/);
+  assert.match(operator, /load_project_env/);
+  assert.match(operator, /key in os\.environ/);
 });

@@ -45,11 +45,16 @@ copies. Configure the host through `.env`:
 ```dotenv
 OPS_BACKUP_RETENTION_DAYS=14
 OPS_BACKUP_MAX_COUNT=14
+OPS_HEALTH_URL=http://172.16.10.6:8787/api/health
 OPS_PUBLIC_HEALTH_URL=https://agent.example.com/api/health
 ```
 
-The public URL check is optional but recommended: it detects nginx, DNS and TLS
-failures that an internal container probe cannot see.
+`OPS_HEALTH_URL` is optional. Set it when Docker is bound to a non-loopback host
+address; otherwise the monitor derives the internal endpoint from `BIND_ADDRESS`
+and `HOST_PORT`. Direct host commands also read missing values from the project
+`.env`, matching the systemd services. The public URL check is optional but
+recommended: it detects nginx, DNS and TLS failures that an internal container
+probe cannot see.
 
 ## Notifications
 
