@@ -294,7 +294,9 @@ Git through process environment configuration and is never returned to the brows
 Git command arguments. **Synchronize** performs `fetch` followed by a fast-forward-only merge and
 stops when the selected repository has local changes, so Claude's unfinished work is never replaced.
 Attachments live under `.agentic-context/`, which Agentic OS adds to the repository-local Git exclude
-file instead of modifying the project's committed `.gitignore`.
+file instead of modifying the project's committed `.gitignore`. Imported files are assigned to
+`CLAUDE_CODE_WORKSPACE_UID:GID` (default `1000:1000`) for host access; Git's trusted-directory
+override is scoped to the selected bounded workspace rather than enabled globally.
 
 Production installs the pinned Claude Code CLI in the image and mounts
 `/home/admilana/.claude:/root/.claude` so login survives container recreation. Project work is

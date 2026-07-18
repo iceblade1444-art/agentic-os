@@ -61,6 +61,7 @@ test("Claude workspace imports and fast-forward syncs a bounded GitHub project",
   const dirs = fixture();
   t.after(() => fs.rmSync(dirs.root, { recursive: true, force: true }));
   const calls = [];
+  const ownership = [];
   const gitExecute = async (_bin, args, options) => {
     calls.push({ args, options });
     if (args[0] === "clone") {
@@ -79,6 +80,7 @@ test("Claude workspace imports and fast-forward syncs a bounded GitHub project",
     workRoot: dirs.work,
     githubToken: "server-only-token",
     gitExecute,
+    applyWorkspaceOwnership: (root) => ownership.push(root),
   });
 
   const imported = await manager.importProject({ url: "acme/product", branch: "main", folder: "product-app" });
@@ -88,6 +90,9 @@ test("Claude workspace imports and fast-forward syncs a bounded GitHub project",
   assert.match(fs.readFileSync(path.join(imported.project.workdir, ".git", "info", "exclude"), "utf8"), /\.agentic-context\//);
   assert.equal(calls[0].args.includes("server-only-token"), false);
   assert.equal(calls[0].options.env.GIT_CONFIG_VALUE_0.includes("server-only-token"), false);
+  assert.equal(calls[0].options.env.GIT_CONFIG_KEY_1, "safe.directory");
+  assert.equal(calls[0].options.env.GIT_CONFIG_VALUE_1, dirs.work);
+  assert.deepEqual(ownership, [imported.project.workdir]);
 
   const synced = await manager.syncProject(imported.project.workdir);
   assert.equal(synced.project.dirty, false);
