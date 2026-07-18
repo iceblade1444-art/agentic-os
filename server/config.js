@@ -20,6 +20,12 @@ export const config = {
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
+  claudeCode: {
+    bin: env.CLAUDE_CODE_BIN || "claude",
+    workdir: env.CLAUDE_CODE_WORKDIR || "/app/work",
+    model: env.CLAUDE_CODE_MODEL || "fable",
+    timeoutMs: Math.max(30000, Number(env.CLAUDE_CODE_TIMEOUT_MS) || 900000),
+  },
   creator: {
     id: "creator",
     name: env.CREATOR_NAME || "Creator",

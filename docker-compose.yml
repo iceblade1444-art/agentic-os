@@ -21,6 +21,9 @@ services:
     volumes:
       - ./data:/app/data        # persists db.json (missions, MCP servers, integrations)
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
+      - ./agentos-runtime/work:/app/work
+      - ./agentos-runtime/projects:/app/projects
+      - /home/admilana/.claude:/root/.claude
       - /home/admilana/.local/state/agentic-os:/run/agentic-os
     depends_on:
       - agentos-runtime

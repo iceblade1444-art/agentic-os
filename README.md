@@ -68,7 +68,7 @@ It runs in **two modes**:
 
 ## ✨ Features
 
-- **17 pages / routes** — Home dashboard, **Missions**, **Hermes Control**, Agents (full CRUD), Chat, Workflow Builder,
+- **18 pages / routes** — Home dashboard, **Missions**, **Hermes Control**, **Claude Workspace**, Agents, Chat, Kanban,
   Tools, Knowledge, Memory, MCP Servers, Integrations, Evaluations, Observability, Guardrails,
   Secrets, Settings, plus a Component Library showcase.
 - **Missions & orchestration** — submit a natural-language mission and watch **Hermes** plan it
@@ -275,6 +275,24 @@ sessions, config, logs, analytics, cron, profiles, skills, MCP, webhooks, channe
 backups and system operations. HTTP and WebSocket traffic pass through `server/lib/hermes-proxy.js`;
 the upstream port is never linked from the browser.
 
+### Claude Code desktop workspace
+
+**Claude Workspace** is the coding surface inside the authenticated Agentic OS shell. It is a
+desktop-style project environment rather than a terminal embed: persistent sessions and messages
+live in `DATA_DIR`, project files stay under the mounted `/app/work` root, and the right inspector
+shows files, attached context, and linked Hermes Kanban tasks. Plan/Edit modes, reasoning effort,
+model selection, file attachments, and resumable Claude Code sessions are available from the
+composer.
+
+Claude Code remains the interactive coding workspace; Hermes remains the primary orchestrator.
+The **Agents** tab delegates a visible task to Hermes, Scout, Scribe, Reach, or Dev and tracks that
+task in the same progress panel and shared Kanban. The browser never receives Claude credentials.
+
+Production installs the pinned Claude Code CLI in the image and mounts
+`/home/admilana/.claude:/root/.claude` so login survives container recreation. Project work is
+persisted by `./agentos-runtime/work:/app/work`. Configure the default model with
+`CLAUDE_CODE_MODEL` and verify the account after deployment from the runtime indicator.
+
 On the production server, install and start the dashboard once:
 
 ```bash
@@ -395,9 +413,10 @@ assets/
       dashboard.js         Home: stats, charts, activity, health, top agents
       agents.js            Agents table + create/edit modal + detail drawer + delete
       missions.js          Missions: submit a goal + live orchestration event feed
+      claude-code.js       Claude desktop workspace, projects, sessions, context and handoffs
       mila.js              Mila Live voice UI + confirmed Hermes handoff
       chat.js              Streaming chat (backend proxy / direct / demo fallback)
-      workflows.js         Drag-and-connect SVG node canvas
+      workflows.js         Shared Hermes Kanban board and task details
       settings.js          Appearance / Model / Profile / Data
       components.js        Component library showcase (all UI primitives + tokens)
       misc.js              Tools, Knowledge, Memory, MCP, Integrations,
@@ -410,12 +429,14 @@ server/                    Node/Express backend (optional — enables the real f
   routes/mcp.js            MCP CRUD + connect / disconnect / call
   routes/integrations.js   Connection CRUD + real credential tests
   routes/missions.js       Missions CRUD + Hermes runtime event feed (SSE)
+  routes/claude-code.js    Protected Claude sessions, files, messages and agent delegation
   mcp/manager.js           Spawns MCP servers over stdio (SDK client), lists/calls tools
   mcp/sample-server.js     Bundled demo MCP server (echo / add / time / facts)
   mcp/agentic-os-server.js MCP bridge: exposes Agentic OS as tools for Hermes/orchestrators
   mcp/obsidian-server.js   MCP server: read/search/write notes in an Obsidian vault
   lib/connectors.js        Real provider checks (OpenAI / Anthropic / GitHub / Notion / Slack)
   lib/orchestrator.js      Bridge from public Missions to Hermes AgentOS runtime
+  lib/claude-code.js       Confined Claude CLI runtime + persistent desktop sessions
 Dockerfile · .env.example · package.json
 ```
 
