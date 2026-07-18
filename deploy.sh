@@ -17,11 +17,29 @@ if ! grep -q '^AUTH_TOKEN=..*' .env; then
   echo "· generated AUTH_TOKEN"
 fi
 
-# 3) build + start
+# 3) keep Claude Code login state outside the replaceable app container
+CLAUDE_CONFIG_DIR="$(sed -n 's/^CLAUDE_CONFIG_DIR=//p' .env | tail -n1)"
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/home/admilana/.claude}"
+CLAUDE_CONFIG_FILE="$(sed -n 's/^CLAUDE_CONFIG_FILE=//p' .env | tail -n1)"
+CLAUDE_CONFIG_FILE="${CLAUDE_CONFIG_FILE:-/home/admilana/.claude.json}"
+mkdir -p "$CLAUDE_CONFIG_DIR" "$(dirname "$CLAUDE_CONFIG_FILE")"
+if [ ! -s "$CLAUDE_CONFIG_FILE" ]; then
+  LATEST_CLAUDE_BACKUP="$(find "$CLAUDE_CONFIG_DIR/backups" -maxdepth 1 -type f -name '.claude.json.backup.*' 2>/dev/null | sort | tail -n1)"
+  if [ -n "$LATEST_CLAUDE_BACKUP" ]; then
+    cp "$LATEST_CLAUDE_BACKUP" "$CLAUDE_CONFIG_FILE"
+    echo "· restored persistent Claude Code login configuration"
+  else
+    printf '{}\n' > "$CLAUDE_CONFIG_FILE"
+    echo "· created persistent Claude Code configuration"
+  fi
+fi
+chmod 600 "$CLAUDE_CONFIG_FILE"
+
+# 4) build + start
 echo "· building and starting the container…"
 docker compose up -d --build
 
-# 4) health check
+# 5) health check
 HOST_PORT="$(sed -n 's/^HOST_PORT=//p' .env | tail -n1)"
 HOST_PORT="${HOST_PORT:-8787}"
 BIND_ADDRESS="$(sed -n 's/^BIND_ADDRESS=//p' .env | tail -n1)"

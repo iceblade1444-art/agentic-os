@@ -163,7 +163,8 @@ test("Claude desktop UI is wired into the authenticated Agentic OS shell", () =>
   assert.doesNotMatch(page, /value="fable"/);
   assert.match(page, /value="sonnet" selected/);
   assert.match(server, /\/api\/claude-code/);
-  assert.match(compose, /\.claude:\/root\/\.claude/);
+  assert.match(compose, /CLAUDE_CONFIG_DIR.*:\/root\/\.claude/);
+  assert.match(compose, /CLAUDE_CONFIG_FILE.*:\/root\/\.claude\.json/);
   assert.match(compose, /agentos-runtime\/work:\/app\/work/);
   assert.match(dockerfile, /apk add --no-cache git openssh-client/);
 });
