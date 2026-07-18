@@ -1,7 +1,7 @@
 // Frontend API client + backend detection. When the Node backend is present,
 // MCP / Integrations / Chat use real endpoints; otherwise the app falls back to
 // the local localStorage mock so the static build still works.
-const state = { on: false, health: null, authRequired: false, authed: true, user: null };
+const state = { on: false, health: null, authRequired: false, registration: false, authed: true, user: null, capabilities: {} };
 
 async function j(url, opts = {}) {
   const res = await fetch(url, {
@@ -25,10 +25,13 @@ export const api = {
         state.health = await res.json();
         state.on = true;
         state.authRequired = !!state.health.auth;
+        state.registration = !!state.health.registration;
         try {
           const me = await (await fetch("/api/auth/me")).json();
           state.authed = !!me.authed;
           state.user = me.user || null;
+          state.registration = !!me.registration;
+          state.capabilities = me.capabilities || {};
         } catch {
           state.authed = !state.authRequired;
           state.user = null;
@@ -40,14 +43,29 @@ export const api = {
   get needsAuth() { return state.on && state.authRequired && !state.authed; },
   auth: {
     get user() { return state.user; },
-    login: async (password) => {
-      const result = await j("/api/auth/login", { method: "POST", body: { password } });
+    get registration() { return state.registration; },
+    get capabilities() { return state.capabilities; },
+    get canAdmin() { return !!state.capabilities.canAdmin; },
+    get canWrite() { return state.capabilities.canWrite !== false; },
+    login: async (body) => {
+      const credentials = typeof body === "string" ? { password: body } : body;
+      const result = await j("/api/auth/login", { method: "POST", body: credentials });
       state.authed = true;
       state.user = result.user || null;
+      state.capabilities = result.capabilities || {};
+      return result;
+    },
+    register: async (body) => {
+      const result = await j("/api/auth/register", { method: "POST", body });
+      state.authed = true;
+      state.user = result.user || null;
+      state.capabilities = result.capabilities || {};
       return result;
     },
     logout: () => j("/api/auth/logout", { method: "POST" }),
     me: () => j("/api/auth/me"),
+    users: () => j("/api/auth/users"),
+    updateUser: (id, body) => j(`/api/auth/users/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },
   mcp: {
     list: () => j("/api/mcp/servers"),

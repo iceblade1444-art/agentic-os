@@ -132,6 +132,8 @@ sudo certbot --nginx -d agentic.example.com
 > `ALLOW_CUSTOM_MCP=false` — refuses to spawn arbitrary commands. With `AUTH_TOKEN` + TLS +
 > `SECURE_COOKIE=true`, it's safe to expose. (Belt-and-suspenders: you can still add nginx
 > `auth_basic` on top.)
+> Set `ALLOW_REGISTRATION=true` only when you want public Member sign-up. Creator/Admin manage
+> roles and blocked accounts in **Settings > Team**; see [docs/ACCESS_CONTROL.md](docs/ACCESS_CONTROL.md).
 
 ---
 
@@ -278,6 +280,7 @@ token. The installer intentionally clears `TELEGRAM_BOT_TOKEN` in every speciali
 
 - [ ] `AUTH_TOKEN` set to a long random value (`openssl rand -hex 32`)
 - [ ] `SECURE_COOKIE=true` and served over HTTPS (certbot)
+- [ ] `ALLOW_REGISTRATION` deliberately set (`true` for Member sign-up, otherwise `false`)
 - [ ] `ALLOW_CUSTOM_MCP=false` (default) — the UI can't spawn arbitrary commands
 - [ ] `AGENTIC_OS_TOKEN` matches `AUTH_TOKEN` so the Hermes bridge authenticates (automatic when
       you only set `AUTH_TOKEN`)

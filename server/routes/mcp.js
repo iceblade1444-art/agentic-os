@@ -4,10 +4,11 @@ import { Router } from "express";
 import { db } from "../store.js";
 import { config } from "../config.js";
 import * as mgr from "../mcp/manager.js";
-import { authenticatedUser } from "../lib/auth.js";
+import { authenticatedUser, requireRoles } from "../lib/auth.js";
 import { knowledge } from "../lib/knowledge.js";
 
 const r = Router();
+const requireAdmin = requireRoles("Creator", "Admin");
 
 const view = (s) => ({
   id: s.id, name: s.name, kind: s.kind, desc: s.desc || "",
@@ -19,7 +20,7 @@ const view = (s) => ({
 
 r.get("/servers", (req, res) => res.json(db.mcp.list().map(view)));
 
-r.post("/servers", (req, res) => {
+r.post("/servers", requireAdmin, (req, res) => {
   if (!config.allowCustomMcp) return res.status(403).json({ error: "Adding custom MCP servers is disabled. Set ALLOW_CUSTOM_MCP=true on the server to allow spawning arbitrary commands." });
   const { name, command, args, env } = req.body || {};
   if (!name || !command) return res.status(400).json({ error: "name and command are required" });
@@ -32,13 +33,13 @@ r.post("/servers", (req, res) => {
   res.json(view(rec));
 });
 
-r.delete("/servers/:id", async (req, res) => {
+r.delete("/servers/:id", requireAdmin, async (req, res) => {
   await mgr.disconnect(req.params.id);
   db.mcp.remove(req.params.id);
   res.json({ ok: true });
 });
 
-r.post("/servers/:id/connect", async (req, res) => {
+r.post("/servers/:id/connect", requireAdmin, async (req, res) => {
   const s = db.mcp.get(req.params.id);
   if (!s) return res.status(404).json({ error: "not found" });
   try {
@@ -51,13 +52,13 @@ r.post("/servers/:id/connect", async (req, res) => {
   }
 });
 
-r.post("/servers/:id/disconnect", async (req, res) => {
+r.post("/servers/:id/disconnect", requireAdmin, async (req, res) => {
   await mgr.disconnect(req.params.id);
   db.mcp.update(req.params.id, { status: "stopped" });
   res.json({ ok: true });
 });
 
-r.post("/servers/:id/call", async (req, res) => {
+r.post("/servers/:id/call", requireAdmin, async (req, res) => {
   const { tool, args } = req.body || {};
   if (!tool) return res.status(400).json({ error: "tool name required" });
   const server = db.mcp.get(req.params.id);

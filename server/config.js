@@ -42,6 +42,7 @@ export const config = {
   authToken: env.AUTH_TOKEN || "",                       // empty = auth disabled (dev)
   sessionSecret: env.SESSION_SECRET || env.AUTH_TOKEN || "agentic-os-dev-secret",
   secureCookie: env.SECURE_COOKIE === "true",            // set true behind HTTPS
+  allowRegistration: env.ALLOW_REGISTRATION === "true", // public sign-up creates Member accounts
   agenticToken: env.AGENTIC_OS_TOKEN || env.AUTH_TOKEN || "",
   allowCustomMcp: env.ALLOW_CUSTOM_MCP === "true",       // gate arbitrary command spawning
   mcpAllowedCommands: (env.MCP_ALLOWED_COMMANDS || "npx,node,uvx,uv,python,python3,deno,bun,docker")

@@ -14,7 +14,10 @@ import knowledge from "./routes/knowledge.js";
 import kanban from "./routes/kanban.js";
 import claudeCode from "./routes/claude-code.js";
 import milaActions from "./routes/mila-actions.js";
-import { requireAuth, loginHandler, logoutHandler, meHandler, rateLimit, authEnabled } from "./lib/auth.js";
+import {
+  authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
+  registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
+} from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
@@ -66,14 +69,18 @@ app.get("/api/health", (req, res) =>
       anthropic: !!(config.anthropic.key || db.integrations.byProvider("anthropic")?.config?.apiKey),
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
-    auth: authEnabled(),
+    auth: authEnabled(), registration: config.allowRegistration,
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
+app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
 
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
 app.use("/api", requireAuth);
+app.use("/api", requireWriteAccess);
+app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);
+app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHandler);
 app.use("/api/llm", llm);
 app.use("/api/mcp", mcp);
 app.use("/api/integrations", integrations);

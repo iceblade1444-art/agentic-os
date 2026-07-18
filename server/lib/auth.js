@@ -4,6 +4,7 @@
 // disabled (local dev) — the server logs a warning at startup.
 import crypto from "node:crypto";
 import { config } from "../config.js";
+import { users } from "./users.js";
 
 const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
@@ -51,16 +52,19 @@ export function userFromSession(payload) {
 }
 
 export function authenticatedUser(req) {
-  if (!isAuthed(req)) return null;
-  if (!authEnabled() || (req.headers.authorization || "").startsWith("Bearer ")) return creatorUser();
-  return userFromSession(verify(parseCookies(req)[COOKIE]));
+  if (!authEnabled()) return creatorUser();
+  const auth = req.headers.authorization || "";
+  if (auth.startsWith("Bearer ")) return constEq(auth.slice(7), config.authToken) ? creatorUser() : null;
+  const payload = verify(parseCookies(req)[COOKIE]);
+  if (!payload?.user) return null;
+  if (payload.user.id === "creator") return creatorUser();
+  const user = users.sessionUser(String(payload.user.id || ""));
+  if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
+  return userFromSession({ user });
 }
 
 export function isAuthed(req) {
-  if (!authEnabled()) return true;
-  const auth = req.headers.authorization || "";
-  if (auth.startsWith("Bearer ") && constEq(auth.slice(7), config.authToken)) return true;
-  return !!verify(parseCookies(req)[COOKIE]);
+  return !!authenticatedUser(req);
 }
 
 export function requireAuth(req, res, next) {
@@ -68,19 +72,54 @@ export function requireAuth(req, res, next) {
   res.status(401).json({ error: "unauthorized" });
 }
 
+export function requireRoles(...allowed) {
+  const roles = new Set(allowed);
+  return (req, res, next) => {
+    const user = authenticatedUser(req);
+    if (!user) return res.status(401).json({ error: "unauthorized" });
+    if (!roles.has(user.role)) return res.status(403).json({ error: "forbidden", requiredRoles: [...roles] });
+    req.user = user;
+    next();
+  };
+}
+
+export function requireWriteAccess(req, res, next) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  return requireRoles("Creator", "Admin", "Member")(req, res, next);
+}
+
+export function capabilities(user) {
+  const role = user?.role || "Viewer";
+  return {
+    canWrite: ["Creator", "Admin", "Member"].includes(role),
+    canAdmin: ["Creator", "Admin"].includes(role),
+    canManageUsers: ["Creator", "Admin"].includes(role),
+  };
+}
+
 export function sessionCookie(req, user = creatorUser()) {
-  const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }) });
+  const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }), sessionVersion: Number(user.sessionVersion) || 1 });
   const secure = config.secureCookie || req.secure ? "; Secure" : "";
   return `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 86400}${secure}`;
 }
 
 export function loginHandler(req, res) {
   if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
-  const password = (req.body || {}).password || "";
-  if (!constEq(password, config.authToken)) return res.status(401).json({ error: "Invalid password" });
-  const user = creatorUser();
+  const { email = "", password = "" } = req.body || {};
+  const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
+  if (!user) return res.status(401).json({ error: "Invalid email or password" });
   res.setHeader("Set-Cookie", sessionCookie(req, user));
-  res.json({ ok: true, user });
+  res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
+}
+export function registerHandler(req, res) {
+  if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
+  try {
+    const user = users.register(req.body || {});
+    res.setHeader("Set-Cookie", sessionCookie(req, user));
+    res.status(201).json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
+  } catch (error) {
+    res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
+  }
 }
 export function logoutHandler(req, res) {
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
@@ -88,7 +127,22 @@ export function logoutHandler(req, res) {
 }
 export function meHandler(req, res) {
   const user = authenticatedUser(req);
-  res.json({ required: authEnabled(), authed: !!user, user });
+  res.json({ required: authEnabled(), registration: config.allowRegistration, authed: !!user, user, capabilities: capabilities(user) });
+}
+
+export function listUsersHandler(req, res) {
+  res.json([creatorUser(), ...users.list()]);
+}
+
+export function updateUserHandler(req, res) {
+  if (req.params.id === "creator") return res.status(400).json({ error: "The Creator account is managed through server configuration" });
+  try {
+    const user = users.update(req.params.id, req.body || {});
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user);
+  } catch (error) {
+    res.status(400).json({ error: error.message, code: error.code });
+  }
 }
 
 // Simple in-memory rate limiter (per-IP sliding window).

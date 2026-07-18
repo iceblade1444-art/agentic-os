@@ -11,6 +11,8 @@ const PROVIDERS = {
 };
 
 let tab = "appearance";
+let teamUsers = null;
+let teamError = "";
 
 export default {
   title: "Settings",
@@ -18,6 +20,8 @@ export default {
     const s = store.state;
     const llm = s.settings.llm;
     const tabs = [["appearance", "Appearance"], ["model", "Model"], ["profile", "Profile"], ["data", "Data"]];
+    if (api.auth.canAdmin) tabs.splice(3, 0, ["team", "Team"]);
+    if (!tabs.some(([key]) => key === tab)) tab = "appearance";
     return `
     <div class="page-head"><div><div class="page-title">Settings</div><div class="page-sub">Manage your workspace, model connection and appearance.</div></div></div>
     <div class="tabs mb-4" id="setTabs">${tabs.map(([k, l]) => `<button class="tab ${tab === k ? "active" : ""}" data-t="${k}">${l}</button>`).join("")}</div>
@@ -26,6 +30,7 @@ export default {
   mount(root) {
     root.querySelectorAll("#setTabs .tab").forEach((b) => (b.onclick = () => { tab = b.dataset.t; window.dispatchEvent(new HashChangeEvent("hashchange")); }));
     wire(root);
+    if (tab === "team" && teamUsers === null) loadTeam();
   },
 };
 
@@ -62,12 +67,14 @@ function section(s, llm) {
 
   if (tab === "profile") return `
     <div class="card pad-lg">
-      <div class="section-title">Profile</div>
-      <div class="field"><label class="label">Name</label><input class="input" id="pname" value="${esc(s.profile.name)}"/></div>
-      <div class="field"><label class="label">Email</label><input class="input" id="pmail" value="${esc(s.profile.email)}"/></div>
-      <div class="field"><label class="label">Role</label><input class="input" id="prole" value="${esc(s.profile.role)}"/></div>
-      <button class="btn btn-primary mt-2" id="saveProfile">${icon("save")}Save profile</button>
+      <div class="section-title">Signed-in account</div>
+      <p class="hint mb-4">This identity comes from the authenticated server session and cannot be changed only in the browser.</p>
+      <div class="field"><label class="label">Name</label><input class="input" value="${esc(s.profile.name)}" readonly/></div>
+      <div class="field"><label class="label">Email</label><input class="input" value="${esc(s.profile.email || "Not set")}" readonly/></div>
+      <div class="field"><label class="label">Role</label><input class="input" value="${esc(s.profile.role)}" readonly/></div>
     </div>`;
+
+  if (tab === "team") return teamSection();
 
   return `
     <div class="card pad-lg">
@@ -78,6 +85,27 @@ function section(s, llm) {
         <button class="btn btn-outline" id="resetData" style="color:var(--error);border-color:var(--error)">${icon("refresh")}Reset demo data</button>
       </div>
     </div>`;
+}
+
+function teamSection() {
+  if (teamError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">Could not load team</div><div class="a-desc">${esc(teamError)}</div></div></div>`;
+  if (!teamUsers) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>Loading team...</span></div></div>`;
+  return `<div class="card pad-lg">
+    <div class="row between mb-4"><div><div class="section-title">Workspace team</div><div class="hint">New registrations start as Member. Role or access changes revoke existing sessions.</div></div><span class="badge info">${teamUsers.length} accounts</span></div>
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>User</th><th>Role</th><th>Access</th></tr></thead><tbody>
+      ${teamUsers.map((user) => `<tr>
+        <td><div class="fw-600">${esc(user.name)}</div><div class="cell-sub">${esc(user.email || "Server owner")}</div></td>
+        <td>${user.id === "creator" ? `<span class="badge primary">Creator</span>` : `<select class="select sm team-role" data-user-id="${esc(user.id)}" ${user.disabled ? "disabled" : ""}>${["Admin", "Member", "Viewer"].map((role) => `<option ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}</select>`}</td>
+        <td>${user.id === "creator" ? `<span class="badge success">Permanent</span>` : `<button class="btn ${user.disabled ? "btn-secondary" : "btn-outline"} sm team-access" data-user-id="${esc(user.id)}" data-disabled="${user.disabled ? "true" : "false"}">${icon(user.disabled ? "check" : "lock")}${user.disabled ? "Enable" : "Disable"}</button>`}</td>
+      </tr>`).join("")}
+    </tbody></table></div>
+  </div>`;
+}
+
+async function loadTeam() {
+  try { teamUsers = await api.auth.users(); teamError = ""; }
+  catch (error) { teamUsers = []; teamError = error.message || "Unknown error"; }
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
 function wire(root) {
@@ -106,14 +134,16 @@ function wire(root) {
     };
   }
 
-  const sp = root.querySelector("#saveProfile");
-  if (sp) sp.onclick = () => {
-    store.set((s) => { s.profile.name = root.querySelector("#pname").value.trim(); s.profile.email = root.querySelector("#pmail").value.trim(); s.profile.role = root.querySelector("#prole").value.trim(); });
-    toast("success", "Profile saved");
-    // refresh sidebar chip
-    import("../app.js").then((m) => m.renderShell());
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
-  };
+  root.querySelectorAll(".team-role").forEach((select) => select.onchange = async () => {
+    select.disabled = true;
+    try { await api.auth.updateUser(select.dataset.userId, { role: select.value }); toast("success", "Role updated", "Existing sessions for this account were revoked."); teamUsers = null; loadTeam(); }
+    catch (error) { toast("error", "Could not update role", error.message); select.disabled = false; }
+  });
+  root.querySelectorAll(".team-access").forEach((button) => button.onclick = async () => {
+    button.classList.add("loading");
+    try { await api.auth.updateUser(button.dataset.userId, { disabled: button.dataset.disabled !== "true" }); toast("success", "Access updated"); teamUsers = null; loadTeam(); }
+    catch (error) { toast("error", "Could not update access", error.message); button.classList.remove("loading"); }
+  });
 
   const ex = root.querySelector("#exportData");
   if (ex) ex.onclick = () => {
