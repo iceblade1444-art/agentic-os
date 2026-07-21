@@ -94,7 +94,8 @@ export function confirmDialog({ title, message, confirmText = "Confirm", danger 
 }
 
 /* ---------- Dropdown menu ---------- */
-export function openMenu(anchor, items, align = "right") {
+export function openMenu(anchor, items, options = "right") {
+  const config = typeof options === "string" ? { align: options } : { align: "right", placement: "bottom", ...options };
   qsa(".menu").forEach((m) => m.remove());
   const menu = el(`<div class="menu"></div>`);
   items.forEach((it) => {
@@ -107,10 +108,12 @@ export function openMenu(anchor, items, align = "right") {
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
   const mw = menu.offsetWidth;
-  let left = align === "right" ? r.right - mw : r.left;
+  const mh = menu.offsetHeight;
+  let left = config.align === "right" ? r.right - mw : r.left;
   left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
+  const top = config.placement === "top" ? r.top - mh - 6 : r.bottom + 6;
   menu.style.left = left + "px";
-  menu.style.top = r.bottom + 6 + "px";
+  menu.style.top = Math.max(8, top) + "px";
   const off = (e) => { if (!menu.contains(e.target) && e.target !== anchor) { menu.remove(); document.removeEventListener("mousedown", off); } };
   setTimeout(() => document.addEventListener("mousedown", off), 0);
   return menu;

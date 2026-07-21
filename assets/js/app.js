@@ -132,7 +132,7 @@ function wireShell() {
     { text: "Component library", icon: "layers", onClick: () => (location.hash = "#/components") },
     { sep: true },
     { text: "Sign out", icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", "Signed out (demo)"); } },
-  ]));
+  ], { align: "right", placement: "top" }));
 }
 
 /* ---------------- Command palette (⌘K) ---------------- */
