@@ -17,6 +17,7 @@ import milaActions from "./routes/mila-actions.js";
 import operations from "./routes/operations.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
+import skills from "./routes/skills.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
@@ -96,6 +97,7 @@ app.use("/api/mila", milaActions);
 app.use("/api/operations", operations);
 app.use("/api/speech", speech);
 app.use("/api/onboarding", onboarding);
+app.use("/api/skills", skills);
 app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 

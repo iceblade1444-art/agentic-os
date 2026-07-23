@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
-  hermesKanbanRawRequest, hermesKanbanRequest, resetHermesKanbanToken, withKanbanBoard,
+  hermesKanbanRawRequest, hermesKanbanRequest, hermesSkillsRequest, resetHermesKanbanToken, withKanbanBoard,
 } from "../server/lib/hermes-kanban.js";
 
 test("Hermes Kanban connector pins requests to the Agentic OS board", () => {
@@ -41,6 +41,20 @@ test("Hermes Kanban connector preserves authenticated binary responses", async (
   assert.equal(calls[1].options.headers.Authorization, "Bearer private-token");
 });
 
+test("Hermes Skills connector reuses private dashboard authentication", async () => {
+  resetHermesKanbanToken();
+  const calls = [];
+  const request = async (pathname, options = {}) => {
+    calls.push({ pathname, options });
+    if (pathname === "/") return { status: 200, text: '<script>window.__HERMES_SESSION_TOKEN__="skills-token";</script>' };
+    return { status: 200, text: JSON.stringify([{ name: "deploy", enabled: true }]) };
+  };
+  const result = await hermesSkillsRequest("/api/skills?profile=dev", {}, request);
+  assert.deepEqual(result, [{ name: "deploy", enabled: true }]);
+  assert.equal(calls[1].options.headers.Authorization, "Bearer skills-token");
+  await assert.rejects(() => hermesSkillsRequest("/api/config", {}, request), /Invalid Hermes Skills path/);
+});
+
 test("Agentic OS exposes a real Hermes fleet Kanban instead of the local workflow canvas", () => {
   const page = fs.readFileSync(new URL("../assets/js/pages/workflows.js", import.meta.url), "utf8");
   const agents = fs.readFileSync(new URL("../assets/js/pages/agents.js", import.meta.url), "utf8");
@@ -66,4 +80,20 @@ test("Agentic OS exposes a real Hermes fleet Kanban instead of the local workflo
   assert.match(routes, /\/tasks\/:id\/log/);
   assert.match(app, /route: "kanban"/);
   assert.doesNotMatch(page, /wf-canvas/);
+});
+
+test("Skill Studio manages the real Hermes catalog instead of browser mock data", () => {
+  const page = fs.readFileSync(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8");
+  const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
+  const routes = fs.readFileSync(new URL("../server/routes/skills.js", import.meta.url), "utf8");
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  assert.match(page, /Skill Studio/);
+  assert.match(page, /api\.skills\.list/);
+  assert.match(page, /api\.skills\.toggle/);
+  assert.match(page, /api\.skills\.hubInstall/);
+  assert.doesNotMatch(page, /Web Search.*Code Interpreter.*SQL Query/s);
+  assert.match(api, /\/api\/skills\/hub\/search/);
+  assert.match(routes, /hermesSkillsRequest/);
+  assert.match(routes, /requireAdmin/);
+  assert.match(app, /label: "Skill Studio"/);
 });

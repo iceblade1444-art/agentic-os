@@ -30,7 +30,7 @@ const NAV = [
     { route: "agents", icon: "agents", label: "Agents" },
     { route: "chat", icon: "chat", label: "Chat" },
     { route: "kanban", icon: "workflow", label: "Kanban" },
-    { route: "tools", icon: "tools", label: "Tools" },
+    { route: "tools", icon: "tools", label: "Skill Studio" },
   ]},
   { group: "Context", items: [
     { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },

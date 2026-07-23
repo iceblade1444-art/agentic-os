@@ -16,39 +16,238 @@ function ensure(key, factory) {
 
 /* ============================ TOOLS ============================ */
 export const tools = {
-  title: "Tools",
+  title: "Skill Studio",
   render() {
-    const list = ensure("tools_", () => [
-      { id: "t1", name: "Web Search", cat: "Data", desc: "Search the web for fresh info", icon: "search", color: "violet", on: true },
-      { id: "t2", name: "Code Interpreter", cat: "Compute", desc: "Run Python in a sandbox", icon: "terminal", color: "blue", on: true },
-      { id: "t3", name: "SQL Query", cat: "Data", desc: "Query connected databases", icon: "database", color: "green", on: true },
-      { id: "t4", name: "Send Email", cat: "Action", desc: "Send email via SMTP/API", icon: "mail", color: "pink", on: false },
-      { id: "t5", name: "HTTP Request", cat: "Action", desc: "Call any REST endpoint", icon: "cloud", color: "cyan", on: true },
-      { id: "t6", name: "File Reader", cat: "Data", desc: "Read PDFs, docs, sheets", icon: "file", color: "amber", on: true },
-      { id: "t7", name: "Image Gen", cat: "Media", desc: "Generate images from prompts", icon: "sparkles", color: "violet", on: false },
-      { id: "t8", name: "Calendar", cat: "Action", desc: "Create & read events", icon: "calendar", color: "blue", on: false },
-    ]);
-    return head("Tools", `${list.filter((t) => t.on).length} of ${list.length} enabled`, `<button class="btn btn-primary">${icon("plus")}Add tool</button>`) + `
-      <div class="grid cols-3">
-        ${list.map((t) => `
-          <div class="card tile">
-            <div class="row between">
-              <div class="aico" style="background:${store.colors[t.color]}">${icon(t.icon)}</div>
-              <label class="switch"><input type="checkbox" data-tool="${t.id}" ${t.on ? "checked" : ""}/><span class="track"></span><span class="thumb"></span></label>
-            </div>
-            <div class="fw-700 mt-4">${t.name}</div>
-            <div class="hint">${t.desc}</div>
-            <span class="badge neutral mt-2">${t.cat}</span>
-          </div>`).join("")}
-      </div>`;
+    const actions = api.on && api.auth.canAdmin ? `<button class="btn btn-secondary" id="skillsHub">${icon("search")}Browse Hub</button><button class="btn btn-primary" id="skillNew">${icon("plus")}New skill</button>` : "";
+    return head("Skill Studio", "Procedural knowledge loaded by Hermes only when an agent needs it", actions)
+      + `<div id="skillStudioBody">${loadingCard("Reading the Hermes skill catalog…")}</div>`;
   },
   mount(root) {
-    root.querySelectorAll("[data-tool]").forEach((c) => (c.onchange = () => {
-      store.set((s) => (s.tools_.find((t) => t.id === c.dataset.tool).on = c.checked));
-      toast(c.checked ? "success" : "info", "Tool " + (c.checked ? "enabled" : "disabled"));
-    }));
+    if (!api.on) {
+      root.querySelector("#skillStudioBody").innerHTML = demoNote("Start the Node backend to manage the real Hermes skill catalog.");
+      return;
+    }
+    skillStudioMount(root);
   },
 };
+
+function skillStudioMount(root) {
+  const body = root.querySelector("#skillStudioBody");
+  let skills = [];
+  let profiles = [];
+  let profile = "default";
+  let query = "";
+
+  const filtered = () => {
+    const value = query.toLowerCase();
+    return skills.filter((skill) => !value || `${skill.name} ${skill.description} ${skill.category}`.toLowerCase().includes(value));
+  };
+
+  const draw = () => {
+    const visible = filtered();
+    const enabled = skills.filter((skill) => skill.enabled).length;
+    const custom = skills.filter((skill) => skill.provenance === "agent").length;
+    body.innerHTML = `
+      <div class="grid cols-4 mb-4">
+        ${statMini("Installed skills", skills.length, "tools")}
+        ${statMini("Enabled", enabled, "check")}
+        ${statMini("Custom procedures", custom, "file")}
+        ${statMini("Recorded uses", skills.reduce((sum, item) => sum + (Number(item.usage) || 0), 0), "activity")}
+      </div>
+      <div class="skill-studio-toolbar mb-4">
+        <div class="search skill-search"><span>${icon("search")}</span><input id="skillSearch" value="${esc(query)}" placeholder="Search procedures, categories, capabilities…"/></div>
+        <label class="field skill-profile-field"><span class="label">Agent profile</span><select class="select" id="skillProfile">${profiles.map((item) => `<option value="${esc(item.name)}" ${item.name === profile ? "selected" : ""}>${esc(item.display_name || item.name)}</option>`).join("")}</select></label>
+      </div>
+      <div class="row between mb-3"><div class="row gap-2"><span class="fw-700">${visible.length} skills</span><span class="hint">Profile: ${esc(profile)}</span></div><span class="hint">Skills load progressively and do not fill every prompt.</span></div>
+      ${visible.length ? `<div class="grid cols-3">${visible.map(skillCard).join("")}</div>` : `<div class="empty"><div class="empty-ico">${icon("search")}</div><h4>No matching skills</h4><p>Try another name, category or capability.</p></div>`}`;
+    bind();
+  };
+
+  const bind = () => {
+    body.querySelector("#skillSearch")?.addEventListener("input", (event) => {
+      query = event.target.value;
+      draw();
+      const input = body.querySelector("#skillSearch");
+      input?.focus();
+      input?.setSelectionRange(query.length, query.length);
+    });
+    body.querySelector("#skillProfile")?.addEventListener("change", async (event) => {
+      profile = event.target.value || "default";
+      await load();
+    });
+    body.querySelectorAll("[data-skill-open]").forEach((button) => button.addEventListener("click", () => openSkillEditor(skills.find((item) => item.name === button.dataset.skillOpen), profile, load)));
+    body.querySelectorAll("[data-skill-toggle]").forEach((input) => input.addEventListener("change", async () => {
+      input.disabled = true;
+      try {
+        await api.skills.toggle(input.dataset.skillToggle, input.checked, profile);
+        const skill = skills.find((item) => item.name === input.dataset.skillToggle);
+        if (skill) skill.enabled = input.checked;
+        toast("success", input.checked ? "Skill enabled" : "Skill disabled", `${input.dataset.skillToggle} · ${profile}`);
+        draw();
+      } catch (error) {
+        input.checked = !input.checked;
+        input.disabled = false;
+        toast("error", "Could not update skill", error.message);
+      }
+    }));
+  };
+
+  const load = async () => {
+    body.innerHTML = loadingCard("Reading the Hermes skill catalog…");
+    try {
+      const [catalog, fleet] = await Promise.all([api.skills.list(profile), api.kanban.profiles().catch(() => ({ profiles: [] }))]);
+      skills = Array.isArray(catalog) ? catalog : [];
+      profiles = (fleet.profiles || []).length ? fleet.profiles : [{ name: "default", display_name: "Orchestrator" }];
+      if (!profiles.some((item) => item.name === profile)) profile = profiles[0]?.name || "default";
+      draw();
+    } catch (error) {
+      body.innerHTML = errCard(error.message || "Hermes skill catalog is unavailable");
+    }
+  };
+
+  root.querySelector("#skillNew")?.addEventListener("click", () => openNewSkill(profile, load));
+  root.querySelector("#skillsHub")?.addEventListener("click", () => openSkillsHub(profile, load));
+  load();
+}
+
+function skillCard(skill) {
+  const provenance = { agent: "Custom", bundled: "Bundled", hub: "Hub" }[skill.provenance] || skill.provenance || "Skill";
+  return `<article class="card skill-card ${skill.enabled ? "" : "is-disabled"}">
+    <div class="row between gap-2">
+      <div class="aico">${icon(skill.provenance === "agent" ? "sparkles" : skill.provenance === "hub" ? "cloud" : "tools")}</div>
+      ${api.auth.canAdmin ? `<label class="switch" title="Enable for this profile"><input type="checkbox" data-skill-toggle="${esc(skill.name)}" ${skill.enabled ? "checked" : ""}/><span class="track"></span><span class="thumb"></span></label>` : `<span class="badge ${skill.enabled ? "success" : "neutral"}">${skill.enabled ? "Enabled" : "Disabled"}</span>`}
+    </div>
+    <button class="skill-card-main" data-skill-open="${esc(skill.name)}">
+      <span class="row between gap-2"><strong>${esc(skill.name)}</strong><span class="badge neutral">${esc(provenance)}</span></span>
+      <span class="skill-description">${esc(skill.description || "No description")}</span>
+      <span class="row between mt-3"><span class="badge info">${esc(skill.category || "general")}</span><span class="hint">${Number(skill.usage) || 0} uses</span></span>
+    </button>
+  </article>`;
+}
+
+function skillTemplate(name = "my-skill", description = "Describe what this skill does") {
+  return `---
+name: ${name}
+description: ${description}
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [agentic-os]
+    category: operations
+---
+
+# ${name}
+
+## When to Use
+
+Use this skill when the task requires a repeatable procedure.
+
+## Procedure
+
+1. Inspect the current state and required inputs.
+2. Execute the approved steps with existing Hermes tools.
+3. Record the result and any reusable learning.
+
+## Pitfalls
+
+- Never invent commands or claim an action completed without verification.
+- Ask for approval before irreversible or external actions.
+
+## Verification
+
+Confirm the expected output and report any remaining risk.
+`;
+}
+
+function openNewSkill(profile, reload) {
+  openModal({
+    title: "Create Hermes skill",
+    width: 760,
+    body: `<div class="grid cols-2"><label class="field"><span class="label">Skill name</span><input class="input mono" id="newSkillName" placeholder="my-workflow"/></label><label class="field"><span class="label">Category</span><input class="input" id="newSkillCategory" value="operations"/></label></div><label class="field mt-3"><span class="label">SKILL.md</span><textarea class="textarea mono skill-editor" id="newSkillContent">${esc(skillTemplate())}</textarea></label>`,
+    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="createSkill">${icon("plus")}Create skill</button>`,
+    onMount: (modal) => {
+      const name = modal.querySelector("#newSkillName");
+      const content = modal.querySelector("#newSkillContent");
+      name.addEventListener("input", () => {
+        if (content.dataset.edited) return;
+        content.value = skillTemplate(name.value.trim() || "my-skill");
+      });
+      content.addEventListener("input", () => { content.dataset.edited = "true"; });
+      modal.querySelector("#createSkill").onclick = async (event) => {
+        const button = event.currentTarget;
+        button.classList.add("loading");
+        try {
+          await api.skills.create({ name: name.value, category: modal.querySelector("#newSkillCategory").value, content: content.value, profile });
+          closeOverlay();
+          toast("success", "Skill created", `${name.value} is available to ${profile}.`);
+          await reload();
+        } catch (error) { toast("error", "Could not create skill", error.message); button.classList.remove("loading"); }
+      };
+    },
+  });
+}
+
+async function openSkillEditor(skill, profile, reload) {
+  if (!skill) return;
+  openModal({ title: skill.name, width: 760, body: loadingCard("Loading SKILL.md…") });
+  try {
+    const result = await api.skills.content(skill.name, profile);
+    const editable = api.auth.canAdmin && skill.provenance === "agent";
+    openModal({
+      title: skill.name,
+      width: 760,
+      body: `<div class="row gap-2 mb-3"><span class="badge info">${esc(skill.category || "general")}</span><span class="badge neutral">${esc(skill.provenance || "skill")}</span><span class="hint">${Number(skill.usage) || 0} recorded uses</span></div><textarea class="textarea mono skill-editor" id="skillContent" ${editable ? "" : "readonly"}>${esc(result.content || "")}</textarea>${editable ? "" : `<div class="alert info mt-3"><span class="a-ico">${icon("lock")}</span><div class="a-body"><div class="a-title">Source-managed skill</div><div class="a-desc">Bundled and Hub skills are updated from their source. Create a custom skill to maintain your own procedure.</div></div></div>`}`,
+      footer: `<button class="btn btn-secondary" data-close>Close</button>${editable ? `<button class="btn btn-primary" id="saveSkill">${icon("check")}Save changes</button>` : ""}`,
+      onMount: (modal) => {
+        modal.querySelector("#saveSkill")?.addEventListener("click", async (event) => {
+          const button = event.currentTarget;
+          button.classList.add("loading");
+          try {
+            await api.skills.update({ name: skill.name, content: modal.querySelector("#skillContent").value, profile });
+            closeOverlay();
+            toast("success", "Skill updated", "Hermes will use the new procedure in future sessions.");
+            await reload();
+          } catch (error) { toast("error", "Could not update skill", error.message); button.classList.remove("loading"); }
+        });
+      },
+    });
+  } catch (error) {
+    openModal({ title: skill.name, width: 520, body: errCard(error.message) });
+  }
+}
+
+function openSkillsHub(profile, reload) {
+  openModal({
+    title: "Hermes Skills Hub",
+    width: 860,
+    body: `<div class="row gap-2"><div class="search" style="flex:1"><span>${icon("search")}</span><input id="hubQuery" placeholder="Search GitHub, official skills and skills.sh…"/></div><button class="btn btn-primary" id="hubSearch">Search</button></div><div id="hubResults" class="mt-4"><div class="empty" style="min-height:220px"><div class="empty-ico">${icon("cloud")}</div><h4>Find a reusable capability</h4><p>Results are inspected by Hermes before installation.</p></div></div>`,
+    onMount: (modal) => {
+      const results = modal.querySelector("#hubResults");
+      const run = async () => {
+        const value = modal.querySelector("#hubQuery").value.trim();
+        if (!value) return;
+        results.innerHTML = loadingCard("Searching trusted and community skill sources…");
+        try {
+          const response = await api.skills.hubSearch(value, profile);
+          const items = response.results || [];
+          results.innerHTML = items.length ? `<div class="stack gap-2">${items.map((item) => `<div class="skill-hub-row"><div><div class="row gap-2"><strong>${esc(item.name || item.identifier)}</strong><span class="badge ${item.trust_level === "builtin" || item.trust_level === "trusted" ? "success" : "neutral"}">${esc(item.trust_level || item.source || "community")}</span></div><div class="hint mt-1">${esc(item.description || "")}</div><div class="mono hint mt-1">${esc(item.identifier || "")}</div></div><button class="btn btn-secondary sm" data-hub-install="${esc(item.identifier)}">${icon("plus")}Install</button></div>`).join("")}</div>` : `<div class="empty"><h4>No skills found</h4><p>Try a broader capability name.</p></div>`;
+          results.querySelectorAll("[data-hub-install]").forEach((button) => button.onclick = async () => {
+            button.classList.add("loading");
+            try {
+              await api.skills.hubInstall(button.dataset.hubInstall, profile);
+              button.textContent = "Installing…";
+              button.disabled = true;
+              toast("success", "Installation started", "Hermes is scanning and installing the selected skill.");
+              setTimeout(async () => { closeOverlay(); await reload(); }, 3500);
+            } catch (error) { toast("error", "Could not install skill", error.message); button.classList.remove("loading"); }
+          });
+        } catch (error) { results.innerHTML = errCard(error.message); }
+      };
+      modal.querySelector("#hubSearch").onclick = run;
+      modal.querySelector("#hubQuery").addEventListener("keydown", (event) => { if (event.key === "Enter") run(); });
+    },
+  });
+}
 
 /* ============================ KNOWLEDGE ============================ */
 export const knowledge = {
