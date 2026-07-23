@@ -8,3 +8,17 @@ __pycache__
 backups
 logs/runtime
 tests
+agents/queue.json
+approvals
+artifacts
+config/agent-worker.json
+config/profile-mapping.json
+config/voice.local.json
+drafts
+exports
+logs
+projects
+work
+workflow/seo_runs.json
+voice/input.txt
+voice/transcripts

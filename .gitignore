@@ -9,3 +9,25 @@ __pycache__/
 *.bak
 speech-models/
 speech-qwen-models/
+
+# AgentOS mutable runtime data. Source files, agent specs, and templates remain tracked.
+agentos-runtime/agents/queue.json
+agentos-runtime/approvals/approvals.json
+agentos-runtime/artifacts/
+agentos-runtime/drafts/
+agentos-runtime/exports/
+agentos-runtime/logs/agent-queue/
+agentos-runtime/logs/agent-worker/
+agentos-runtime/logs/events.json
+agentos-runtime/projects/
+agentos-runtime/work/
+agentos-runtime/workflow/seo_runs.json
+agentos-runtime/voice/input.txt
+agentos-runtime/voice/transcripts/
+agentos-runtime/config/agent-worker.json
+agentos-runtime/config/profile-mapping.json
+agentos-runtime/config/voice.local.json
+
+# Obsidian settings and MILA notes belong to the deployed/user vault.
+vault/.obsidian/
+vault/MILA/
