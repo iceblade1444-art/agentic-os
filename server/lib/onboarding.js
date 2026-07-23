@@ -1,0 +1,172 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { config } from "../config.js";
+
+const LOCALES = new Set(["ru-RU", "uz-UZ", "en-US"]);
+const STYLES = new Set(["assistant", "friend", "operator", "mentor"]);
+const LENGTHS = new Set(["brief", "balanced"]);
+const LANGUAGES = new Set(["Russian", "Uzbek", "English"]);
+
+const text = (value, max) => String(value || "").trim().replace(/\s+/g, " ").slice(0, max);
+const list = (value, maxItems = 6, maxChars = 300) => [...new Set(
+  (Array.isArray(value) ? value : String(value || "").split("\n"))
+    .map((item) => text(item, maxChars)).filter(Boolean),
+)].slice(0, maxItems);
+
+function emptyData() {
+  return { version: 1, workspace: {}, users: {} };
+}
+
+export class OnboardingStore {
+  constructor(filePath = path.join(path.resolve(config.dataDir), "onboarding.json")) {
+    this.filePath = filePath;
+    this.data = this.#load();
+  }
+
+  #load() {
+    try {
+      if (!fs.existsSync(this.filePath)) return emptyData();
+      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
+      return {
+        version: 1,
+        workspace: parsed?.workspace && typeof parsed.workspace === "object" ? parsed.workspace : {},
+        users: parsed?.users && typeof parsed.users === "object" ? parsed.users : {},
+      };
+    } catch {
+      return emptyData();
+    }
+  }
+
+  #save() {
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    const temp = `${this.filePath}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
+    fs.renameSync(temp, this.filePath);
+    try { fs.chmodSync(this.filePath, 0o600); } catch { /* Windows or restrictive volume */ }
+  }
+
+  get(user) {
+    const profile = this.data.users[user.id] || {};
+    const workspace = this.data.workspace || {};
+    return {
+      version: 1,
+      needsOnboarding: !profile.completedAt || !workspace.completedAt,
+      canEditWorkspace: ["Creator", "Admin"].includes(user.role) || !workspace.completedAt,
+      profile,
+      workspace,
+    };
+  }
+
+  update(user, input = {}) {
+    const current = this.get(user);
+    const now = new Date().toISOString();
+    const profileInput = input.profile || {};
+    const locale = LOCALES.has(profileInput.locale) ? profileInput.locale : "ru-RU";
+    const assistantStyle = STYLES.has(profileInput.assistantStyle) ? profileInput.assistantStyle : "assistant";
+    const responseLength = LENGTHS.has(profileInput.responseLength) ? profileInput.responseLength : "brief";
+    const profile = {
+      locale,
+      timezone: text(profileInput.timezone || "Asia/Tashkent", 80),
+      roleFocus: text(profileInput.roleFocus, 160),
+      assistantStyle,
+      responseLength,
+      completedAt: current.profile.completedAt || now,
+      updatedAt: now,
+    };
+
+    let workspace = current.workspace;
+    if (current.canEditWorkspace) {
+      const workspaceInput = input.workspace || {};
+      const name = text(workspaceInput.name, 140);
+      if (name.length < 2) {
+        const error = new Error("Workspace name must contain at least 2 characters");
+        error.code = "invalid_workspace";
+        throw error;
+      }
+      workspace = {
+        name,
+        industry: text(workspaceInput.industry, 140),
+        summary: text(workspaceInput.summary, 1200),
+        audience: text(workspaceInput.audience, 600),
+        products: text(workspaceInput.products, 1200),
+        goals: list(workspaceInput.goals),
+        constraints: list(workspaceInput.constraints),
+        operatingLanguages: list(workspaceInput.operatingLanguages, 3, 30).filter((item) => LANGUAGES.has(item)),
+        completedAt: current.workspace.completedAt || now,
+        updatedAt: now,
+        updatedBy: user.id,
+      };
+    }
+
+    this.data.users[user.id] = profile;
+    this.data.workspace = workspace;
+    this.#save();
+    return this.get(user);
+  }
+}
+
+const bulletList = (items, fallback = "Not specified") =>
+  items?.length ? items.map((item) => `- ${item}`).join("\n") : `- ${fallback}`;
+
+export function onboardingContextDocuments(user, state) {
+  const workspace = state.workspace;
+  const profile = state.profile;
+  const safeUserId = String(user.id || "user").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 100);
+  return [
+    {
+      path: "Agentic OS/Workspace Context.md",
+      content: `---
+type: agentic-os-workspace-context
+updated: ${workspace.updatedAt}
+---
+
+# ${workspace.name}
+
+This is the shared business context for Hermes, MILA, Claude and specialist agents.
+
+## Business
+
+- Industry: ${workspace.industry || "Not specified"}
+- Operating languages: ${workspace.operatingLanguages?.join(", ") || "Not specified"}
+- Audience: ${workspace.audience || "Not specified"}
+
+## What We Do
+
+${workspace.summary || "Not specified"}
+
+## Products And Services
+
+${workspace.products || "Not specified"}
+
+## Current Goals
+
+${bulletList(workspace.goals)}
+
+## Constraints
+
+${bulletList(workspace.constraints)}
+`,
+    },
+    {
+      path: `Agentic OS/People/${safeUserId}.md`,
+      content: `---
+type: agentic-os-user-context
+user_id: ${safeUserId}
+updated: ${profile.updatedAt}
+---
+
+# ${user.name}
+
+- Role: ${user.role}
+- Preferred language: ${profile.locale}
+- Timezone: ${profile.timezone}
+- Work focus: ${profile.roleFocus || "Not specified"}
+- MILA style: ${profile.assistantStyle}
+- Voice answer length: ${profile.responseLength}
+`,
+    },
+  ];
+}
+
+export const onboarding = new OnboardingStore();
