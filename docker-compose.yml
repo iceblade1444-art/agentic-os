@@ -13,6 +13,7 @@ services:
       - DATA_DIR=/app/data
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
+      - SPEECH_URL=http://speech:4400
       - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
       - HERMES_CHAT_SOCKET=/run/agentic-os/hermes-chat.sock
       - OPS_STATE_FILE=/run/agentic-os/operations.json
