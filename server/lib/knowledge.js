@@ -47,6 +47,16 @@ function links(body) {
     .map((match) => match[1].trim()).filter(Boolean).slice(0, 30);
 }
 
+function linkTargetPath(value, notesByStem) {
+  const clean = String(value || "").trim().replace(/\\/g, "/").replace(/\.md$/i, "");
+  if (!clean) return "";
+  const direct = `${clean}.md`;
+  if (notesByStem.has(clean.toLowerCase())) return notesByStem.get(clean.toLowerCase()).path;
+  const basename = clean.split("/").at(-1)?.toLowerCase();
+  if (basename && notesByStem.has(basename)) return notesByStem.get(basename).path;
+  return direct;
+}
+
 export class KnowledgeLibrary {
   constructor({ vaultDir, usageFile } = {}) {
     this.vaultDir = path.resolve(vaultDir || config.obsidianVault);
@@ -162,6 +172,43 @@ export class KnowledgeLibrary {
     }
     await this.record({ actor, action: "search", query: q, source, count: matches.length });
     return { query: q, matches };
+  }
+
+  async graph({ query = "", actor = "", source = "dashboard" } = {}) {
+    const notes = await this.list({ query, actor, source });
+    const byStem = new Map();
+    for (const note of notes) {
+      byStem.set(note.path.replace(/\.md$/i, "").toLowerCase(), note);
+      byStem.set(path.basename(note.path, ".md").toLowerCase(), note);
+    }
+    const nodes = notes.map((note) => ({
+      id: note.path,
+      label: note.title,
+      folder: note.folder,
+      tags: note.tags,
+      links: note.links.length,
+      updatedAt: note.updatedAt,
+      size: note.size,
+    }));
+    const edges = [];
+    const seen = new Set();
+    for (const note of notes) {
+      for (const raw of note.links) {
+        const target = linkTargetPath(raw, byStem);
+        if (!target || target === note.path) continue;
+        const id = `${note.path}->${target}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        edges.push({
+          id,
+          source: note.path,
+          target,
+          resolved: byStem.has(target.replace(/\.md$/i, "").toLowerCase()) || notes.some((item) => item.path === target),
+        });
+      }
+    }
+    await this.record({ actor, action: "graph", query: cleanText(query, 300), source, count: nodes.length });
+    return { nodes, edges, generatedAt: Date.now() };
   }
 
   async create(relativePath, content, { actor = "", source = "dashboard" } = {}) {

@@ -58,8 +58,14 @@ test("onboarding produces shared Obsidian context without secrets", (t) => {
     workspace: { name: "Milana Premium", goals: ["Improve operations"], constraints: ["Approval before publishing"] },
   });
   const documents = onboardingContextDocuments(creator, state);
-  assert.deepEqual(documents.map((item) => item.path), ["Agentic OS/Workspace Context.md", "Agentic OS/People/creator.md"]);
+  assert.deepEqual(documents.map((item) => item.path), [
+    "Agentic OS/Workspace Context.md",
+    "Agentic OS/People/creator.md",
+    "Agentic OS/People/creator/SOUL.md",
+  ]);
   assert.match(documents[0].content, /Improve operations/);
+  assert.match(documents[2].content, /personal operating profile/);
+  assert.match(documents[2].content, /answer in the user's latest language/);
   assert.doesNotMatch(JSON.stringify(documents), /password|api[_ -]?key/i);
   const context = sharedAgentContext(creator, state);
   assert.match(context, /Authoritative Agentic OS workspace context/);

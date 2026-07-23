@@ -110,10 +110,61 @@ export class OnboardingStore {
 const bulletList = (items, fallback = "Not specified") =>
   items?.length ? items.map((item) => `- ${item}`).join("\n") : `- ${fallback}`;
 
+export const safeUserSlug = (user) =>
+  String(user?.id || user?.email || user?.name || "user").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 100);
+
+export function userSoulDocument(user, state) {
+  const profile = state.profile || {};
+  const workspace = state.workspace || {};
+  const safeUserId = safeUserSlug(user);
+  return {
+    path: `Agentic OS/People/${safeUserId}/SOUL.md`,
+    content: `---
+type: agentic-os-user-soul
+user_id: ${safeUserId}
+updated: ${profile.updatedAt || new Date().toISOString()}
+---
+
+# ${user.name}
+
+This is the durable personal operating profile for MILA, Hermes and Agentic OS agents.
+
+## Identity
+
+- Account: ${user.email || user.id || "Not specified"}
+- Role: ${user.role || "User"}
+- Workspace: ${workspace.name || "Agentic OS"}
+- Timezone: ${profile.timezone || "Asia/Tashkent"}
+- Preferred interface and voice language: ${profile.locale || "ru-RU"}
+- Work focus: ${profile.roleFocus || "Not specified"}
+
+## Assistant Preferences
+
+- MILA style: ${profile.assistantStyle || "assistant"}
+- Voice answer length: ${profile.responseLength || "brief"}
+- Voice behavior: answer briefly first; offer details when needed.
+- Language behavior: understand Russian, Uzbek and English; answer in the user's latest language and prefer Uzbek Latin for Uzbek.
+
+## Safety Boundaries
+
+- Ask for confirmation before changing files, settings, accounts, money, deployments or public services.
+- Use Agentic OS Kanban for real work; do not claim a task is done until the server state confirms it.
+- Store durable preferences here or in nearby personal memory notes; do not store secrets.
+
+## Agent Routing
+
+- MILA handles live voice, short chat, capture and user-facing clarification.
+- Hermes orchestrates multi-step work and specialist agents.
+- Obsidian is the long-term knowledge library.
+- Claude Code is for implementation work after explicit approval.
+`,
+  };
+}
+
 export function onboardingContextDocuments(user, state) {
   const workspace = state.workspace;
   const profile = state.profile;
-  const safeUserId = String(user.id || "user").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 100);
+  const safeUserId = safeUserSlug(user);
   return [
     {
       path: "Agentic OS/Workspace Context.md",
@@ -167,6 +218,7 @@ updated: ${profile.updatedAt}
 - Voice answer length: ${profile.responseLength}
 `,
     },
+    userSoulDocument(user, state),
   ];
 }
 

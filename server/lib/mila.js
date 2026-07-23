@@ -61,8 +61,8 @@ async function milaSessionRequest(cfg = {}, pathname, options = {}) {
 }
 
 export const milaStatus = (cfg, options) => milaRequest(cfg, "/admin/status", options);
-export const milaConnectionCode = (cfg, label, options) => milaRequest(cfg, "/admin/connection-code", {
-  ...options, method: "POST", body: { label },
+export const milaConnectionCode = (cfg, label, options = {}) => milaRequest(cfg, "/admin/connection-code", {
+  ...options, method: "POST", body: { label, ...(options.owner ? { owner: options.owner } : {}) },
 });
 export const milaDevices = (cfg, options) => milaRequest(cfg, "/admin/devices", options);
 export const milaRevokeDevice = (cfg, id, options) => {
@@ -94,6 +94,7 @@ export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", option
       ...options,
       method: "POST",
       bearer: sessionToken,
+      body: { language: options.language || "auto" },
     });
   } catch (error) {
     // Re-authorize once when the MILA backend revoked or lost its session.

@@ -82,6 +82,7 @@ export const api = {
   knowledge: {
     status: () => j("/api/knowledge/status"),
     list: (query = "") => j(`/api/knowledge/notes${query ? `?q=${encodeURIComponent(query)}` : ""}`),
+    graph: (query = "") => j(`/api/knowledge/graph${query ? `?q=${encodeURIComponent(query)}` : ""}`),
     read: (path) => j(`/api/knowledge/notes/read?path=${encodeURIComponent(path)}`),
     search: (query, limit = 20) => j(`/api/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit}`),
     usage: (limit = 50) => j(`/api/knowledge/usage?limit=${limit}`),
@@ -97,7 +98,7 @@ export const api = {
     milaStatus: () => j("/api/integrations/mila/status"),
     milaDevices: () => j("/api/integrations/mila/devices"),
     milaRevokeDevice: (id) => j(`/api/integrations/mila/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    milaVoiceToken: () => j("/api/integrations/mila/voice-token", { method: "POST" }),
+    milaVoiceToken: (body = {}) => j("/api/integrations/mila/voice-token", { method: "POST", body }),
     milaConnectionCode: (label) => j("/api/integrations/mila/connection-code", { method: "POST", body: { label } }),
     milaSubscription: (body) => j("/api/integrations/mila/subscription", { method: "POST", body }),
     milaAppUpdate: (body) => j("/api/integrations/mila/app-update", { method: "POST", body }),

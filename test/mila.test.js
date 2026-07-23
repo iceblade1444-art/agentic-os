@@ -23,9 +23,12 @@ test("MILA status uses the server-held admin token", async () => {
   assert.equal(request.options.headers["X-Admin-Token"], "server-secret");
 });
 
-test("MILA connection code forwards only the requested account label", async () => {
+test("MILA connection code forwards the requested account label and owner", async () => {
   const fetchImpl = async (_url, options) => {
-    assert.deepEqual(JSON.parse(options.body), { label: "Mobile user" });
+    assert.deepEqual(JSON.parse(options.body), {
+      label: "Mobile user",
+      owner: { id: "creator", email: "owner@example.com", name: "Creator", role: "Creator" },
+    });
     return new Response(JSON.stringify({ ok: true, code: "AB12CD34" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -35,7 +38,7 @@ test("MILA connection code forwards only the requested account label", async () 
   const result = await milaConnectionCode(
     { baseUrl: "https://mila.example", adminToken: "server-secret" },
     "Mobile user",
-    { fetchImpl },
+    { fetchImpl, owner: { id: "creator", email: "owner@example.com", name: "Creator", role: "Creator" } },
   );
   assert.equal(result.code, "AB12CD34");
 });
@@ -91,6 +94,7 @@ test("MILA voice token exchange keeps long-lived credentials server-side", async
   assert.equal(requests[0].options.headers["X-Admin-Token"], "admin-secret");
   assert.deepEqual(JSON.parse(requests[1].options.body), { code: "VOICE123" });
   assert.equal(requests[2].options.headers.Authorization, "Bearer dashboard-session-secret");
+  assert.deepEqual(JSON.parse(requests[2].options.body), { language: "auto" });
   assert.equal(JSON.stringify(result).includes("admin-secret"), false);
   assert.equal(JSON.stringify(result).includes("dashboard-session-secret"), false);
 

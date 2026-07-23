@@ -85,7 +85,7 @@ function initialPreferences() {
 function languageInstruction(language) {
   const instructions = {
     "ru-RU": "The selected language is Russian. Interpret speech as Russian, reply in natural Russian, and use Cyrillic rather than transliteration or Devanagari.",
-    "uz-UZ": "The selected language is Uzbek. Interpret speech as Uzbek and reply in natural Uzbek using Latin script unless the user asks otherwise.",
+    "uz-UZ": "The selected language is Uzbek. Interpret speech as Uzbek, including Uzbek Latin, Uzbek Cyrillic and Russian-Uzbek code switching. Reply in natural Uzbek Latin unless the user asks otherwise.",
     "en-US": "The selected language is English. Interpret speech as English and reply in natural English.",
     auto: "Reply in the language of the user's latest message. You are fluent in Russian, Uzbek and English.",
   };
@@ -113,7 +113,7 @@ export function buildMilaSystemInstruction({ language = "auto", preferences = {}
     ? "In voice mode, answer briefly, usually in one to three sentences. If the answer would be long, give a short summary first and offer more detail."
     : "Keep voice answers focused. For complex questions, give the conclusion first and then a concise explanation.";
   return `You are MILA, ${profile.userName}'s live voice assistant inside Agentic OS. Hermes is the primary orchestrator and executes real work.
-${languageInstruction(language)} If the user mixes Russian and English, preserve the useful terms and reply in the language that makes the answer easiest to understand.
+${languageInstruction(language)} If the user mixes Russian, Uzbek and English, preserve useful technical terms and reply in the language that makes the answer easiest to understand.
 Your voice should feel warm, calm, confident and natural. Avoid a robotic, theatrical or overly formal tone. ${PACE_INSTRUCTIONS[profile.pace]}
 ${STYLE_INSTRUCTIONS[profile.style]}
 ${lengthInstruction}
@@ -238,7 +238,7 @@ class MilaSessionHub {
       transcriptionLanguage: this.state.language,
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
-      getToken: () => api.integrations.milaVoiceToken(),
+      getToken: () => api.integrations.milaVoiceToken({ language: this.state.language }),
       onState: ({ phase, error }) => this.handleState(live, phase, error),
       onLevel: (kind, value) => {
         this.state[kind === "input" ? "inputLevel" : "outputLevel"] = Math.max(0, Math.min(1, value || 0));

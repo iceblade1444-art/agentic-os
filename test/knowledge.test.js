@@ -53,6 +53,15 @@ test("Obsidian usage log identifies agents without storing note contents", async
   assert.equal(JSON.stringify(usage).includes("Hermes integration"), false);
 });
 
+test("Obsidian graph maps wiki links between notes", async () => {
+  await library.upsert("People/Creator.md", "# Creator\n\nOwns [[Projects/Roadmap]].", { actor: "Creator" });
+  await library.upsert("Projects/Roadmap.md", "# Roadmap\n\nLinked to [[People/Creator]] and [[Missing Note]].", { actor: "Creator" });
+  const graph = await library.graph({ actor: "Creator" });
+  assert.equal(graph.nodes.some((node) => node.id === "People/Creator.md"), true);
+  assert.equal(graph.edges.some((edge) => edge.source === "Projects/Roadmap.md" && edge.target === "People/Creator.md" && edge.resolved), true);
+  assert.equal(graph.edges.some((edge) => edge.target === "Missing Note.md" && !edge.resolved), true);
+});
+
 test("Knowledge panel exposes the real vault and agent audit UI", async () => {
   const [page, api, app] = await Promise.all([
     fs.readFile(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8"),
@@ -60,8 +69,10 @@ test("Knowledge panel exposes the real vault and agent audit UI", async () => {
     fs.readFile(new URL("../assets/js/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(page, /Obsidian Library/);
+  assert.match(page, /Obsidian graph/);
   assert.match(page, /How agents use this library/);
   assert.match(page, /knowledgeUsage/);
   assert.match(api, /\/api\/knowledge\/status/);
+  assert.match(api, /\/api\/knowledge\/graph/);
   assert.match(app, /label: "Obsidian Library"/);
 });
