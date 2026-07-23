@@ -1,5 +1,4 @@
 import { icon } from "../icons.js";
-import { startLocalCall } from "../mila-local.js";
 import { closeOverlay, esc, openModal, toast } from "../ui.js";
 import {
   MILA_ATTACHMENT_ACCEPT, formatAttachmentSize, prepareMilaAttachment,
@@ -102,7 +101,6 @@ export default {
             <div class="mila-phase" id="milaPhase">Ready</div>
             <div class="mila-caption" id="milaCaption" aria-live="polite"></div>
             <div class="mila-controls">
-              <button class="mila-mic tip" id="milaLocalCall" data-tip="Локальный звонок — свой стек, голос Миланы" aria-label="Local call" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)">${icon("mic")}</button>
               <button class="mila-mic tip" id="milaMic" data-tip="Start live call" aria-label="Start live call">${icon("mic")}</button>
               <button class="mila-end tip hidden" id="milaEnd" data-tip="End call" aria-label="End call">${icon("x")}</button>
             </div>
@@ -296,7 +294,6 @@ export default {
       } catch (error) { toast("error", "Mila Live", error.message); }
     }
 
-    root.querySelector("#milaLocalCall").onclick = () => startLocalCall();
     mic.onclick = async () => {
       try {
         if (!milaHub.active) await milaHub.start();
