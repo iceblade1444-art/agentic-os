@@ -60,6 +60,11 @@ test("operations UI and host installer use real API, timers and path activation"
   const installer = fs.readFileSync(new URL("../scripts/install-agentic-os-operations.sh", import.meta.url), "utf8");
   const operator = fs.readFileSync(new URL("../scripts/agentic-os-operations.py", import.meta.url), "utf8");
   const productionE2e = fs.readFileSync(new URL("../scripts/production-e2e.mjs", import.meta.url), "utf8");
+  const deploy = fs.readFileSync(new URL("../deploy.sh", import.meta.url), "utf8");
+  const store = fs.readFileSync(new URL("../server/store.js", import.meta.url), "utf8");
+  const users = fs.readFileSync(new URL("../server/lib/users.js", import.meta.url), "utf8");
+  const onboarding = fs.readFileSync(new URL("../server/lib/onboarding.js", import.meta.url), "utf8");
+  const runtimeFiles = fs.readFileSync(new URL("../server/lib/runtime-files.js", import.meta.url), "utf8");
   const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   assert.match(api, /\/api\/operations\/status/);
   assert.match(api, /\/api\/operations\/backup/);
@@ -93,6 +98,12 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(productionE2e, /\/api\/kanban\/board/);
   assert.match(productionE2e, /\/api\/knowledge\/status/);
   assert.doesNotMatch(productionE2e, /method:\s*"POST"/);
+  assert.match(deploy, /chown -R \$\{HOST_UID\}:\$\{HOST_GID\} \/app\/data/);
+  assert.match(deploy, /find \/app\/data -type f -exec chmod 600/);
+  assert.match(store, /hardenRuntimeFile\(file, 0o600\)/);
+  assert.match(users, /hardenRuntimeFile\(this\.filePath, 0o600\)/);
+  assert.match(onboarding, /hardenRuntimeFile\(this\.filePath, 0o600\)/);
+  assert.match(runtimeFiles, /fs\.chownSync\(file, config\.runtimeFiles\.uid, config\.runtimeFiles\.gid\)/);
 });
 
 test("host backup can be restore-drilled without touching source data", { skip: process.platform === "win32" }, (t) => {

@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { hardenRuntimeFile } from "./lib/runtime-files.js";
 
 const dir = path.resolve(config.dataDir);
 const file = path.join(dir, "db.json");
@@ -48,7 +49,7 @@ function readOrSeed() {
   return s;
 }
 function write(d) {
-  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, JSON.stringify(d, null, 2)); }
+  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, JSON.stringify(d, null, 2), { mode: 0o600 }); hardenRuntimeFile(file, 0o600); }
   catch (e) { console.error("[store] save failed:", e.message); }
 }
 

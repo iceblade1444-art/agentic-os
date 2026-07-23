@@ -34,6 +34,10 @@ export const config = {
     model: env.CLAUDE_CODE_MODEL || "sonnet",
     timeoutMs: Math.max(30000, Number(env.CLAUDE_CODE_TIMEOUT_MS) || 900000),
   },
+  runtimeFiles: {
+    uid: Number.isInteger(Number(env.RUNTIME_FILE_UID || env.CLAUDE_CODE_WORKSPACE_UID)) ? Number(env.RUNTIME_FILE_UID || env.CLAUDE_CODE_WORKSPACE_UID) : 1000,
+    gid: Number.isInteger(Number(env.RUNTIME_FILE_GID || env.CLAUDE_CODE_WORKSPACE_GID)) ? Number(env.RUNTIME_FILE_GID || env.CLAUDE_CODE_WORKSPACE_GID) : 1000,
+  },
   creator: {
     id: "creator",
     name: env.CREATOR_NAME || "Creator",
