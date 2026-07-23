@@ -3,6 +3,7 @@ import { icon } from "./icons.js";
 import { api } from "./api.js";
 import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui.js";
 import { mountMilaDock } from "./mila-dock.js";
+import { renderOnboarding } from "./onboarding.js";
 
 import dashboard from "./pages/dashboard.js";
 import agents from "./pages/agents.js";
@@ -265,6 +266,15 @@ async function boot() {
   });
   if (api.needsAuth) return renderLogin();
   syncAuthenticatedProfile();
+  if (api.on) {
+    try {
+      const onboarding = await api.onboarding.get();
+      const forceSetup = new URLSearchParams(location.search).get("setup") === "1";
+      if (onboarding.needsOnboarding || forceSetup) return renderOnboarding(onboarding);
+    } catch (error) {
+      console.warn("[onboarding]", error.message);
+    }
+  }
   renderShell();
   mountMilaDock();
   route();

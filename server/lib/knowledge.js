@@ -173,6 +173,15 @@ export class KnowledgeLibrary {
     return { ...(await this.noteMeta(file)), content: value };
   }
 
+  async upsert(relativePath, content, { actor = "", source = "dashboard" } = {}) {
+    const value = String(content || "");
+    if (value.length > MAX_WRITE_CHARS || Buffer.byteLength(value) > MAX_NOTE_BYTES) throw new Error("Note content is too large");
+    const { normalized, file } = await this.resolveWrite(relativePath);
+    await fs.writeFile(file, value);
+    await this.record({ actor, action: "upsert", path: normalized, source });
+    return { ...(await this.noteMeta(file)), content: value };
+  }
+
   async append(relativePath, text, { actor = "", source = "agent" } = {}) {
     const value = String(text || "");
     if (!value.trim()) throw new Error("Text is required");

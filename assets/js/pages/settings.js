@@ -19,7 +19,7 @@ export default {
   render() {
     const s = store.state;
     const llm = s.settings.llm;
-    const tabs = [["appearance", "Appearance"], ["model", "Model"], ["profile", "Profile"], ["data", "Data"]];
+    const tabs = [["appearance", "Appearance"], ["model", "Model"], ["profile", "Profile"], ["workspace", "Workspace"], ["data", "Data"]];
     if (api.auth.canAdmin) tabs.splice(3, 0, ["team", "Team"]);
     if (!tabs.some(([key]) => key === tab)) tab = "appearance";
     return `
@@ -75,6 +75,13 @@ function section(s, llm) {
     </div>`;
 
   if (tab === "team") return teamSection();
+
+  if (tab === "workspace") return `
+    <div class="card pad-lg">
+      <div class="section-title">Workspace context</div>
+      <p class="hint mb-4">Company details, current goals and personal assistant preferences are stored on the server and synchronized to Obsidian for Hermes, MILA, Claude and specialist agents.</p>
+      <a class="btn btn-primary" href="/?setup=1">${icon("settings")}Review workspace setup</a>
+    </div>`;
 
   return `
     <div class="card pad-lg">

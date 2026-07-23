@@ -67,6 +67,10 @@ export const api = {
     users: () => j("/api/auth/users"),
     updateUser: (id, body) => j(`/api/auth/users/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },
+  onboarding: {
+    get: () => j("/api/onboarding"),
+    save: (body) => j("/api/onboarding", { method: "PUT", body }),
+  },
   mcp: {
     list: () => j("/api/mcp/servers"),
     connect: (id) => j(`/api/mcp/servers/${id}/connect`, { method: "POST" }),
