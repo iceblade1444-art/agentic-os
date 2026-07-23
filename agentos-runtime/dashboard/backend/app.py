@@ -267,7 +267,7 @@ def normalize_hermes_plan(slug: str, raw_plan: dict, max_tasks: int = 24):
     }
 
 
-def hermes_plan_goal(workspace: Path, slug: str, goal: str):
+def hermes_plan_goal(workspace: Path, slug: str, goal: str, context: str = ""):
     config = load_orchestrator_config(workspace)
     planning = config.get("planning") or {}
     mock_plan = os.getenv("AGENTOS_HERMES_MOCK_PLAN")
@@ -290,6 +290,7 @@ def hermes_plan_goal(workspace: Path, slug: str, goal: str):
                 "Schema: {\"summary\":string,\"tasks\":[{\"id\":\"T001\",\"title\":string,\"owner\":string,\"depends_on\":[\"T000\"],\"risk_level\":\"low|medium|high\",\"requires_approval\":boolean,\"acceptance_criteria\":[string],\"artifacts\":[relative_path],\"lane\":string}]}",
                 "Dependencies may reference earlier task IDs only. Mark deploy, publish, send, delete, payment, credential, and production changes as high risk and requiring approval.",
                 f"Goal: {goal}",
+                f"Workspace context:\n{str(context or '').strip()[:6000]}" if str(context or "").strip() else "Workspace context: not configured.",
             ])
             command = [
                 str(config.get("command") or "hermes"), "chat", "-q", prompt, "-Q",
@@ -2266,11 +2267,11 @@ def create_goal(workspace: Path, goal: str):
     return metadata
 
 
-def create_agentic_goal(workspace: Path, goal: str):
+def create_agentic_goal(workspace: Path, goal: str, context: str = ""):
     slug = slugify(goal)
     project_dir = workspace / "projects" / slug
     project_dir.mkdir(parents=True, exist_ok=True)
-    plan = hermes_plan_goal(workspace, slug, goal)
+    plan = hermes_plan_goal(workspace, slug, goal, context)
     tasks = plan["tasks"]
     human_gates = [gate.get("task_id") for gate in plan.get("approval_gates", []) if gate.get("task_id")]
     metadata = {
@@ -7476,7 +7477,8 @@ def handle_api(workspace: str | Path, path: str, method: str = "GET", payload=No
         goal = str(payload.get("goal", "")).strip()
         if not goal:
             return {"error": "goal_required"}
-        created = create_agentic_goal(workspace, goal)
+        context = str(payload.get("context", "") or "").strip()[:6000]
+        created = create_agentic_goal(workspace, goal, context)
         run = run_agentic_orchestrator(workspace, created.get("slug"), max_steps=int(payload.get("max_steps") or 20), dry_run=bool(payload.get("dry_run", False)))
         return {"status": "created_and_ran", "decision": "agentic_orchestrator_create_and_run", "created": created, "run": run}
     if method == "POST" and clean == "/api/agent-worker/config":

@@ -476,13 +476,18 @@ export function createClaudeCodeManager(options = {}) {
     const contextHint = context.length
       ? `\n\nThe user attached these files inside the workspace:\n${context.map((item) => `- ${item.path}`).join("\n")}`
       : "";
+    const agentContext = bounded(input.agentContext, 6000);
+    const systemPrompt = [
+      "You are Claude Code inside Agentic OS. Work only inside the selected workspace. Keep changes reviewable, run focused verification, and finish with a concise summary of files changed, checks run, and any remaining risk.",
+      agentContext,
+    ].filter(Boolean).join("\n\n");
     const args = [
       "-p", `${text}${contextHint}`,
       "--max-turns", String(maxTurns),
       "--effort", effort,
       "--model", model,
       "--permission-mode", permissionMode,
-      "--append-system-prompt", "You are Claude Code inside Agentic OS. Work only inside the selected workspace. Keep changes reviewable, run focused verification, and finish with a concise summary of files changed, checks run, and any remaining risk.",
+      "--append-system-prompt", systemPrompt,
       "--output-format", "json",
     ];
     if (session.cliSessionId) args.push("--resume", session.cliSessionId);
@@ -542,7 +547,7 @@ export function createClaudeCodeManager(options = {}) {
       method: "POST",
       body: {
         title,
-        body: `${body}\n\nSource: Claude Workspace session ${session.id}`,
+        body: `${body}${input.agentContext ? `\n\n${bounded(input.agentContext, 6000)}` : ""}\n\nSource: Claude Workspace session ${session.id}`,
         assignee: profile,
         priority: Math.max(0, Math.min(3, Number(input.priority) || 1)),
         triage: profile === "default",

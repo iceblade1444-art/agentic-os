@@ -5,8 +5,14 @@ import { Readable } from "node:stream";
 import { config } from "../config.js";
 import { hermesChatComplete, hermesChatStatus } from "../lib/hermes-chat.js";
 import { db } from "../store.js";
+import { authenticatedUser } from "../lib/auth.js";
+import { sharedAgentContext } from "../lib/onboarding.js";
 
 const r = Router();
+const contextualMessages = (req, messages = []) => {
+  const context = sharedAgentContext(authenticatedUser(req));
+  return context ? [{ role: "system", content: context }, ...messages] : messages;
+};
 
 function keyFor(provider) {
   if (provider === "openai") return config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey || "";
@@ -46,7 +52,7 @@ r.get("/models", (req, res) => {
 // Non-streaming completion (used by orchestrators / the MCP bridge's run_llm tool).
 r.post("/complete", async (req, res) => {
   const { model = config.defaultModel, messages, prompt, system, temperature = 0.7, provider } = req.body || {};
-  const msgs = messages || [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: prompt || "" }];
+  const msgs = contextualMessages(req, messages || [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: prompt || "" }]);
   const prov = pickProvider(model, provider);
   if (prov === "hermes") {
     try { return res.json(await hermesChatComplete(msgs)); }
@@ -72,6 +78,7 @@ r.post("/complete", async (req, res) => {
 
 r.post("/chat/completions", async (req, res) => {
   const { model = config.defaultModel, messages = [], temperature = 0.7, provider } = req.body || {};
+  const contextual = contextualMessages(req, messages);
   const prov = pickProvider(model, provider);
   const key = keyFor(prov);
   if (prov !== "hermes" && !key) return res.status(400).json({ error: `No API key configured for ${prov}. Add it to .env or the Integrations page.` });
@@ -82,13 +89,13 @@ r.post("/chat/completions", async (req, res) => {
 
   try {
     if (prov === "hermes") {
-      const result = await hermesChatComplete(messages);
+      const result = await hermesChatComplete(contextual);
       for (const chunk of result.text.match(/[\s\S]{1,80}/g) || []) send({ choices: [{ delta: { content: chunk } }] });
       return done();
     }
     if (prov === "anthropic") {
-      const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n") || undefined;
-      const msgs = messages.filter((m) => m.role !== "system");
+      const system = contextual.filter((m) => m.role === "system").map((m) => m.content).join("\n") || undefined;
+      const msgs = contextual.filter((m) => m.role !== "system");
       const up = await fetch(config.anthropic.baseUrl + "/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -102,7 +109,7 @@ r.post("/chat/completions", async (req, res) => {
     const up = await fetch(config.openai.baseUrl + "/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      body: JSON.stringify({ model, messages, temperature, stream: true }),
+      body: JSON.stringify({ model, messages: contextual, temperature, stream: true }),
     });
     if (!up.ok) { send({ choices: [{ delta: { content: `[OpenAI error ${up.status}] ${await up.text()}` } }] }); return done(); }
     Readable.fromWeb(up.body).pipe(res);

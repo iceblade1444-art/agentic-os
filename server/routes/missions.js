@@ -3,6 +3,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { runMission } from "../lib/orchestrator.js";
+import { authenticatedUser } from "../lib/auth.js";
 
 const r = Router();
 const summary = (m) => ({ id: m.id, title: m.title, goal: m.goal, status: m.status, orchestrator: m.orchestrator, createdAt: m.createdAt, events: m.events.length });
@@ -40,7 +41,7 @@ r.post("/:id/run", async (req, res) => {
   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
   db.missions.update(m.id, { orchestrator: "hermes", status: "running" });
   const emit = (ev) => { const saved = db.missions.addEvent(m.id, ev) || ev; res.write(`data: ${JSON.stringify(saved)}\n\n`); };
-  try { await runMission(m, emit); }
+  try { await runMission(m, emit, authenticatedUser(req)); }
   catch (e) { emit({ type: "error", message: e.message, status: "failed" }); }
   res.write("data: [DONE]\n\n");
   res.end();

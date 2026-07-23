@@ -1,6 +1,8 @@
 import { Router } from "express";
 
 import { claudeCode } from "../lib/claude-code.js";
+import { authenticatedUser } from "../lib/auth.js";
+import { sharedAgentContext } from "../lib/onboarding.js";
 
 const r = Router();
 const send = (handler) => async (req, res) => {
@@ -19,7 +21,11 @@ r.get("/files", send((req) => claudeCode.listFiles(req.query.workdir, req.query.
 r.get("/file", send((req) => claudeCode.readFile(req.query.workdir, req.query.path)));
 r.get("/sessions/:id", send((req) => claudeCode.getSession(req.params.id)));
 r.delete("/sessions/:id", send((req) => claudeCode.removeSession(req.params.id)));
-r.post("/sessions/:id/messages", send((req) => claudeCode.message(req.params.id, req.body || {})));
-r.post("/sessions/:id/delegate", send((req) => claudeCode.delegate(req.params.id, req.body || {})));
+r.post("/sessions/:id/messages", send((req) => claudeCode.message(req.params.id, {
+  ...(req.body || {}), agentContext: sharedAgentContext(authenticatedUser(req)),
+})));
+r.post("/sessions/:id/delegate", send((req) => claudeCode.delegate(req.params.id, {
+  ...(req.body || {}), agentContext: sharedAgentContext(authenticatedUser(req)),
+})));
 
 export default r;

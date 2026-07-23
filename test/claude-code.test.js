@@ -37,12 +37,16 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   assert.equal(JSON.stringify(status).includes("must-not-leak"), false);
 
   const created = manager.createSession({ title: "Demo project", workdir: path.join(dirs.work, "demo") });
-  const completed = await manager.message(created.id, { text: "Inspect index.js", permissionMode: "plan" });
+  const completed = await manager.message(created.id, {
+    text: "Inspect index.js", permissionMode: "plan",
+    agentContext: "Authoritative Agentic OS workspace context:\nWorkspace: Milana Premium",
+  });
   assert.equal(completed.status, "ready");
   assert.equal(completed.messages.at(-1).text, "Implemented and tested.");
   assert.equal(manager.listSessions()[0].messageCount, 2);
   assert.ok(calls.at(-1).args.includes("--permission-mode"));
   assert.ok(calls.at(-1).args.includes("--model"));
+  assert.match(calls.at(-1).args[calls.at(-1).args.indexOf("--append-system-prompt") + 1], /Workspace: Milana Premium/);
   assert.equal(calls.at(-1).options.env.ANTHROPIC_BASE_URL, "https://api.anthropic.com");
   assert.equal("ANTHROPIC_API_KEY" in calls.at(-1).options.env, false);
 });
