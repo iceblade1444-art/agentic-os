@@ -3,16 +3,22 @@ import { Router, raw } from "express";
 
 const r = Router();
 const SPEECH_URL = process.env.SPEECH_URL || "http://speech:4400";
+const SPEECH_INTERNAL_SECRET = process.env.SPEECH_INTERNAL_SECRET || "";
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGS = new Set(["uz", "kk", "ky", "ru", "en"]);
 
-function safeFilename(req) {
-  let value;
-  try { value = decodeURIComponent(req.get("X-File-Name") || ""); }
+export function safeSpeechFilename(value = "") {
+  try { value = decodeURIComponent(value); }
   catch { value = ""; }
   const base = (value.replace(/\\/g, "/").split("/").at(-1) || "");
   const name = base.replace(/[^\w.\- ]/g, "").replace(/^\.+/, "").trim().slice(0, 200);
   return name || "audio.webm";
+}
+
+export function speechInternalHeaders(extra = {}) {
+  return SPEECH_INTERNAL_SECRET
+    ? { ...extra, "X-Internal-Secret": SPEECH_INTERNAL_SECRET }
+    : extra;
 }
 
 r.get("/health", async (req, res) => {
@@ -30,13 +36,13 @@ r.post("/stt", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, re
     const language = LANGS.has(req.query.language) ? req.query.language : "";
     const boundary = `agentic-speech-${crypto.randomBytes(12).toString("hex")}`;
     const parts = [Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${safeFilename(req)}"\r\nContent-Type: application/octet-stream\r\n\r\n`
+      `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${safeSpeechFilename(req.get("X-File-Name"))}"\r\nContent-Type: application/octet-stream\r\n\r\n`
     ), req.body];
     if (language) parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}`));
     parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
     const upstream = await fetch(`${SPEECH_URL}/stt`, {
       method: "POST",
-      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      headers: speechInternalHeaders({ "Content-Type": `multipart/form-data; boundary=${boundary}` }),
       body: Buffer.concat(parts),
     });
     res.status(upstream.status).json(await upstream.json());
@@ -51,7 +57,11 @@ r.post("/tts", async (req, res) => {
     const form = new URLSearchParams({ text: String(text).slice(0, 4000) });
     for (const [k, v] of Object.entries({ language, speaker, instruct, engine, speed }))
       if (v) form.set(k, String(v).slice(0, 300));
-    const upstream = await fetch(`${SPEECH_URL}/tts`, { method: "POST", body: form });
+    const upstream = await fetch(`${SPEECH_URL}/tts`, {
+      method: "POST",
+      headers: speechInternalHeaders(),
+      body: form,
+    });
     if (!upstream.ok) {
       const raw = (await upstream.text()).slice(0, 500);
       let message = raw;
@@ -71,7 +81,7 @@ r.post("/clone", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, 
     if (!text.trim()) return res.status(400).json({ error: "text is required" });
     const boundary = `agentic-speech-${crypto.randomBytes(12).toString("hex")}`;
     const parts = [Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="ref_audio"; filename="${safeFilename(req)}"\r\nContent-Type: application/octet-stream\r\n\r\n`
+      `--${boundary}\r\nContent-Disposition: form-data; name="ref_audio"; filename="${safeSpeechFilename(req.get("X-File-Name"))}"\r\nContent-Type: application/octet-stream\r\n\r\n`
     ), req.body];
     for (const k of ["text", "language", "ref_text"]) {
       const v = String(req.query[k] || "").slice(0, 4000);
@@ -80,7 +90,7 @@ r.post("/clone", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, 
     parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
     const upstream = await fetch(`${SPEECH_URL}/clone`, {
       method: "POST",
-      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      headers: speechInternalHeaders({ "Content-Type": `multipart/form-data; boundary=${boundary}` }),
       body: Buffer.concat(parts),
     });
     if (!upstream.ok) {

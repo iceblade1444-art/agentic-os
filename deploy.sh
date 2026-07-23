@@ -17,6 +17,18 @@ if ! grep -q '^AUTH_TOKEN=..*' .env; then
   echo "· generated AUTH_TOKEN"
 fi
 
+# Speech traffic stays on the private Compose network, but still uses a
+# separate shared secret so another container cannot call STT/TTS directly.
+if ! grep -q '^SPEECH_INTERNAL_SECRET=..*' .env; then
+  SPEECH_TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | xxd -p | tr -d '\n')"
+  if grep -q '^SPEECH_INTERNAL_SECRET=' .env; then
+    sed -i "s|^SPEECH_INTERNAL_SECRET=.*|SPEECH_INTERNAL_SECRET=${SPEECH_TOKEN}|" .env
+  else
+    printf '\nSPEECH_INTERNAL_SECRET=%s\n' "$SPEECH_TOKEN" >> .env
+  fi
+  echo "· generated speech service internal secret"
+fi
+
 # 3) keep Claude Code login state outside the replaceable app container
 CLAUDE_CONFIG_DIR="$(sed -n 's/^CLAUDE_CONFIG_DIR=//p' .env | tail -n1)"
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/home/admilana/.claude}"

@@ -14,6 +14,7 @@ services:
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
       - SPEECH_URL=http://speech:4400
+      - SPEECH_INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
       - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
       - HERMES_CHAT_SOCKET=/run/agentic-os/hermes-chat.sock
       - OPS_STATE_FILE=/run/agentic-os/operations.json
@@ -32,6 +33,22 @@ services:
       - /home/admilana/.local/state/agentic-os:/run/agentic-os
     depends_on:
       - agentos-runtime
+      - speech
+
+  speech:
+    build:
+      context: ./speech-service
+    image: agentos-speech:latest
+    container_name: speech
+    restart: unless-stopped
+    environment:
+      - INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
+      - SPEECH_CPU_THREADS=${SPEECH_CPU_THREADS:-6}
+      - STT_MODEL_UZ=/app/models/whisper-uz-medium-ct2
+    volumes:
+      - ${SPEECH_MODELS_DIR:-./speech-models}:/app/models
+      - ${QWEN_TTS_MODELS_DIR:-./speech-qwen-models}:/app/models-qwen:ro
+      - speech-hf-cache:/root/.cache/huggingface
 
   agentos-runtime:
     build:
@@ -62,3 +79,6 @@ services:
       - /home/admilana/.hermes:/home/admilana/.hermes
       - /home/admilana/.local/share/uv:/home/admilana/.local/share/uv:ro
       - /home/admilana/.local/bin/hermes:/home/admilana/.local/bin/hermes:ro
+
+volumes:
+  speech-hf-cache:
