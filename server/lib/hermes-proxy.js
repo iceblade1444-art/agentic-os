@@ -79,7 +79,7 @@ export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
 
   server.on("upgrade", (req, socket, head) => {
     const path = new URL(req.url || "/", "http://agentic-os.local").pathname;
-    if (path !== PREFIX && !path.startsWith(`${PREFIX}/`)) return rejectUpgrade(socket, "404 Not Found");
+    if (path !== PREFIX && !path.startsWith(`${PREFIX}/`)) return;
     if (!isAuthed(req)) return rejectUpgrade(socket);
     req.url = stripHermesPrefix(req.url);
     proxy.ws(req, socket, head);

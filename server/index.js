@@ -24,6 +24,7 @@ import {
   registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
 } from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
+import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
 
@@ -58,6 +59,7 @@ app.use((req, res, next) => {
 // Hermes serves its official dashboard here, including PTY WebSockets. Mount
 // before body parsers so config forms, uploads and streaming bodies stay intact.
 mountHermesProxy(app, server);
+mountLiveKitProxy(app, server);
 
 // CORS: same-origin only unless ALLOW_ORIGIN is set explicitly
 if (config.allowOrigin) app.use(cors({ origin: config.allowOrigin.split(",").map((s) => s.trim()), credentials: true }));

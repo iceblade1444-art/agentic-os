@@ -20,6 +20,7 @@ export const config = {
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
+  livekitUrl: strip(env.LIVEKIT_URL, "http://host.docker.internal:7880"),
   operationsStateFile: env.OPS_STATE_FILE || "/run/agentic-os/operations.json",
   operationsBackupRequestFile: env.OPS_BACKUP_REQUEST_FILE || "/run/agentic-os/backup.request",
   operationsRestoreRequestFile: env.OPS_RESTORE_REQUEST_FILE || "/run/agentic-os/restore.request",

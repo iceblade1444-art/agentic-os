@@ -17,12 +17,15 @@ services:
       - SPEECH_INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
       - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
       - HERMES_CHAT_SOCKET=/run/agentic-os/hermes-chat.sock
+      - LIVEKIT_URL=${LIVEKIT_URL:-http://host.docker.internal:7880}
       - OPS_STATE_FILE=/run/agentic-os/operations.json
       - OPS_BACKUP_REQUEST_FILE=/run/agentic-os/backup.request
     ports:
       # Keep localhost for a proxy on this host. Set BIND_ADDRESS to the server's
       # private/LAN IP when the reverse proxy runs on another machine.
       - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8787}:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data        # persists db.json (missions, MCP servers, integrations)
       - ./vault:/app/vault      # your Obsidian vault — change ./vault to your real vault path
