@@ -188,4 +188,14 @@ export const api = {
     status: () => j("/api/operations/status"),
     backup: () => j("/api/operations/backup", { method: "POST" }),
   },
+  skills: {
+    list: (profile = "") => j(`/api/skills${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
+    content: (name, profile = "") => j(`/api/skills/content?name=${encodeURIComponent(name)}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),
+    toggle: (name, enabled, profile = "") => j("/api/skills/toggle", { method: "PUT", body: { name, enabled, profile } }),
+    create: (body) => j("/api/skills", { method: "POST", body }),
+    update: (body) => j("/api/skills/content", { method: "PUT", body }),
+    hubSearch: (query, profile = "") => j(`/api/skills/hub/search?q=${encodeURIComponent(query)}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),
+    hubPreview: (identifier, profile = "") => j(`/api/skills/hub/preview?identifier=${encodeURIComponent(identifier)}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),
+    hubInstall: (identifier, profile = "") => j("/api/skills/hub/install", { method: "POST", body: { identifier, profile } }),
+  },
 };

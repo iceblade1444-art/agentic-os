@@ -60,14 +60,7 @@ async function sessionToken(force = false, requestImpl = dashboardRequest) {
   return token;
 }
 
-export function withKanbanBoard(pathname, board = config.hermesKanbanBoard) {
-  const url = new URL(pathname, "http://kanban.local");
-  url.searchParams.set("board", board);
-  return `${url.pathname}${url.search}`;
-}
-
-export async function hermesKanbanRawRequest(pathname, options = {}, requestImpl = dashboardRequest) {
-  if (!String(pathname).startsWith(`${API_PREFIX}/`)) throw new Error("Invalid Hermes Kanban path");
+async function authorizedDashboardRequest(pathname, options = {}, requestImpl = dashboardRequest) {
   const run = async (forceToken = false) => {
     const token = await sessionToken(forceToken, requestImpl);
     return requestImpl(pathname, {
@@ -80,18 +73,28 @@ export async function hermesKanbanRawRequest(pathname, options = {}, requestImpl
       timeoutMs: options.timeoutMs,
     });
   };
-
   let response = await run(false);
   if (response.status === 401 || response.status === 403) response = await run(true);
   if (response.status < 200 || response.status >= 300) {
     let data;
     try { data = response.text ? JSON.parse(response.text) : {}; }
     catch { data = {}; }
-    const error = new Error(data.detail || data.error || `Hermes Kanban HTTP ${response.status}`);
+    const error = new Error(data.detail || data.error || `Hermes Dashboard HTTP ${response.status}`);
     error.status = response.status;
     throw error;
   }
   return response;
+}
+
+export function withKanbanBoard(pathname, board = config.hermesKanbanBoard) {
+  const url = new URL(pathname, "http://kanban.local");
+  url.searchParams.set("board", board);
+  return `${url.pathname}${url.search}`;
+}
+
+export async function hermesKanbanRawRequest(pathname, options = {}, requestImpl = dashboardRequest) {
+  if (!String(pathname).startsWith(`${API_PREFIX}/`)) throw new Error("Invalid Hermes Kanban path");
+  return authorizedDashboardRequest(pathname, options, requestImpl);
 }
 
 export async function hermesKanbanRequest(pathname, options = {}, requestImpl = dashboardRequest) {
@@ -109,6 +112,24 @@ export async function hermesKanbanRequest(pathname, options = {}, requestImpl = 
 }
 
 export const kanbanPath = (suffix, board) => withKanbanBoard(`${API_PREFIX}${suffix}`, board);
+
+export async function hermesSkillsRequest(pathname, options = {}, requestImpl = dashboardRequest) {
+  const value = String(pathname || "");
+  if (value !== "/api/skills" && !value.startsWith("/api/skills/") && !value.startsWith("/api/skills?")) {
+    throw new Error("Invalid Hermes Skills path");
+  }
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  const response = await authorizedDashboardRequest(value, {
+    method: options.method,
+    headers: payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {},
+    body: payload,
+    timeoutMs: options.timeoutMs || 12000,
+  }, requestImpl);
+  let data;
+  try { data = response.text ? JSON.parse(response.text) : {}; }
+  catch { throw new Error("Hermes Skills returned invalid JSON"); }
+  return data;
+}
 
 export function resetHermesKanbanToken() {
   cachedToken = "";
