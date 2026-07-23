@@ -105,7 +105,7 @@ const PACE_INSTRUCTIONS = {
   fast: "Speak briskly but keep every word clear and natural.",
 };
 
-export function buildMilaSystemInstruction({ language = "auto", preferences = {}, history = [], currentTime } = {}) {
+export function buildMilaSystemInstruction({ language = "auto", preferences = {}, history = [], currentTime, agentContext = "" } = {}) {
   const profile = normalizeMilaPreferences(preferences);
   const recent = history.slice(-8).filter((item) => item.role !== "system")
     .map((item) => `${item.role === "user" ? "User" : "MILA"}: ${item.text}`).join("\n");
@@ -126,6 +126,7 @@ Every state-changing tool uses enforced two-step confirmation. On the first call
 This includes anything that changes settings, files, accounts, money, deployments, external messages or other important state.
 Use delegate_to_hermes for multi-agent work, create_kanban_task when the user only wants a visible card, write_obsidian_note for approved knowledge writes, and ask_claude_code for approved work in the coding workspace. Never claim that Hermes or Claude completed a task when it has only started.
 Current local time: ${currentTime || new Date().toISOString()}.
+${agentContext ? `Workspace context supplied by Agentic OS:\n${String(agentContext).slice(0, 6000)}` : "Workspace context has not been configured yet."}
 ${recent ? `Recent conversation:\n${recent}` : ""}`;
 }
 
@@ -148,6 +149,7 @@ class MilaSessionHub {
       phase: "checking", error: "", backendReady: false,
       model: "gemini-3.1-flash-live-preview", language: initialLanguage(),
       preferences: initialPreferences(),
+      agentContext: "",
       transcriptionMode: "gemini", transcriptWarning: 0,
       history: [], partials: { user: "", assistant: "" }, pendingTurnAttachments: [],
       inputLevel: 0, outputLevel: 0, startedAt: 0, elapsed: 0, elapsedLabel: "00:00",
@@ -176,7 +178,11 @@ class MilaSessionHub {
 
   async loadStatus(force = false) {
     if (this.statusPromise && !force) return this.statusPromise;
-    this.statusPromise = api.integrations.milaStatus().then((result) => {
+    this.statusPromise = Promise.all([
+      api.integrations.milaStatus(),
+      api.onboarding.get().catch(() => ({ agentContext: "" })),
+    ]).then(([result, onboarding]) => {
+      this.state.agentContext = String(onboarding.agentContext || "").slice(0, 6000);
       this.state.backendReady = !!result.voiceConfigured;
       this.state.model = result.liveModel || this.state.model;
       this.state.phase = this.state.backendReady ? "idle" : "error";
@@ -215,6 +221,7 @@ class MilaSessionHub {
       language: this.state.language,
       preferences: this.state.preferences,
       history: this.state.history,
+      agentContext: this.state.agentContext,
     });
   }
 

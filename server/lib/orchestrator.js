@@ -7,6 +7,7 @@ import * as mgr from "../mcp/manager.js";
 import { slackSend } from "./connectors.js";
 import { milaConnectionCode, milaStatus } from "./mila.js";
 import { knowledge } from "./knowledge.js";
+import { sharedAgentContext } from "./onboarding.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const safeParse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -92,7 +93,7 @@ async function runtimeJson(path, options = {}) {
   return data;
 }
 
-export async function runMission(mission, emit) {
+export async function runMission(mission, emit, user = null) {
   emit({ type: "status", message: "Mission accepted by Hermes", status: "running" });
   emit({ type: "think", message: "Hermes is preparing an approval-gated AgentOS plan." });
   const hermes = await runtimeJson("/api/orchestrator/status");
@@ -104,7 +105,7 @@ export async function runMission(mission, emit) {
   });
   const result = await runtimeJson("/api/orchestrator/create-and-run", {
     method: "POST",
-    body: { goal: mission.goal || mission.title, max_steps: 20 },
+    body: { goal: mission.goal || mission.title, context: sharedAgentContext(user), max_steps: 20 },
   });
   const created = result.created || {};
   const run = result.run || {};

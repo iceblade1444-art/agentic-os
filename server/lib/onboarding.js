@@ -170,3 +170,29 @@ updated: ${profile.updatedAt}
 }
 
 export const onboarding = new OnboardingStore();
+
+export function sharedAgentContext(user, state = onboarding.get(user || { id: "system", role: "Viewer" })) {
+  const workspace = state.workspace || {};
+  const profile = state.profile || {};
+  if (!workspace.completedAt) return "";
+  const context = [
+    "Authoritative Agentic OS workspace context:",
+    `Workspace: ${workspace.name || "Not specified"}`,
+    `Industry: ${workspace.industry || "Not specified"}`,
+    `Business: ${workspace.summary || "Not specified"}`,
+    `Audience: ${workspace.audience || "Not specified"}`,
+    `Products and services: ${workspace.products || "Not specified"}`,
+    `Goals:\n${bulletList(workspace.goals)}`,
+    `Constraints:\n${bulletList(workspace.constraints)}`,
+    `Operating languages: ${workspace.operatingLanguages?.join(", ") || "Not specified"}`,
+  ];
+  if (user?.name) {
+    context.push(
+      `Current user: ${user.name} (${user.role || "User"})`,
+      `User language: ${profile.locale || "Not specified"}`,
+      `User timezone: ${profile.timezone || "Not specified"}`,
+      `User work focus: ${profile.roleFocus || "Not specified"}`,
+    );
+  }
+  return context.join("\n").slice(0, 6000);
+}

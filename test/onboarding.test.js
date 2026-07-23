@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { OnboardingStore, onboardingContextDocuments } from "../server/lib/onboarding.js";
+import { OnboardingStore, onboardingContextDocuments, sharedAgentContext } from "../server/lib/onboarding.js";
 
 function temporaryStore(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-onboarding-"));
@@ -61,6 +61,9 @@ test("onboarding produces shared Obsidian context without secrets", (t) => {
   assert.deepEqual(documents.map((item) => item.path), ["Agentic OS/Workspace Context.md", "Agentic OS/People/creator.md"]);
   assert.match(documents[0].content, /Improve operations/);
   assert.doesNotMatch(JSON.stringify(documents), /password|api[_ -]?key/i);
+  const context = sharedAgentContext(creator, state);
+  assert.match(context, /Authoritative Agentic OS workspace context/);
+  assert.match(context, /Improve operations/);
 });
 
 test("frontend gates the shell on server onboarding and exposes settings entry", () => {
@@ -70,4 +73,15 @@ test("frontend gates the shell on server onboarding and exposes settings entry",
   assert.match(app, /onboarding\.needsOnboarding/);
   assert.match(api, /\/api\/onboarding/);
   assert.match(settings, /Review workspace setup/);
+});
+
+test("all primary execution paths receive server-owned shared context", () => {
+  const orchestrator = fs.readFileSync(new URL("../server/lib/orchestrator.js", import.meta.url), "utf8");
+  const claudeRoute = fs.readFileSync(new URL("../server/routes/claude-code.js", import.meta.url), "utf8");
+  const llmRoute = fs.readFileSync(new URL("../server/routes/llm.js", import.meta.url), "utf8");
+  const mila = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  assert.match(orchestrator, /context: sharedAgentContext\(user\)/);
+  assert.match(claudeRoute, /agentContext: sharedAgentContext\(authenticatedUser\(req\)\)/);
+  assert.match(llmRoute, /contextualMessages/);
+  assert.match(mila, /Workspace context supplied by Agentic OS/);
 });
