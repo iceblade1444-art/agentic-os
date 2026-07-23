@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { config } from "../config.js";
+import { hardenRuntimeFile } from "./runtime-files.js";
 
 const LOCALES = new Set(["ru-RU", "uz-UZ", "en-US"]);
 const STYLES = new Set(["assistant", "friend", "operator", "mentor"]);
@@ -43,7 +44,7 @@ export class OnboardingStore {
     const temp = `${this.filePath}.${process.pid}.tmp`;
     fs.writeFileSync(temp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
     fs.renameSync(temp, this.filePath);
-    try { fs.chmodSync(this.filePath, 0o600); } catch { /* Windows or restrictive volume */ }
+    hardenRuntimeFile(this.filePath, 0o600);
   }
 
   get(user) {

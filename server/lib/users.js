@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { config } from "../config.js";
+import { hardenRuntimeFile } from "./runtime-files.js";
 
 const ROLES = new Set(["Admin", "Member", "Viewer"]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,7 +51,7 @@ export class UserStore {
     const temp = `${this.filePath}.${process.pid}.tmp`;
     fs.writeFileSync(temp, JSON.stringify({ version: 1, users: this.users }, null, 2), { mode: 0o600 });
     fs.renameSync(temp, this.filePath);
-    try { fs.chmodSync(this.filePath, 0o600); } catch { /* Windows or restrictive volume */ }
+    hardenRuntimeFile(this.filePath, 0o600);
   }
 
   list() {

@@ -67,6 +67,15 @@ echo "· building Agentic OS application images…"
 docker compose build agentic-os agentos-runtime
 docker compose up -d --no-build
 
+# Keep container-written runtime files readable by the host services that create
+# backups. The app container runs as root for Claude's persisted config mount,
+# so writes like data/onboarding.json can otherwise become root-owned 0600 files.
+HOST_UID="$(sed -n -e 's/^RUNTIME_FILE_UID=//p' -e 's/^CLAUDE_CODE_WORKSPACE_UID=//p' .env | tail -n1)"
+HOST_GID="$(sed -n -e 's/^RUNTIME_FILE_GID=//p' -e 's/^CLAUDE_CODE_WORKSPACE_GID=//p' .env | tail -n1)"
+HOST_UID="${HOST_UID:-1000}"
+HOST_GID="${HOST_GID:-1000}"
+docker compose exec -T agentic-os sh -lc "chown -R ${HOST_UID}:${HOST_GID} /app/data /run/agentic-os 2>/dev/null || true; find /app/data -type d -exec chmod 700 {} + 2>/dev/null || true; find /app/data -type f -exec chmod 600 {} + 2>/dev/null || true"
+
 # 5) health check
 HOST_PORT="$(sed -n 's/^HOST_PORT=//p' .env | tail -n1)"
 HOST_PORT="${HOST_PORT:-8787}"
