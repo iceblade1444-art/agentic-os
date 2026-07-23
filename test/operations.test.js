@@ -43,6 +43,7 @@ test("missing operations state is explicit and backup requests contain no comman
 test("operations UI and host installer use real API, timers and path activation", () => {
   const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8");
+  const dashboard = fs.readFileSync(new URL("../assets/js/pages/dashboard.js", import.meta.url), "utf8");
   const installer = fs.readFileSync(new URL("../scripts/install-agentic-os-operations.sh", import.meta.url), "utf8");
   const operator = fs.readFileSync(new URL("../scripts/agentic-os-operations.py", import.meta.url), "utf8");
   assert.match(api, /\/api\/operations\/status/);
@@ -50,6 +51,12 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.doesNotMatch(page, /14,208|Rate limit approaching|search_web\(query/);
   assert.match(page, /Host checks/);
   assert.match(page, /Four C readiness/);
+  assert.match(dashboard, /api\.operations\.status/);
+  assert.match(dashboard, /api\.kanban\.board/);
+  assert.match(dashboard, /api\.routines\.list/);
+  assert.match(dashboard, /api\.knowledge\.usage/);
+  assert.match(dashboard, /Operational Home/);
+  assert.doesNotMatch(dashboard, /randomSeries|Tokens Used|Success Rate.*82|All systems operational/);
   assert.match(installer, /OnUnitActiveSec=5min/);
   assert.match(installer, /OnCalendar=\*-\*-\* 03:15:00/);
   assert.match(installer, /PathExists=.*backup\.request/);

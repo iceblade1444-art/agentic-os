@@ -1716,3 +1716,229 @@ body.compact .card.pad-lg { padding: 16px; }
   border-radius: 8px;
   background: var(--surface-2);
 }
+
+.operational-head {
+  margin-bottom: 16px;
+}
+
+.operational-stat {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.operational-stat:hover {
+  border-color: var(--border-strong);
+}
+
+.ops-action-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning-bg) 55%, var(--surface));
+}
+
+.ops-action-strip.is-ready {
+  border-color: color-mix(in srgb, var(--success) 38%, var(--border));
+  background: color-mix(in srgb, var(--success-bg) 52%, var(--surface));
+}
+
+.ops-action-strip > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.ops-action-strip > div > span:last-child {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operational-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.8fr);
+  gap: 16px;
+}
+
+.operational-lower-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ops-card-head {
+  padding: 16px 16px 12px;
+}
+
+.ops-service {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ops-service:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.ops-service-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-content: center;
+  border-radius: 6px;
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.ops-service-icon.ready {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.ops-service-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ops-service strong,
+.ops-service small {
+  display: block;
+}
+
+.ops-service strong {
+  font-size: 12px;
+}
+
+.ops-service small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-progress {
+  display: block;
+  color: inherit;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.ops-progress .progress {
+  margin-top: 7px;
+}
+
+.ops-fleet {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-agent {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ops-agent strong,
+.ops-agent small {
+  display: block;
+}
+
+.ops-agent strong {
+  font-size: 12px;
+}
+
+.ops-agent small {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.ops-activity {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ops-activity:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.ops-activity > span {
+  color: var(--text-3);
+}
+
+.ops-activity > span svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ops-activity strong,
+.ops-activity small {
+  display: block;
+}
+
+.ops-activity strong {
+  font-size: 11px;
+}
+
+.ops-activity small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-activity time {
+  color: var(--text-3);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.ops-empty {
+  min-height: 210px;
+}
+
+@media (max-width: 1180px) {
+  .operational-grid,
+  .operational-lower-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .ops-action-strip,
+  .ops-action-strip > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ops-action-strip > div > span:last-child {
+    white-space: normal;
+  }
+}
