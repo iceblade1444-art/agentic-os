@@ -306,11 +306,12 @@ async function loadOperations(force = false) {
 }
 
 function operationsHTML(state) {
-  if (!state.available) return `<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Host monitor is not installed</div><div class="a-desc">Install the Agentic OS operations systemd units on the server to enable checks and backups.</div></div></div>`;
+  if (!state.available) return `${fourCReadinessHTML(state.readiness)}<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Host monitor is not installed</div><div class="a-desc">Install the Agentic OS operations systemd units on the server to enable checks and backups.</div></div></div>`;
   const backup = state.backup || {};
   const disk = (state.checks || []).find((check) => check.id === "disk");
   const incidents = state.incidents || [];
   return `
+    ${fourCReadinessHTML(state.readiness)}
     <div class="grid cols-4 mb-4">
       ${statMini("System status", opsStatusText(state.status), state.status === "healthy" ? "check" : "warn")}
       ${statMini("Active incidents", state.activeIncidents || 0, "alert")}
@@ -335,6 +336,30 @@ function operationsHTML(state) {
     </div>
     <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Incidents</h3><span class="hint">Latest ${Math.min(incidents.length, 50)}</span></div>
       ${incidents.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Check</th><th>Message</th><th>First seen</th></tr></thead><tbody>${incidents.map((incident) => `<tr><td><span class="badge ${incident.status === "resolved" ? "success" : opsTone(incident.severity)}">${esc(incident.status || "active")}</span></td><td class="fw-600">${esc(incident.name || incident.checkId)}</td><td class="muted">${esc(incident.message || "")}</td><td class="muted nowrap">${opsAge(incident.firstSeenAt)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty" style="min-height:180px"><div class="empty-ico">${icon("check")}</div><h4>No incidents recorded</h4><p>All monitored services are operating normally.</p></div>`}
+    </div>`;
+}
+
+function fourCReadinessHTML(readiness) {
+  if (!readiness || readiness.error) return `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Four C readiness audit is unavailable</div><div class="a-desc">${esc(readiness?.error || "The server did not return an audit.")}</div></div></div>`;
+  const sections = readiness.sections || [];
+  const recommendations = readiness.recommendations || [];
+  return `
+    <div class="card pad-lg mb-4">
+      <div class="card-head">
+        <div><h3>Four C readiness</h3><p class="hint mt-1">Live audit of context, connections, capabilities and cadence</p></div>
+        <span class="badge ${readiness.score >= 80 ? "success" : readiness.score >= 50 ? "warning" : "error"}">${esc(readiness.score)}% ready</span>
+      </div>
+      <div class="grid cols-4 mt-4">
+        ${sections.map((section) => `
+          <div class="readiness-section">
+            <div class="row between gap-2"><span class="fw-700">${esc(section.label)}</span><span class="badge ${section.score >= 80 ? "success" : section.score >= 50 ? "warning" : "error"}">${esc(section.score)}%</span></div>
+            <p class="hint mt-1">${esc(section.description)}</p>
+            <div class="stack gap-2 mt-3">
+              ${(section.checks || []).map((check) => `<div class="readiness-check ${check.ok ? "is-ready" : "needs-work"}"><span>${icon(check.ok ? "check" : "warn")}</span><div><div class="text-sm fw-600">${esc(check.label)}</div><div class="hint">${esc(check.detail)}</div></div></div>`).join("")}
+            </div>
+          </div>`).join("")}
+      </div>
+      ${recommendations.length ? `<div class="readiness-actions mt-4"><div class="fw-700 mb-3">Next operational actions</div><div class="grid cols-2">${recommendations.map((item) => `<a class="readiness-action" href="${esc(item.href)}"><div><span class="eyebrow">${esc(item.section)}</span><div class="fw-600 mt-1">${esc(item.title)}</div><div class="hint mt-1">${esc(item.detail)}</div></div>${icon("arrowright")}</a>`).join("")}</div></div>` : `<div class="alert success mt-4"><span class="a-ico">${icon("check")}</span><div class="a-body"><div class="a-title">All operational layers are ready</div><div class="a-desc">No readiness gaps were detected.</div></div></div>`}
     </div>`;
 }
 

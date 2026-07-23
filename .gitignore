@@ -31,3 +31,4 @@ agentos-runtime/config/voice.local.json
 # Obsidian settings and MILA notes belong to the deployed/user vault.
 vault/.obsidian/
 vault/MILA/
+vault/Agentic OS/

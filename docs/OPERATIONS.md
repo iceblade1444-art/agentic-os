@@ -83,3 +83,21 @@ systemctl --user status agentic-os-monitor.service
 systemctl --user status agentic-os-backup.service
 python3 scripts/agentic-os-operations.py status
 ```
+
+## Four C readiness audit
+
+The Observability page combines host operations with a live readiness audit:
+
+- **Context:** onboarding, workspace goals and synchronized Obsidian notes.
+- **Connections:** Hermes, Obsidian MCP, MILA and configured integrations.
+- **Capabilities:** the five-agent Hermes fleet, Claude Workspace, MILA voice and Kanban execution history.
+- **Cadence:** host monitoring, incidents, backups and scheduled agent work.
+
+The audit is calculated on the server by `server/lib/readiness.js`. External probes
+run in parallel with bounded timeouts, failures become explicit failed checks, and
+credentials are never returned. Each failed check includes a dashboard route for
+the next corrective action.
+
+When adding a new operational dependency, extend the snapshot in
+`readFourCReadiness()`, add a bounded check in `buildFourCReadiness()`, and cover
+both healthy and degraded behavior in `test/readiness.test.js`.

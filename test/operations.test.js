@@ -49,6 +49,7 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(api, /\/api\/operations\/backup/);
   assert.doesNotMatch(page, /14,208|Rate limit approaching|search_web\(query/);
   assert.match(page, /Host checks/);
+  assert.match(page, /Four C readiness/);
   assert.match(installer, /OnUnitActiveSec=5min/);
   assert.match(installer, /OnCalendar=\*-\*-\* 03:15:00/);
   assert.match(installer, /PathExists=.*backup\.request/);
