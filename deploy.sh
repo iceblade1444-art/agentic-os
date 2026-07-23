@@ -53,9 +53,19 @@ if systemctl --user is-enabled agentic-os-hermes-chat.service >/dev/null 2>&1; t
   echo "· restarted Hermes text provider bridge"
 fi
 
-# 4) build + start
-echo "· building and starting the container…"
-docker compose up -d --build
+# 4) build + start. Speech images contain several gigabytes of ML packages and
+# model tooling, so normal application deploys reuse the last verified image.
+# Rebuild it explicitly after speech-service changes:
+#   REBUILD_SPEECH=true bash deploy.sh
+if [ "${REBUILD_SPEECH:-false}" = "true" ] || ! docker image inspect agentos-speech:latest >/dev/null 2>&1; then
+  echo "· building speech service image…"
+  docker compose build speech
+else
+  echo "· reusing existing speech service image"
+fi
+echo "· building Agentic OS application images…"
+docker compose build agentic-os agentos-runtime
+docker compose up -d --no-build
 
 # 5) health check
 HOST_PORT="$(sed -n 's/^HOST_PORT=//p' .env | tail -n1)"

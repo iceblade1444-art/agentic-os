@@ -24,3 +24,13 @@ speech-models/
 Fine-tuned CTranslate2 Whisper directories may also be placed under
 `speech-models/`. Missing language-specific weights fall back to a stock
 multilingual Whisper model.
+
+The regular `deploy.sh` reuses an existing `agentos-speech:latest` image because
+the ML dependency layer is large. Rebuild it only after changing this service:
+
+```bash
+REBUILD_SPEECH=true bash deploy.sh
+```
+
+Check free disk space before rebuilding; the build temporarily needs several
+additional gigabytes beyond the final image.
