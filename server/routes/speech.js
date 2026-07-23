@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 import { Router, raw } from "express";
+import { rateLimit } from "../lib/auth.js";
 
 const r = Router();
 const SPEECH_URL = process.env.SPEECH_URL || "http://speech:4400";
 const SPEECH_INTERNAL_SECRET = process.env.SPEECH_INTERNAL_SECRET || "";
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGS = new Set(["uz", "kk", "ky", "ru", "en"]);
+
+r.use(rateLimit({ windowMs: 60000, max: 60 }));
 
 export function safeSpeechFilename(value = "") {
   try { value = decodeURIComponent(value); }
@@ -74,8 +77,15 @@ r.post("/tts", async (req, res) => {
 });
 
 // Voice clone: raw audio sample in body, ?text=...&language=...&ref_text=...
-r.post("/clone", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, res) => {
+r.post(
+  "/clone",
+  rateLimit({ windowMs: 60 * 60000, max: 5 }),
+  raw({ type: () => true, limit: MAX_AUDIO_BYTES }),
+  async (req, res) => {
   try {
+    if (req.query.consent !== "true") {
+      return res.status(400).json({ error: "voice owner consent is required" });
+    }
     if (!req.body?.length) return res.status(400).json({ error: "empty reference audio" });
     const text = String(req.query.text || "").slice(0, 4000);
     if (!text.trim()) return res.status(400).json({ error: "text is required" });
@@ -102,6 +112,7 @@ r.post("/clone", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, 
     res.set("Content-Type", "audio/wav");
     res.send(Buffer.from(await upstream.arrayBuffer()));
   } catch (error) { res.status(502).json({ error: error.message }); }
-});
+  },
+);
 
 export default r;

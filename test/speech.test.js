@@ -21,9 +21,13 @@ test("speech service is reproducible without committing model weights", () => {
   const compose = fs.readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
   const ignore = fs.readFileSync(new URL("../.gitignore", import.meta.url), "utf8");
   const dockerfile = fs.readFileSync(new URL("../speech-service/Dockerfile", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../server/routes/speech.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/speech.js", import.meta.url), "utf8");
   assert.match(compose, /context: \.\/speech-service/);
   assert.match(compose, /SPEECH_INTERNAL_SECRET/);
   assert.match(ignore, /speech-models\//);
   assert.match(dockerfile, /uvicorn/);
   assert.doesNotMatch(dockerfile, /COPY\s+.*models/i);
+  assert.match(route, /voice owner consent is required/);
+  assert.match(page, /cloneConsent/);
 });

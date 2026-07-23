@@ -132,6 +132,10 @@ export default {
             <span class="hint" id="cloneState">образец не задан</span>
           </div>
           <input id="cloneRefText" class="input mt-4" placeholder="(необязательно) точный текст, произнесённый в образце — повышает похожесть"/>
+          <label class="row mt-4" style="gap:8px;align-items:flex-start">
+            <input type="checkbox" id="cloneConsent"/>
+            <span class="hint">Подтверждаю согласие владельца голоса на создание этой озвучки</span>
+          </label>
         </div>
         <div class="row mt-4" style="gap:8px">
           <button class="btn btn-primary" id="ttsBtn">${icon("sparkles")}<span>Озвучить</span></button>
@@ -277,7 +281,8 @@ export default {
         let res;
         if (engine === "clone") {
           if (!cloneSample) throw new Error("сначала задай образец голоса");
-          const params = new URLSearchParams({ text, language: q("#ttsLang").value });
+          if (!q("#cloneConsent").checked) throw new Error("подтверди согласие владельца голоса");
+          const params = new URLSearchParams({ text, language: q("#ttsLang").value, consent: "true" });
           const refText = q("#cloneRefText").value.trim();
           if (refText) params.set("ref_text", refText);
           res = await fetch(`/api/speech/clone?${params}`, {
