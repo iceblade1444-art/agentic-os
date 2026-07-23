@@ -11,6 +11,7 @@ agentos-runtime/           Python orchestration runtime on port 8765
 vault/                     shared Obsidian Markdown vault
 Hermes Agent               primary orchestrator, installed for the Linux deploy user
 Mila + Gemini Live         voice and conversation assistant
+speech-service/            self-hosted STT, TTS and consent-based voice cloning
 ```
 
 The **Obsidian Library** page is the live view of `vault/`. It shows Markdown
@@ -18,6 +19,20 @@ notes, folders, tags, wiki-links, MCP readiness, the tools available to Hermes,
 and a persistent audit identifying which agent listed, searched, read, created,
 or updated a note. Agentic OS auto-starts the bundled Obsidian MCP server unless
 `AUTO_CONNECT_OBSIDIAN=false`.
+
+### Self-hosted Speech Studio
+
+`speech-service/` contains the reproducible CPU speech backend used by the
+Speech Studio page. Its model weights are deliberately kept outside Git because
+they can occupy several gigabytes. Set `SPEECH_MODELS_DIR` and
+`QWEN_TTS_MODELS_DIR` in the server `.env`; Compose mounts them into the private
+`speech` service. `deploy.sh` creates a dedicated internal secret shared only by
+the Node API and speech container.
+
+The browser never calls the speech container directly. Authenticated requests
+pass through `/api/speech`, where audio uploads are bounded to 25 MB and text is
+bounded to 4,000 characters. See `speech-service/README.md` for the expected
+model layout.
 
 ### Hermes specialist fleet
 

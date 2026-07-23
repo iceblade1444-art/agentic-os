@@ -15,6 +15,7 @@ import kanban from "./routes/kanban.js";
 import claudeCode from "./routes/claude-code.js";
 import milaActions from "./routes/mila-actions.js";
 import operations from "./routes/operations.js";
+import speech from "./routes/speech.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
@@ -37,6 +38,7 @@ const CSP = [
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://api.openai.com https://api.anthropic.com wss://generativelanguage.googleapis.com",
   "script-src 'self'",
+  "media-src 'self' blob:",
   "frame-src 'self'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
@@ -91,6 +93,7 @@ app.use("/api/kanban", kanban);
 app.use("/api/claude-code", claudeCode);
 app.use("/api/mila", milaActions);
 app.use("/api/operations", operations);
+app.use("/api/speech", speech);
 app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 

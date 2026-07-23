@@ -6,3 +6,6 @@ data/
 .claude/
 __pycache__/
 *.pyc
+*.bak
+speech-models/
+speech-qwen-models/
