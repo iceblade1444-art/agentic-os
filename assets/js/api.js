@@ -198,4 +198,14 @@ export const api = {
     hubPreview: (identifier, profile = "") => j(`/api/skills/hub/preview?identifier=${encodeURIComponent(identifier)}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),
     hubInstall: (identifier, profile = "") => j("/api/skills/hub/install", { method: "POST", body: { identifier, profile } }),
   },
+  routines: {
+    list: (profile = "all") => j(`/api/routines?profile=${encodeURIComponent(profile)}`),
+    deliveryTargets: () => j("/api/routines/delivery-targets"),
+    blueprints: () => j("/api/routines/blueprints"),
+    runs: (id, profile = "", limit = 20) => j(`/api/routines/${encodeURIComponent(id)}/runs?limit=${limit}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),
+    create: (body) => j("/api/routines", { method: "POST", body }),
+    update: (id, body) => j(`/api/routines/${encodeURIComponent(id)}`, { method: "PUT", body }),
+    action: (id, action, profile = "default") => j(`/api/routines/${encodeURIComponent(id)}/${encodeURIComponent(action)}`, { method: "POST", body: { profile } }),
+    remove: (id, profile = "default") => j(`/api/routines/${encodeURIComponent(id)}?profile=${encodeURIComponent(profile)}`, { method: "DELETE" }),
+  },
 };
