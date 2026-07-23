@@ -494,6 +494,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: var(--text-base);
 .kanban-agent-state i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .kanban-agent-state.running { color: var(--warning); }
 .kanban-agent-state.blocked { color: var(--error); }
+.kanban-agent-state.waiting { color: var(--warning); }
 .kanban-agent-count { align-self: start; }
 .kanban-board {
   min-height: 570px; flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 280px; gap: 9px;

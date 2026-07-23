@@ -17,10 +17,15 @@ let poll = null;
 
 const meta = (name) => META[name] || { label: name, role: "Hermes profile", icon: "bot", color: "violet" };
 const count = (name, statuses) => tasks.filter((task) => task.assignee === name && statuses.includes(task.status)).length;
+const waitingCount = (name) => tasks.filter((task) =>
+  task.assignee === name && task.status === "blocked" && task.block_kind === "needs_input").length;
+const failedCount = (name) => tasks.filter((task) =>
+  task.assignee === name && task.status === "blocked" && task.block_kind !== "needs_input").length;
 
 function statusFor(name) {
   if (count(name, ["running"])) return ["Working", "warning"];
-  if (count(name, ["blocked"])) return ["Blocked", "error"];
+  if (failedCount(name)) return ["Blocked", "error"];
+  if (waitingCount(name)) return ["Waiting input", "warning"];
   if (count(name, ["triage", "todo", "scheduled", "ready", "review"])) return ["Queued", "info"];
   return ["Ready", "success"];
 }
@@ -69,12 +74,13 @@ function openProfile(name) {
   const [status, tone] = statusFor(name);
   const running = count(name, ["running"]);
   const queued = count(name, ["triage", "todo", "scheduled", "ready", "review"]);
-  const blocked = count(name, ["blocked"]);
+    const waiting = waitingCount(name);
+    const blocked = failedCount(name);
   openModal({
     title: `${view.label} · ${view.role}`, width: 640,
     body: `<div class="kanban-profile-head"><span class="kanban-agent-icon ${view.color}">${icon(view.icon)}</span><div><strong>${esc(profile.model || "Configured model")}</strong><span>${esc(profile.provider || "Hermes profile")}</span></div><span class="badge ${tone}">${status}</span></div>
       <p class="kanban-profile-description">${esc(profile.description || "No routing description configured.")}</p>
-      <div class="kanban-profile-stats"><span><strong>${running}</strong>Running</span><span><strong>${queued}</strong>Queued</span><span><strong>${blocked}</strong>Blocked</span><span><strong>${profile.skill_count || 0}</strong>Skills</span></div>`,
+      <div class="kanban-profile-stats"><span><strong>${running}</strong>Running</span><span><strong>${queued}</strong>Queued</span><span><strong>${waiting}</strong>Waiting</span><span><strong>${blocked}</strong>Blocked</span><span><strong>${profile.skill_count || 0}</strong>Skills</span></div>`,
     footer: `<a class="btn btn-secondary" href="#/hermes" data-close>${icon("settings")}Configure</a><button class="btn btn-primary" id="fleetAssign">${icon("plus")}Assign task</button>`,
     onMount: (modal) => {
       modal.querySelector("#fleetAssign").onclick = () => {

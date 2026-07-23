@@ -57,14 +57,16 @@ function service(label, ready, detail, href) {
 function fleetState(profile, tasks) {
   const assigned = tasks.filter((task) => task.assignee === profile.name);
   const running = assigned.filter((task) => task.status === "running").length;
-  const blocked = assigned.filter((task) => task.status === "blocked").length;
+  const waiting = assigned.filter((task) => task.status === "blocked" && task.block_kind === "needs_input").length;
+  const blocked = assigned.filter((task) => task.status === "blocked" && task.block_kind !== "needs_input").length;
   const queued = assigned.filter((task) => openStatuses.has(task.status) && task.status !== "running" && task.status !== "blocked").length;
   return {
     running,
+    waiting,
     blocked,
     queued,
-    label: running ? "Working" : blocked ? "Blocked" : queued ? "Queued" : "Ready",
-    tone: running ? "warning" : blocked ? "error" : queued ? "info" : "success",
+    label: running ? "Working" : blocked ? "Blocked" : waiting ? "Waiting input" : queued ? "Queued" : "Ready",
+    tone: running || waiting ? "warning" : blocked ? "error" : queued ? "info" : "success",
   };
 }
 
@@ -137,7 +139,7 @@ function dashboardHTML(data) {
         <div class="ops-fleet">${profiles.map((profile) => {
           const meta = META[profile.name] || { label: profile.name, role: "Agent", icon: "bot", color: "violet" };
           const current = fleetState(profile, tasks);
-          return `<a class="ops-agent" href="#/agents"><span class="kanban-agent-icon ${esc(meta.color)}">${icon(meta.icon)}</span><span><strong>${esc(meta.label)}</strong><small>${esc(meta.role)} · ${current.running || current.queued || current.blocked || 0} active</small></span><span class="badge ${current.tone}">${esc(current.label)}</span></a>`;
+          return `<a class="ops-agent" href="#/agents"><span class="kanban-agent-icon ${esc(meta.color)}">${icon(meta.icon)}</span><span><strong>${esc(meta.label)}</strong><small>${esc(meta.role)} · ${current.running || current.queued || current.waiting || current.blocked || 0} active</small></span><span class="badge ${current.tone}">${esc(current.label)}</span></a>`;
         }).join("")}</div>
       </section>
 

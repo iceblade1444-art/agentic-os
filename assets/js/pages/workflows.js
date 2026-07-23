@@ -68,8 +68,15 @@ function agentState(name) {
   const tasks = taskList().filter((task) => task.assignee === name);
   const running = tasks.filter((task) => task.status === "running").length;
   const queued = tasks.filter((task) => ["triage", "todo", "scheduled", "ready", "review"].includes(task.status)).length;
-  const blocked = tasks.filter((task) => task.status === "blocked").length;
-  return { running, queued, blocked, label: running ? "Working" : blocked ? "Blocked" : queued ? "Queued" : "Ready" };
+  const waiting = tasks.filter((task) => task.status === "blocked" && task.block_kind === "needs_input").length;
+  const blocked = tasks.filter((task) => task.status === "blocked" && task.block_kind !== "needs_input").length;
+  return {
+    running,
+    queued,
+    waiting,
+    blocked,
+    label: running ? "Working" : blocked ? "Blocked" : waiting ? "Waiting input" : queued ? "Queued" : "Ready",
+  };
 }
 
 function renderFleet() {
@@ -81,8 +88,8 @@ function renderFleet() {
     return `<button class="kanban-agent" type="button" data-profile="${esc(profile.name)}">
       <span class="kanban-agent-icon ${esc(meta.color)}">${icon(meta.icon)}</span>
       <span class="kanban-agent-copy"><strong>${esc(meta.label)}</strong><small>${esc(meta.role)}</small></span>
-      <span class="kanban-agent-state ${state.running ? "running" : state.blocked ? "blocked" : ""}"><i></i>${state.label}</span>
-      <span class="kanban-agent-count">${state.running ? `${state.running} running` : state.queued ? `${state.queued} queued` : profile.model || ""}</span>
+      <span class="kanban-agent-state ${state.running ? "running" : state.blocked ? "blocked" : state.waiting ? "waiting" : ""}"><i></i>${state.label}</span>
+      <span class="kanban-agent-count">${state.running ? `${state.running} running` : state.blocked ? `${state.blocked} blocked` : state.waiting ? `${state.waiting} waiting` : state.queued ? `${state.queued} queued` : profile.model || ""}</span>
     </button>`;
   }).join("");
   host.querySelectorAll("[data-profile]").forEach((button) => {
@@ -146,7 +153,12 @@ function renderBoard() {
 
 function renderSummary() {
   const summary = pageRoot?.querySelector("#kanbanSummary");
-  if (summary) summary.textContent = `${taskList().length} tasks · ${column("running").length} running · ${column("blocked").length} blocked`;
+  if (summary) {
+    const blocked = column("blocked");
+    const waiting = blocked.filter((task) => task.block_kind === "needs_input").length;
+    const failed = blocked.length - waiting;
+    summary.textContent = `${taskList().length} tasks · ${column("running").length} running${waiting ? ` · ${waiting} waiting input` : ""}${failed ? ` · ${failed} blocked` : ""}`;
+  }
   const mode = pageRoot?.querySelector("#kanbanMode");
   if (mode && orchestration) {
     mode.className = `btn sm ${orchestration.auto_decompose ? "btn-primary" : "btn-secondary"}`;

@@ -85,7 +85,10 @@ test("Agentic OS exposes a real Hermes fleet Kanban instead of the local workflo
   assert.match(page, /uploadAttachment/);
   assert.match(page, /downloadAttachment/);
   assert.match(page, /ondragstart/);
+  assert.match(page, /block_kind === "needs_input"/);
+  assert.match(page, /Waiting input/);
   assert.match(agents, /api\.kanban\.profiles/);
+  assert.match(agents, /Waiting input/);
   assert.match(api, /\/api\/kanban\/board/);
   assert.match(api, /taskLog/);
   assert.match(api, /deleteAttachment/);

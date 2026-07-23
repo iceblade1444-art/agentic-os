@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATE_ROOT="$REPO_ROOT/hermes/fleet"
 PROFILE_ROOT="$HOME/.hermes/profiles"
 WORKSPACE_ROOT="${HERMES_FLEET_WORKSPACE_ROOT:-$HOME/hermes-workspaces}"
+HERMES_TIMEZONE="${HERMES_TIMEZONE:-Asia/Tashkent}"
 
 if [[ ! -x "$HERMES_BIN" ]]; then
   echo "Hermes CLI was not found at $HERMES_BIN" >&2
@@ -120,6 +121,7 @@ if missing:
 PY
 "$HERMES_BIN" config set kanban.orchestrator_profile default >/dev/null
 "$HERMES_BIN" config set kanban.default_assignee default >/dev/null
+"$HERMES_BIN" config set timezone "$HERMES_TIMEZONE" >/dev/null
 "$HERMES_BIN" config set kanban.auto_decompose true >/dev/null
 "$HERMES_BIN" config set kanban.auto_decompose_per_tick 2 >/dev/null
 "$HERMES_BIN" config set kanban.dispatch_in_gateway true >/dev/null
@@ -173,6 +175,7 @@ PY
   chmod 600 "$profile_home/.env"
 
   "$HERMES_BIN" -p "$name" config set terminal.cwd "$workspace" >/dev/null
+  "$HERMES_BIN" -p "$name" config set timezone "$HERMES_TIMEZONE" >/dev/null
   "$HERMES_BIN" -p "$name" config set terminal.docker_volumes "$volumes" >/dev/null
   "$HERMES_BIN" -p "$name" config set terminal.container_cpu 1 >/dev/null
   "$HERMES_BIN" -p "$name" config set terminal.container_memory "$memory_mb" >/dev/null
