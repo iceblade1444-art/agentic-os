@@ -187,6 +187,7 @@ export const api = {
   operations: {
     status: () => j("/api/operations/status"),
     backup: () => j("/api/operations/backup", { method: "POST" }),
+    restoreDrill: () => j("/api/operations/restore-drill", { method: "POST" }),
   },
   skills: {
     list: (profile = "") => j(`/api/skills${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),

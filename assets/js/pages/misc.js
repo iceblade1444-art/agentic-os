@@ -472,7 +472,7 @@ let operationsLoading = false;
 export const observability = {
   title: "Observability",
   render() {
-    const actions = api.on ? `<div class="row gap-2"><button class="btn btn-secondary" id="opsRefresh">${icon("refresh")}Refresh</button>${api.auth.canAdmin ? `<button class="btn btn-primary" id="opsBackup">${icon("database")}Create backup</button>` : ""}</div>` : "";
+    const actions = api.on ? `<div class="row gap-2"><button class="btn btn-secondary" id="opsRefresh">${icon("refresh")}Refresh</button>${api.auth.canAdmin ? `<button class="btn btn-secondary" id="opsRestoreDrill">${icon("check")}Verify restore</button><button class="btn btn-primary" id="opsBackup">${icon("database")}Create backup</button>` : ""}</div>` : "";
     if (!api.on) return head("Observability", "Server health, backups and incidents", actions) + demoNote("Start the Node backend to read host operations state.");
     if (operationsError) return head("Observability", "Server health, backups and incidents", actions) + errCard(operationsError);
     if (!operationsState) return head("Observability", "Server health, backups and incidents", actions) + loadingCard("Loading host health…");
@@ -491,6 +491,16 @@ export const observability = {
       } catch (error) { toast("error", "Could not queue backup", error.message); }
       button.classList.remove("loading");
     });
+    root.querySelector("#opsRestoreDrill")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.classList.add("loading");
+      try {
+        await api.operations.restoreDrill();
+        toast("success", "Restore drill queued", "The host service will verify the latest backup safely.");
+        [4000, 12000, 30000].forEach((delay) => setTimeout(() => loadOperations(true), delay));
+      } catch (error) { toast("error", "Could not queue restore drill", error.message); }
+      button.classList.remove("loading");
+    });
     if (!operationsState && !operationsLoading) loadOperations();
   },
 };
@@ -507,6 +517,7 @@ async function loadOperations(force = false) {
 function operationsHTML(state) {
   if (!state.available) return `${fourCReadinessHTML(state.readiness)}<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Host monitor is not installed</div><div class="a-desc">Install the Agentic OS operations systemd units on the server to enable checks and backups.</div></div></div>`;
   const backup = state.backup || {};
+  const restoreDrill = state.restoreDrill || {};
   const disk = (state.checks || []).find((check) => check.id === "disk");
   const incidents = state.incidents || [];
   return `
@@ -515,6 +526,7 @@ function operationsHTML(state) {
       ${statMini("System status", opsStatusText(state.status), state.status === "healthy" ? "check" : "warn")}
       ${statMini("Active incidents", state.activeIncidents || 0, "alert")}
       ${statMini("Last backup", opsAge(backup.lastSuccessAt), "database")}
+      ${statMini("Restore verified", opsAge(restoreDrill.lastSuccessAt), "check")}
       ${statMini("Server storage", disk?.metrics?.usedPercent != null ? `${disk.metrics.usedPercent}%` : "Unknown", "database")}
     </div>
     <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr);margin-bottom:16px">
@@ -531,6 +543,15 @@ function operationsHTML(state) {
           ${opsFact("Daily schedule", `${state.schedule?.backupDailyAt || "03:15"} · ${state.schedule?.timezone || "server time"}`)}
         </div>
         ${backup.error ? `<div class="field-error mt-3">${esc(backup.error)}</div>` : ""}
+        <div class="divider"></div>
+        <div class="card-head" style="padding:0"><h3>Restore drill</h3><span class="badge ${opsTone(restoreDrill.status)}">${esc(opsStatusText(restoreDrill.status))}</span></div>
+        <div class="stack gap-3 mt-3">
+          ${opsFact("Last verified", opsAge(restoreDrill.lastSuccessAt))}
+          ${opsFact("Files checked", String(restoreDrill.filesChecked || 0))}
+          ${opsFact("Archives", Array.isArray(restoreDrill.archives) ? String(restoreDrill.archives.length) : "0")}
+          ${opsFact("Backup commit", restoreDrill.gitHead ? String(restoreDrill.gitHead).slice(0, 12) : "Unknown")}
+        </div>
+        ${restoreDrill.error ? `<div class="field-error mt-3">${esc(restoreDrill.error)}</div>` : ""}
       </div>
     </div>
     <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Incidents</h3><span class="hint">Latest ${Math.min(incidents.length, 50)}</span></div>

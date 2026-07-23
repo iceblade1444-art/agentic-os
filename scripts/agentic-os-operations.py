@@ -64,6 +64,7 @@ class Operations:
         self.state_dir = Path(os.environ.get("OPS_STATE_DIR", Path.home() / ".local/state/agentic-os")).resolve()
         self.state_file = self.state_dir / "operations.json"
         self.request_file = self.state_dir / "backup.request"
+        self.restore_request_file = self.state_dir / "restore.request"
         self.backup_root = Path(os.environ.get("OPS_BACKUP_DIR", Path.home() / "backups/agentic-os")).resolve()
         self.retention_days = max(1, int(os.environ.get("OPS_BACKUP_RETENTION_DAYS", "14")))
         self.max_backups = max(2, int(os.environ.get("OPS_BACKUP_MAX_COUNT", "14")))
@@ -164,6 +165,79 @@ class Operations:
     def backup_count(self) -> int:
         return sum(1 for item in self.backup_root.iterdir() if item.is_dir() and item.name[:8].isdigit())
 
+    def latest_backup(self) -> Path | None:
+        entries = sorted((item for item in self.backup_root.iterdir() if item.is_dir() and item.name[:8].isdigit()), reverse=True)
+        return entries[0] if entries else None
+
+    @staticmethod
+    def assert_safe_tar_member(member: tarfile.TarInfo) -> None:
+        target = Path(member.name)
+        if target.is_absolute() or ".." in target.parts:
+            raise RuntimeError(f"unsafe archive path: {member.name}")
+
+    def restore_drill(self, backup_path: Path | None = None) -> dict:
+        with self.locked():
+            self.restore_request_file.unlink(missing_ok=True)
+            state = self.load()
+            state["restoreDrill"] = {**state.get("restoreDrill", {}), "status": "running", "startedAt": iso(), "error": None}
+            self.save(state)
+
+            try:
+                selected = backup_path or self.latest_backup()
+                if not selected:
+                    raise RuntimeError("no backup is available for restore drill")
+                selected = selected.resolve()
+                if not selected.is_dir() or self.backup_root not in selected.parents:
+                    raise RuntimeError("restore drill can only read backups inside OPS_BACKUP_DIR")
+
+                manifest_file = selected / "manifest.json"
+                manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+                archives = manifest.get("archives", [])
+                if not isinstance(archives, list) or not archives:
+                    raise RuntimeError("backup manifest does not list archives")
+                git_head = (selected / "git-head").read_text(encoding="utf-8").strip()
+                if not git_head:
+                    raise RuntimeError("backup git-head is empty")
+
+                checked_files = 0
+                checked_archives = []
+                with tempfile.TemporaryDirectory(prefix="agentic-os-restore-", dir=self.state_dir) as temp_dir:
+                    target_root = Path(temp_dir).resolve()
+                    for archive_name in archives:
+                        archive = selected / str(archive_name)
+                        if not archive.is_file():
+                            raise RuntimeError(f"missing archive: {archive_name}")
+                        with tarfile.open(archive, "r:gz") as bundle:
+                            members = bundle.getmembers()
+                            for member in members:
+                                self.assert_safe_tar_member(member)
+                            bundle.extractall(target_root)
+                            checked_files += sum(1 for member in members if member.isfile())
+                        checked_archives.append(str(archive_name))
+
+                    if not any(target_root.iterdir()):
+                        raise RuntimeError("restore drill extracted no files")
+
+                completed = iso()
+                state = self.load()
+                state["restoreDrill"] = {
+                    "status": "success",
+                    "lastSuccessAt": completed,
+                    "backupPath": str(selected),
+                    "gitHead": git_head,
+                    "archives": checked_archives,
+                    "filesChecked": checked_files,
+                    "error": None,
+                }
+                self.save(state)
+                return state["restoreDrill"]
+            except Exception as error:
+                state = self.load()
+                state["restoreDrill"] = {**state.get("restoreDrill", {}), "status": "error", "failedAt": iso(), "error": str(error)[:500]}
+                self.save(state)
+                self.notify("critical", f"Agentic OS restore drill failed: {error}")
+                raise
+
     def prune(self, current: Path) -> list[str]:
         entries = sorted((item for item in self.backup_root.iterdir() if item.is_dir() and item.name[:8].isdigit()), reverse=True)
         cutoff = now() - dt.timedelta(days=self.retention_days)
@@ -224,6 +298,17 @@ class Operations:
         status = "healthy" if age < dt.timedelta(hours=36) else "degraded"
         return self.check("backup", "Automated backup", status, f"last success {round(age.total_seconds() / 3600, 1)}h ago")
 
+    def check_restore_drill(self, state: dict) -> dict:
+        drill = state.get("restoreDrill", {})
+        last = parse_time(drill.get("lastSuccessAt"))
+        if drill.get("status") == "error":
+            return self.check("restore-drill", "Backup restore drill", "critical", drill.get("error") or "last restore drill failed")
+        if not last:
+            return self.check("restore-drill", "Backup restore drill", "degraded", "no successful restore drill recorded")
+        age = now() - last
+        status = "healthy" if age < dt.timedelta(days=14) else "degraded"
+        return self.check("restore-drill", "Backup restore drill", status, f"last verified {round(age.total_seconds() / 86400, 1)} days ago")
+
     @staticmethod
     def check(check_id: str, name: str, status: str, detail: str, metrics: dict | None = None) -> dict:
         value = {"id": check_id, "name": name, "status": status, "detail": str(detail)[:500], "checkedAt": iso()}
@@ -234,6 +319,8 @@ class Operations:
     def monitor(self) -> dict:
         if self.request_file.exists():
             self.backup()
+        if self.restore_request_file.exists():
+            self.restore_drill()
         with self.locked():
             previous = self.load()
             checks = [
@@ -244,6 +331,7 @@ class Operations:
                 self.check_service("agentic-os-hermes-chat.service", "Hermes text bridge"),
                 self.check_disk(),
                 self.check_backup(previous),
+                self.check_restore_drill(previous),
             ]
             if self.public_health_url:
                 checks.insert(1, self.check_http(self.public_health_url, "public-api", "Public HTTPS endpoint"))
@@ -309,7 +397,7 @@ class Operations:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["monitor", "backup", "status"])
+    parser.add_argument("command", choices=["monitor", "backup", "restore-drill", "status"])
     parser.add_argument("--root", default=str(Path(__file__).resolve().parent.parent))
     args = parser.parse_args()
     root = Path(args.root)
@@ -319,6 +407,8 @@ def main() -> None:
         value = operations.monitor()
     elif args.command == "backup":
         value = operations.backup()
+    elif args.command == "restore-drill":
+        value = operations.restore_drill()
     else:
         value = operations.load()
     print(json.dumps(value, ensure_ascii=True))

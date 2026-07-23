@@ -76,10 +76,36 @@ Unit=agentic-os-backup.service
 WantedBy=default.target
 EOF
 
-chmod 600 "$UNIT_DIR"/agentic-os-{monitor,backup}.{service,timer} "$UNIT_DIR/agentic-os-backup.path"
+cat > "$UNIT_DIR/agentic-os-restore-drill.service" <<EOF
+[Unit]
+Description=Verify the latest Agentic OS backup can be restored
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=$ROOT
+EnvironmentFile=-$ROOT/.env
+Environment=OPS_STATE_DIR=$STATE_DIR
+ExecStart=$PYTHON $ROOT/scripts/agentic-os-operations.py restore-drill --root $ROOT
+EOF
+
+cat > "$UNIT_DIR/agentic-os-restore-drill.path" <<EOF
+[Unit]
+Description=Run an Agentic OS restore drill requested by the dashboard
+
+[Path]
+PathExists=$STATE_DIR/restore.request
+Unit=agentic-os-restore-drill.service
+
+[Install]
+WantedBy=default.target
+EOF
+
+chmod 600 "$UNIT_DIR"/agentic-os-{monitor,backup}.{service,timer} "$UNIT_DIR/agentic-os-backup.path" "$UNIT_DIR/agentic-os-restore-drill.service" "$UNIT_DIR/agentic-os-restore-drill.path"
 systemctl --user daemon-reload
-systemctl --user enable --now agentic-os-monitor.timer agentic-os-backup.timer agentic-os-backup.path
+systemctl --user enable --now agentic-os-monitor.timer agentic-os-backup.timer agentic-os-backup.path agentic-os-restore-drill.path
 systemctl --user start agentic-os-backup.service
+systemctl --user start agentic-os-restore-drill.service
 systemctl --user start agentic-os-monitor.service
 
 echo "Agentic OS operations services installed."
