@@ -15,6 +15,7 @@ import chat from "./pages/chat.js";
 import workflows from "./pages/workflows.js";
 import settings from "./pages/settings.js";
 import speech from "./pages/speech.js";
+import routines from "./pages/routines.js";
 import components from "./pages/components.js";
 import * as misc from "./pages/misc.js";
 
@@ -30,6 +31,7 @@ const NAV = [
     { route: "agents", icon: "agents", label: "Agents" },
     { route: "chat", icon: "chat", label: "Chat" },
     { route: "kanban", icon: "workflow", label: "Kanban" },
+    { route: "routines", icon: "calendar", label: "Routines" },
     { route: "tools", icon: "tools", label: "Skill Studio" },
   ]},
   { group: "Context", items: [
@@ -48,7 +50,7 @@ const NAV = [
 ];
 
 const PAGES = {
-  "": dashboard, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, settings, components,
+  "": dashboard, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,

@@ -131,6 +131,24 @@ export async function hermesSkillsRequest(pathname, options = {}, requestImpl = 
   return data;
 }
 
+export async function hermesCronRequest(pathname, options = {}, requestImpl = dashboardRequest) {
+  const value = String(pathname || "");
+  if (value !== "/api/cron" && !value.startsWith("/api/cron/") && !value.startsWith("/api/cron?")) {
+    throw new Error("Invalid Hermes Cron path");
+  }
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  const response = await authorizedDashboardRequest(value, {
+    method: options.method,
+    headers: payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {},
+    body: payload,
+    timeoutMs: options.timeoutMs || 15000,
+  }, requestImpl);
+  let data;
+  try { data = response.text ? JSON.parse(response.text) : {}; }
+  catch { throw new Error("Hermes Cron returned invalid JSON"); }
+  return data;
+}
+
 export function resetHermesKanbanToken() {
   cachedToken = "";
 }

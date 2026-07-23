@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
-  hermesKanbanRawRequest, hermesKanbanRequest, hermesSkillsRequest, resetHermesKanbanToken, withKanbanBoard,
+  hermesCronRequest, hermesKanbanRawRequest, hermesKanbanRequest, hermesSkillsRequest, resetHermesKanbanToken, withKanbanBoard,
 } from "../server/lib/hermes-kanban.js";
 
 test("Hermes Kanban connector pins requests to the Agentic OS board", () => {
@@ -55,6 +55,20 @@ test("Hermes Skills connector reuses private dashboard authentication", async ()
   await assert.rejects(() => hermesSkillsRequest("/api/config", {}, request), /Invalid Hermes Skills path/);
 });
 
+test("Hermes Cron connector keeps scheduler mutations behind the dashboard bridge", async () => {
+  resetHermesKanbanToken();
+  const calls = [];
+  const request = async (pathname, options = {}) => {
+    calls.push({ pathname, options });
+    if (pathname === "/") return { status: 200, text: '<script>window.__HERMES_SESSION_TOKEN__="cron-token";</script>' };
+    return { status: 200, text: JSON.stringify([{ id: "daily-brief", schedule: "0 9 * * *" }]) };
+  };
+  const result = await hermesCronRequest("/api/cron/jobs?profile=all", {}, request);
+  assert.equal(result[0].id, "daily-brief");
+  assert.equal(calls[1].options.headers.Authorization, "Bearer cron-token");
+  await assert.rejects(() => hermesCronRequest("/api/sessions", {}, request), /Invalid Hermes Cron path/);
+});
+
 test("Agentic OS exposes a real Hermes fleet Kanban instead of the local workflow canvas", () => {
   const page = fs.readFileSync(new URL("../assets/js/pages/workflows.js", import.meta.url), "utf8");
   const agents = fs.readFileSync(new URL("../assets/js/pages/agents.js", import.meta.url), "utf8");
@@ -96,4 +110,19 @@ test("Skill Studio manages the real Hermes catalog instead of browser mock data"
   assert.match(routes, /hermesSkillsRequest/);
   assert.match(routes, /requireAdmin/);
   assert.match(app, /label: "Skill Studio"/);
+});
+
+test("Routines UI manages native Hermes Cron jobs and exposes run history", () => {
+  const page = fs.readFileSync(new URL("../assets/js/pages/routines.js", import.meta.url), "utf8");
+  const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
+  const routes = fs.readFileSync(new URL("../server/routes/routines.js", import.meta.url), "utf8");
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  assert.match(page, /api\.routines\.create/);
+  assert.match(page, /api\.routines\.action/);
+  assert.match(page, /api\.routines\.runs/);
+  assert.match(page, /Daily operations brief/);
+  assert.match(api, /\/api\/routines\/delivery-targets/);
+  assert.match(routes, /ACTIONS = new Set\(\["pause", "resume", "trigger"\]\)/);
+  assert.match(routes, /requireAdmin/);
+  assert.match(app, /route: "routines"/);
 });

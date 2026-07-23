@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { db } from "../store.js";
 import * as mcp from "../mcp/manager.js";
 import { claudeCode } from "./claude-code.js";
-import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
+import { hermesCronRequest, hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { knowledge } from "./knowledge.js";
 import { milaStatus } from "./mila.js";
@@ -47,11 +47,13 @@ export function buildFourCReadiness(snapshot) {
     operations = {},
     connectedIntegrations = [],
     liveMcp = [],
+    cronJobs = [],
   } = snapshot;
   const goals = onboardingState.workspace?.goals || [];
   const profileCount = Array.isArray(profiles.profiles) ? profiles.profiles.length : 0;
   const totalTasks = countTasks(board);
   const scheduledTasks = countTasks(board, "scheduled");
+  const activeRoutines = (Array.isArray(cronJobs) ? cronJobs : []).filter((job) => job.enabled !== false && job.paused !== true && job.status !== "paused");
 
   const sections = [
     section("context", "Context", "Shared business knowledge and user preferences", [
@@ -76,7 +78,7 @@ export function buildFourCReadiness(snapshot) {
       checked("monitor", "Host monitoring", operations.available, operations.available ? `Checks run every ${operations.schedule?.monitorEveryMinutes || 5} minutes.` : "The host monitor is not installed.", "Open Observability", "#/observability"),
       checked("health", "Incident loop", operations.status === "healthy" && !operations.activeIncidents, operations.status === "healthy" ? "Host checks are healthy with no active incidents." : `${operations.activeIncidents || 0} active incidents; host status is ${operations.status || "unknown"}.`, "Review incidents", "#/observability"),
       checked("backup", "Automated backup", operations.backup?.status === "success", operations.backup?.status === "success" ? `Last successful backup: ${operations.backup.lastSuccessAt || "recorded"}.` : "No successful automated backup is recorded.", "Create backup", "#/observability"),
-      checked("scheduled-work", "Recurring agent work", scheduledTasks > 0, scheduledTasks ? `${scheduledTasks} tasks are scheduled for autonomous execution.` : "No recurring or scheduled agent task exists yet.", "Plan recurring work", "#/kanban"),
+      checked("scheduled-work", "Recurring agent work", activeRoutines.length > 0 || scheduledTasks > 0, activeRoutines.length ? `${activeRoutines.length} Hermes routines are active.` : scheduledTasks ? `${scheduledTasks} Kanban tasks are scheduled for autonomous execution.` : "No recurring or scheduled agent task exists yet.", "Plan recurring work", "#/routines"),
     ]),
   ];
 
@@ -107,6 +109,7 @@ export async function readFourCReadiness(user) {
     milaStatus(milaConfig, { timeoutMs: 3500 }),
     hermesKanbanRequest(kanbanPath("/profiles", config.hermesKanbanBoard), { timeoutMs: 4000 }),
     hermesKanbanRequest(kanbanPath("/board", config.hermesKanbanBoard), { timeoutMs: 4000 }),
+    hermesCronRequest("/api/cron/jobs?profile=all", { timeoutMs: 5000 }),
   ]);
   const value = (index) => results[index].status === "fulfilled" ? results[index].value : fallback(results[index].reason);
   return buildFourCReadiness({
@@ -117,6 +120,7 @@ export async function readFourCReadiness(user) {
     mila: value(3),
     profiles: value(4),
     board: value(5),
+    cronJobs: value(6),
     operations,
     connectedIntegrations: db.integrations.list().filter((item) => item.connected).map((item) => item.provider),
     liveMcp: db.mcp.list().filter((item) => mcp.isLive(item.id)).map((item) => item.id),

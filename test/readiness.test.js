@@ -47,3 +47,12 @@ test("Four C readiness exposes concrete gaps without leaking configuration", () 
   assert.deepEqual(result.recommendations.map((item) => item.title), ["Open MILA integration", "Open MILA Live", "Plan recurring work"]);
   assert.equal(JSON.stringify(result).includes("adminToken"), false);
 });
+
+test("Hermes routines satisfy the recurring cadence check", () => {
+  const snapshot = healthySnapshot();
+  snapshot.board.columns.find((column) => column.name === "scheduled").tasks = [];
+  snapshot.cronJobs = [{ id: "daily-brief", enabled: true, schedule: "0 9 * * *" }];
+  const result = buildFourCReadiness(snapshot);
+  assert.equal(result.sections.find((item) => item.id === "cadence").score, 100);
+  assert.equal(result.recommendations.some((item) => item.title === "Plan recurring work"), false);
+});
