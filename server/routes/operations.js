@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { authenticatedUser, requireRoles } from "../lib/auth.js";
-import { readOperationsState, requestOperationsBackup } from "../lib/operations.js";
+import { readOperationsState, requestOperationsBackup, requestOperationsRestoreDrill } from "../lib/operations.js";
 import { readFourCReadiness } from "../lib/readiness.js";
 
 const r = Router();
@@ -15,6 +15,10 @@ r.get("/status", async (req, res) => {
 r.post("/backup", requireAdmin, (req, res) => {
   try { res.status(202).json(requestOperationsBackup()); }
   catch (error) { res.status(503).json({ error: `Could not queue backup: ${error.message}` }); }
+});
+r.post("/restore-drill", requireAdmin, (req, res) => {
+  try { res.status(202).json(requestOperationsRestoreDrill()); }
+  catch (error) { res.status(503).json({ error: `Could not queue restore drill: ${error.message}` }); }
 });
 
 export default r;

@@ -21,6 +21,7 @@ function healthySnapshot() {
       status: "healthy",
       activeIncidents: 0,
       backup: { status: "success", lastSuccessAt: "2026-07-23T03:15:00Z" },
+      restoreDrill: { status: "success", lastSuccessAt: "2026-07-23T03:30:00Z" },
       schedule: { monitorEveryMinutes: 5 },
     },
     connectedIntegrations: ["mila"],
@@ -42,7 +43,7 @@ test("Four C readiness exposes concrete gaps without leaking configuration", () 
   snapshot.board.columns.find((column) => column.name === "scheduled").tasks = [];
   snapshot.mila = { ok: false, error: "MILA is offline" };
   const result = buildFourCReadiness(snapshot);
-  assert.equal(result.score, 81);
+  assert.equal(result.score, 83);
   assert.equal(result.status, "ready");
   assert.deepEqual(result.recommendations.map((item) => item.title), ["Open MILA integration", "Open MILA Live", "Plan recurring work"]);
   assert.equal(JSON.stringify(result).includes("adminToken"), false);

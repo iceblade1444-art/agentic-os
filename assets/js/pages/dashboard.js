@@ -18,6 +18,8 @@ let dashboardPoll = null;
 
 const rerender = () => window.dispatchEvent(new HashChangeEvent("hashchange"));
 const value = (result, fallback) => result.status === "fulfilled" ? result.value : fallback;
+const timeoutValue = (fallback, ms = 5000) => new Promise((resolve) => setTimeout(() => resolve(fallback), ms));
+const bounded = (promise, fallback, ms = 5000) => Promise.race([promise.catch(() => fallback), timeoutValue(fallback, ms)]);
 const tasksFrom = (board = {}) => (board.columns || []).flatMap((column) =>
   (column.tasks || []).map((task) => ({ ...task, status: task.status || column.name })));
 const openStatuses = new Set(["triage", "todo", "scheduled", "ready", "running", "blocked", "review"]);
@@ -79,6 +81,7 @@ function dashboardHTML(data) {
   const activeRoutines = routines.filter((job) => job.enabled !== false && !job.paused && job.status !== "paused");
   const readiness = data.operations.readiness || { score: 0, sections: [], recommendations: [] };
   const backup = data.operations.backup || {};
+  const restoreDrill = data.operations.restoreDrill || {};
   const recommendations = readiness.recommendations || [];
   const profiles = data.profiles.profiles || [];
   const usage = data.usage || [];
@@ -118,6 +121,7 @@ function dashboardHTML(data) {
           ${service("Claude Workspace", data.claude.ready && data.claude.auth?.loggedIn, data.claude.ready ? (data.claude.model?.resolved || data.claude.defaultModel || "Authenticated") : data.claude.error || "Unavailable", "#/claude")}
           ${service("Obsidian vault", data.knowledge.ready && data.knowledge.writable, `${data.knowledge.notes || 0} notes · ${data.knowledge.folders || 0} folders`, "#/knowledge")}
           ${service("Automated backup", backup.status === "success", backup.status === "success" ? `Last success ${age(backup.lastSuccessAt)}` : "No successful backup", "#/observability")}
+          ${service("Restore drill", restoreDrill.status === "success", restoreDrill.status === "success" ? `Verified ${age(restoreDrill.lastSuccessAt)}` : "Backup restore has not been verified", "#/observability")}
         </div>
       </section>
     </div>
@@ -148,17 +152,17 @@ async function loadDashboard(force = false) {
   if (dashboardLoading && !force) return;
   dashboardLoading = true;
   const results = await Promise.allSettled([
-    api.operations.status(),
-    api.kanban.board(),
-    api.kanban.profiles(),
-    api.routines.list("all"),
-    api.knowledge.status(),
-    api.knowledge.usage(12),
-    api.skills.list("default"),
-    api.hermes.status(),
-    api.claude.status(false),
-    api.integrations.milaStatus(),
-    api.onboarding.get(),
+    bounded(api.operations.status(), { status: "unknown", readiness: { score: 0, sections: [], recommendations: [] }, backup: {}, restoreDrill: {} }),
+    bounded(api.kanban.board(), { columns: [] }),
+    bounded(api.kanban.profiles(), { profiles: [] }),
+    bounded(api.routines.list("all"), []),
+    bounded(api.knowledge.status(), {}),
+    bounded(api.knowledge.usage(12), []),
+    bounded(api.skills.list("default"), []),
+    bounded(api.hermes.status(), { ready: false, error: "Timed out" }, 3500),
+    bounded(api.claude.status(false), { ready: false, error: "Timed out" }, 5000),
+    bounded(api.integrations.milaStatus(), { ok: false, error: "Timed out" }, 3500),
+    bounded(api.onboarding.get(), { workspace: {} }),
   ]);
   const critical = [results[0], results[1], results[2]];
   if (critical.every((result) => result.status === "rejected")) {

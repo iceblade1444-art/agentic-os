@@ -22,6 +22,7 @@ export const config = {
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
   operationsStateFile: env.OPS_STATE_FILE || "/run/agentic-os/operations.json",
   operationsBackupRequestFile: env.OPS_BACKUP_REQUEST_FILE || "/run/agentic-os/backup.request",
+  operationsRestoreRequestFile: env.OPS_RESTORE_REQUEST_FILE || "/run/agentic-os/restore.request",
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
   claudeCode: {
     bin: env.CLAUDE_CODE_BIN || "claude",
