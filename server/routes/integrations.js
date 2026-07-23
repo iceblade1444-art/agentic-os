@@ -3,7 +3,7 @@ import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
 import { milaConnectionCode, milaDevices, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
-import { requireRoles } from "../lib/auth.js";
+import { authenticatedUser, requireRoles } from "../lib/auth.js";
 
 const r = Router();
 const requireAdmin = requireRoles("Creator", "Admin");
@@ -62,8 +62,18 @@ const milaAction = (handler) => async (req, res) => {
 r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
 r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
 r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));
-r.post("/mila/voice-token", milaAction((cfg) => milaVoiceToken(cfg)));
-r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body) => milaConnectionCode(cfg, body.label)));
+r.post("/mila/voice-token", milaAction((cfg, body) => milaVoiceToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
+r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body, req) => {
+  const user = authenticatedUser(req);
+  return milaConnectionCode(cfg, body.label || user.email || user.name, {
+    owner: {
+      id: user.id,
+      email: user.email || "",
+      name: user.name || "",
+      role: user.role || "User",
+    },
+  });
+}));
 r.post("/mila/subscription", requireAdmin, milaAction((cfg, body) => milaSetSubscription(cfg, body)));
 r.post("/mila/app-update", requireAdmin, milaAction((cfg, body) => milaSetAppUpdate(cfg, body)));
 

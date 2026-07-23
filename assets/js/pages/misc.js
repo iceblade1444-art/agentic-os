@@ -273,8 +273,48 @@ function knowledgeBytes(bytes = 0) {
 }
 
 function knowledgeAction(entry) {
-  const labels = { list: "listed notes", read: "read", search: "searched", create: "created", append: "updated" };
+  const labels = { list: "listed notes", read: "read", search: "searched", create: "created", append: "updated", graph: "mapped graph" };
   return labels[entry.action] || entry.action;
+}
+
+function knowledgeGraphHTML(graph, activePath) {
+  const nodes = (graph?.nodes || []).slice(0, 48);
+  const nodeSet = new Set(nodes.map((node) => node.id));
+  const edges = (graph?.edges || []).filter((edge) => nodeSet.has(edge.source) && nodeSet.has(edge.target)).slice(0, 90);
+  if (!nodes.length) return `<div class="knowledge-graph empty"><div class="empty-ico">${icon("network")}</div><h4>No graph yet</h4><p>Add Obsidian links like [[Project Roadmap]] to connect notes.</p></div>`;
+  const center = { x: 360, y: 150 };
+  const radius = nodes.length < 8 ? 86 : 116;
+  const positions = new Map(nodes.map((node, index) => {
+    const angle = (Math.PI * 2 * index) / nodes.length - Math.PI / 2;
+    const weight = Math.min(1.35, 1 + (node.links || 0) * 0.04);
+    return [node.id, {
+      x: center.x + Math.cos(angle) * radius * weight,
+      y: center.y + Math.sin(angle) * radius * weight,
+    }];
+  }));
+  return `<div class="knowledge-graph">
+    <div class="knowledge-section-head">
+      <div><strong>Obsidian graph</strong><span>${nodes.length} notes · ${edges.length} resolved links · ${(graph?.edges || []).filter((edge) => !edge.resolved).length} open links</span></div>
+      <span class="badge neutral">${icon("network")}Live map</span>
+    </div>
+    <svg viewBox="0 0 720 300" role="img" aria-label="Obsidian graph">
+      ${edges.map((edge) => {
+        const from = positions.get(edge.source);
+        const to = positions.get(edge.target);
+        if (!from || !to) return "";
+        return `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" class="${edge.resolved ? "resolved" : "open"}"/>`;
+      }).join("")}
+      ${nodes.map((node) => {
+        const pos = positions.get(node.id);
+        const active = node.id === activePath;
+        const r = Math.min(18, 8 + (node.links || 0));
+        return `<g class="knowledge-graph-node ${active ? "active" : ""}" data-note-path="${esc(node.id)}" transform="translate(${pos.x.toFixed(1)} ${pos.y.toFixed(1)})">
+          <circle r="${r}"></circle>
+          <text y="${r + 14}">${esc(node.label).slice(0, 22)}</text>
+        </g>`;
+      }).join("")}
+    </svg>
+  </div>`;
 }
 
 function knowledgeMount(root) {
@@ -282,6 +322,7 @@ function knowledgeMount(root) {
   let status = null;
   let notes = [];
   let usage = [];
+  let graph = null;
   let selected = null;
   let query = "";
   let searchTimer = null;
@@ -303,6 +344,7 @@ function knowledgeMount(root) {
         <span class="badge ${status.mcp.status === "active" ? "success" : "error"}"><span class="dot"></span>MCP ${esc(status.mcp.status)}</span>
         <span class="knowledge-updated">${status.updatedAt ? `Updated ${timeAgo(status.updatedAt)}` : "Empty vault"}</span>
       </div>
+      ${knowledgeGraphHTML(graph, activePath)}
       <div class="knowledge-workspace">
         <section class="knowledge-browser" aria-label="Obsidian notes">
           <div class="knowledge-toolbar">
@@ -357,6 +399,7 @@ function knowledgeMount(root) {
       [status, notes, usage] = await Promise.all([
         api.knowledge.status(), api.knowledge.list(query), api.knowledge.usage(50),
       ]);
+      graph = await api.knowledge.graph(query);
       if (selected && !notes.some((note) => note.path === selected.path)) selected = null;
       draw();
       if (!selected && notes[0]) await selectNote(notes[0].path);

@@ -38,6 +38,11 @@ r.get("/notes", async (req, res, next) => {
   catch (error) { next(error); }
 });
 
+r.get("/graph", async (req, res, next) => {
+  try { res.json(await knowledge.graph({ query: req.query.q || "", ...context(req) })); }
+  catch (error) { next(error); }
+});
+
 r.get("/notes/read", async (req, res, next) => {
   try { res.json(await knowledge.read(req.query.path, context(req))); }
   catch (error) { next(error); }
