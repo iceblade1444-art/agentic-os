@@ -86,4 +86,12 @@ test("dashboard uses the pulse API and fonts are self-hosted", () => {
 
   // Scout no longer rides the CVD-unsafe violet/blue pair.
   assert.match(dashboard, /scout: \{[^}]*color: "teal"/);
+
+  // GET /api/missions returns events as a count; the feed must guard the shape.
+  assert.match(dashboard, /Array\.isArray\(mission\.events\)/);
+});
+
+test("mission list summary keeps events as a count and the dashboard tolerates it", () => {
+  const missions = fs.readFileSync(new URL("../server/routes/missions.js", import.meta.url), "utf8");
+  assert.match(missions, /events: m\.events\.length/);
 });
