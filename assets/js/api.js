@@ -99,6 +99,7 @@ export const api = {
     milaDevices: () => j("/api/integrations/mila/devices"),
     milaRevokeDevice: (id) => j(`/api/integrations/mila/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
     milaVoiceToken: (body = {}) => j("/api/integrations/mila/voice-token", { method: "POST", body }),
+    milaLiveKitToken: (body = {}) => j("/api/integrations/mila/livekit-token", { method: "POST", body }),
     milaConnectionCode: (label) => j("/api/integrations/mila/connection-code", { method: "POST", body: { label } }),
     milaSubscription: (body) => j("/api/integrations/mila/subscription", { method: "POST", body }),
     milaAppUpdate: (body) => j("/api/integrations/mila/app-update", { method: "POST", body }),

@@ -109,6 +109,43 @@ export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", option
     newSessionExpiresAt: voice.newSessionExpiresAt || null,
   };
 }
+
+export async function milaLiveKitToken(cfg, label = "Agentic OS dashboard", options = {}) {
+  const cacheKey = cleanBaseUrl(cfg.baseUrl);
+  let sessionToken = dashboardSessions.get(cacheKey);
+  if (!sessionToken) {
+    const connection = await milaConnectionCode(cfg, label, options);
+    if (!connection.code) throw new Error("MILA did not create a connection code");
+    const session = await milaSessionRequest(cfg, "/v1/auth/device", {
+      ...options,
+      method: "POST",
+      body: { code: connection.code },
+    });
+    if (!session.token) throw new Error("MILA did not create a dashboard session");
+    sessionToken = session.token;
+    dashboardSessions.set(cacheKey, sessionToken);
+  }
+
+  try {
+    const voice = await milaSessionRequest(cfg, "/v1/voice/livekit-token", {
+      ...options,
+      method: "POST",
+      bearer: sessionToken,
+      body: { language: options.language || "auto" },
+    });
+    if (!voice.participant_token || !voice.server_url) throw new Error("MILA did not create a LiveKit voice room");
+    return {
+      serverUrl: voice.server_url,
+      participantToken: voice.participant_token,
+      roomName: voice.room_name || "",
+      language: voice.language || options.language || "auto",
+    };
+  } catch (error) {
+    if (!/session|unauthorized|401/i.test(error.message || "")) throw error;
+    dashboardSessions.delete(cacheKey);
+    return milaLiveKitToken(cfg, label, options);
+  }
+}
 export const milaSetSubscription = (cfg, subscription, options) => milaRequest(cfg, "/admin/subscription", {
   ...options, method: "POST", body: subscription,
 });

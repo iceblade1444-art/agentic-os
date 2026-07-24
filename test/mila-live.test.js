@@ -26,10 +26,18 @@ test("Mila Live setup uses a warm voice and explicit activity detection", () => 
 
 test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   const source = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  const hub = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
   assert.match(source, /BROWSER_STT_FALLBACK_MS/);
   assert.match(source, /THINKING_TIMEOUT_MS/);
   assert.match(source, /INPUT_ACTIVITY_LEVEL/);
   assert.match(source, /silenceTurnMs/);
+  assert.match(source, /LIVEKIT_SDK_URL/);
+  assert.match(source, /_connectLiveKit/);
+  assert.match(source, /setMicrophoneEnabled\(true\)/);
+  assert.match(api, /milaLiveKitToken/);
+  assert.match(hub, /milaLiveKitToken/);
+  assert.match(hub, /milaVoiceToken/);
   assert.match(source, /clientContent/);
   assert.match(source, /turnComplete: true/);
   assert.match(source, /finalChanged/);

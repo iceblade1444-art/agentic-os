@@ -1,4 +1,5 @@
 const LIVE_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained";
+const LIVEKIT_SDK_URL = "https://cdn.jsdelivr.net/npm/livekit-client@2.15.14/dist/livekit-client.umd.min.js";
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
@@ -74,6 +75,21 @@ export function isTranscriptPlausible(text, language = "auto") {
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let liveKitSdkPromise = null;
+
+function loadLiveKitSdk() {
+  if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
+  if (liveKitSdkPromise) return liveKitSdkPromise;
+  liveKitSdkPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = LIVEKIT_SDK_URL;
+    script.async = true;
+    script.onload = () => window.LivekitClient ? resolve(window.LivekitClient) : reject(new Error("LiveKit SDK did not initialize"));
+    script.onerror = () => reject(new Error("Could not load LiveKit SDK"));
+    document.head.appendChild(script);
+  });
+  return liveKitSdkPromise;
+}
 
 function bytesToBase64(bytes) {
   let binary = "";
@@ -138,6 +154,9 @@ export class MilaLiveSession {
   constructor(options) {
     this.options = options;
     this.socket = null;
+    this.livekitRoom = null;
+    this.livekitAudio = new Set();
+    this.usingLiveKit = false;
     this.audioContext = null;
     this.mediaStream = null;
     this.processor = null;
@@ -171,8 +190,11 @@ export class MilaLiveSession {
     try {
       await this._openAudio();
       const credentials = await this.options.getToken();
-      if (!credentials?.token) throw new Error("Mila did not return a Live token");
-      await this._connect(credentials.token);
+      if (credentials?.participantToken && credentials?.serverUrl) await this._connectLiveKit(credentials);
+      else {
+        if (!credentials?.token) throw new Error("Mila did not return a Live token");
+        await this._connect(credentials.token);
+      }
     } catch (error) {
       await this._cleanupAudio();
       this._state("error", error.message || "Could not start Mila Live");
@@ -190,6 +212,13 @@ export class MilaLiveSession {
     clearTimeout(this.browserTextTimer);
     if (this.socket && this.socket.readyState < WebSocket.CLOSING) this.socket.close(1000, "Session ended");
     this.socket = null;
+    if (this.livekitRoom) {
+      try { await this.livekitRoom.disconnect(); } catch { /* already disconnected */ }
+      this.livekitRoom = null;
+    }
+    for (const element of this.livekitAudio) element.remove();
+    this.livekitAudio.clear();
+    this.usingLiveKit = false;
     await this._cleanupAudio();
     this._state("idle");
   }
@@ -197,7 +226,9 @@ export class MilaLiveSession {
   toggleMute() {
     this.muted = !this.muted;
     for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
-    if (this.muted) {
+    if (this.usingLiveKit) {
+      this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(!this.muted).catch?.(() => {});
+    } else if (this.muted) {
       if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
       this._stopSpeechRecognition();
       this.options.onLevel?.("input", 0);
@@ -211,6 +242,7 @@ export class MilaLiveSession {
   }
 
   async sendTurn({ prompt, displayText, images = [] }) {
+    if (this.usingLiveKit) throw new Error("Text fallback is unavailable during a LiveKit voice call");
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) throw new Error("Mila Live is not connected");
     const message = String(prompt || "").trim();
     if (!message) throw new Error("Add a message or attachment");
@@ -317,10 +349,12 @@ export class MilaLiveSession {
     this.processor.connect(this.silentGain);
     this.silentGain.connect(this.audioContext.destination);
     this.processor.onaudioprocess = (event) => {
-      if (!this.ready || this.muted || this.socket?.readyState !== WebSocket.OPEN) return;
+      if (!this.ready || this.muted) return;
       const samples = event.inputBuffer.getChannelData(0);
       const level = rmsFloat(samples);
       this.options.onLevel?.("input", level);
+      if (this.usingLiveKit) return;
+      if (this.socket?.readyState !== WebSocket.OPEN) return;
       this._trackInputActivity(level);
       const pcm = pcm16FromFloat(samples, this.audioContext.sampleRate);
       this.socket.send(JSON.stringify({
@@ -373,6 +407,63 @@ export class MilaLiveSession {
       this.readyResolve = null;
       this.readyReject = null;
     }
+  }
+
+  async _connectLiveKit(credentials) {
+    const LK = await loadLiveKitSdk();
+    const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+    this.livekitRoom = room;
+    this.usingLiveKit = true;
+    room.on(LK.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind !== LK.Track.Kind.Audio) return;
+      const element = track.attach();
+      element.autoplay = true;
+      element.playsInline = true;
+      element.style.display = "none";
+      document.body.appendChild(element);
+      this.livekitAudio.add(element);
+      this._state("speaking");
+    });
+    room.on(LK.RoomEvent.TrackUnsubscribed, (track) => {
+      for (const element of this.livekitAudio) {
+        try { track.detach(element); } catch { /* detached */ }
+        element.remove();
+        this.livekitAudio.delete(element);
+      }
+      if (this.ready && !this.muted) this._state("listening");
+    });
+    room.on(LK.RoomEvent.ActiveSpeakersChanged, (speakers = []) => {
+      const remoteSpeaking = speakers.some((participant) => !participant.isLocal);
+      if (this.ready && !this.muted) this._state(remoteSpeaking ? "speaking" : "listening");
+    });
+    room.on(LK.RoomEvent.TranscriptionReceived, (segments = [], participant) => {
+      const role = participant?.isLocal === false ? "assistant" : "user";
+      for (const segment of segments) {
+        const text = String(segment.text || "").trim();
+        if (!text) continue;
+        if (segment.final === false) this.options.onPartial?.(role, text);
+        else {
+          if (role === "assistant") {
+            this.currentAssistant = mergeTranscript(this.currentAssistant, text);
+            this.options.onPartial?.("assistant", this.currentAssistant);
+          } else {
+            this.currentUser = mergeTranscript(this.currentUser, text);
+            this.options.onPartial?.("user", this.currentUser);
+          }
+          this._commitTurn();
+        }
+      }
+    });
+    room.on(LK.RoomEvent.Disconnected, () => {
+      this.ready = false;
+      if (!this.intentionalClose) this._state("error", "LiveKit voice room disconnected");
+    });
+
+    await room.connect(credentials.serverUrl, credentials.participantToken);
+    await room.localParticipant.setMicrophoneEnabled(true);
+    this.ready = true;
+    this._state("listening");
+    this._startSpeechRecognition();
   }
 
   async _handleFrame(frame) {

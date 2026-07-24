@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { milaConnectionCode, milaDevices, milaRevokeDevice, milaStatus, milaVoiceToken } from "../server/lib/mila.js";
+import { milaConnectionCode, milaDevices, milaLiveKitToken, milaRevokeDevice, milaStatus, milaVoiceToken } from "../server/lib/mila.js";
 
 test("MILA status uses the server-held admin token", async () => {
   let request;
@@ -106,6 +106,44 @@ test("MILA voice token exchange keeps long-lived credentials server-side", async
   assert.equal(requests.length, 4);
   assert.equal(requests[3].url, "https://mila.example/v1/voice/token");
   assert.equal(requests[3].options.headers.Authorization, "Bearer dashboard-session-secret");
+});
+
+test("MILA LiveKit token exchange creates a private room for dashboard voice", async () => {
+  const requests = [];
+  const fetchImpl = async (url, options) => {
+    requests.push({ url, options });
+    const data = url.endsWith("/admin/connection-code")
+      ? { code: "ROOM123" }
+      : url.endsWith("/v1/auth/device")
+        ? { token: "dashboard-session-secret" }
+        : { server_url: "wss://agent.example/rtc", participant_token: "room-jwt", room_name: "mila-room", language: "ru-RU" };
+    return new Response(JSON.stringify(data), {
+      status: url.endsWith("/v1/voice/livekit-token") ? 201 : 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  const result = await milaLiveKitToken(
+    { baseUrl: "https://mila-livekit.example", adminToken: "admin-secret" },
+    "Dashboard",
+    { fetchImpl, language: "ru-RU" },
+  );
+
+  assert.deepEqual(result, {
+    serverUrl: "wss://agent.example/rtc",
+    participantToken: "room-jwt",
+    roomName: "mila-room",
+    language: "ru-RU",
+  });
+  assert.deepEqual(requests.map((request) => request.url), [
+    "https://mila-livekit.example/admin/connection-code",
+    "https://mila-livekit.example/v1/auth/device",
+    "https://mila-livekit.example/v1/voice/livekit-token",
+  ]);
+  assert.equal(requests[2].options.headers.Authorization, "Bearer dashboard-session-secret");
+  assert.deepEqual(JSON.parse(requests[2].options.body), { language: "ru-RU" });
+  assert.equal(JSON.stringify(result).includes("admin-secret"), false);
+  assert.equal(JSON.stringify(result).includes("dashboard-session-secret"), false);
 });
 
 test("MILA connector rejects unsafe URL schemes", async () => {

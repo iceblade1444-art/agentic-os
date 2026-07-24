@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
-import { milaConnectionCode, milaDevices, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
+import { milaConnectionCode, milaDevices, milaLiveKitToken, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
 import { authenticatedUser, requireRoles } from "../lib/auth.js";
 
 const r = Router();
@@ -63,6 +63,7 @@ r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
 r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
 r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));
 r.post("/mila/voice-token", milaAction((cfg, body) => milaVoiceToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
+r.post("/mila/livekit-token", milaAction((cfg, body) => milaLiveKitToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
 r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body, req) => {
   const user = authenticatedUser(req);
   return milaConnectionCode(cfg, body.label || user.email || user.name, {

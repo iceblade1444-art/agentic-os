@@ -238,7 +238,13 @@ class MilaSessionHub {
       transcriptionLanguage: this.state.language,
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
-      getToken: () => api.integrations.milaVoiceToken({ language: this.state.language }),
+      getToken: async () => {
+        try {
+          return await api.integrations.milaLiveKitToken({ language: this.state.language });
+        } catch {
+          return api.integrations.milaVoiceToken({ language: this.state.language });
+        }
+      },
       onState: ({ phase, error }) => this.handleState(live, phase, error),
       onLevel: (kind, value) => {
         this.state[kind === "input" ? "inputLevel" : "outputLevel"] = Math.max(0, Math.min(1, value || 0));
