@@ -3,6 +3,7 @@ import { closeOverlay, esc, openModal, toast } from "../ui.js";
 import {
   MILA_ATTACHMENT_ACCEPT, formatAttachmentSize, prepareMilaAttachment,
 } from "../mila-attachments.js";
+import { listMilaMicrophones, testMilaMicrophone } from "../mila-audio-devices.js";
 import {
   MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
   MILA_STYLES, MILA_VOICES, milaHub,
@@ -178,6 +179,12 @@ export default {
             <div class="field"><label class="label" for="milaVoiceName">Voice</label><select class="select" id="milaVoiceName">${optionsHTML(MILA_VOICES, prefs.voiceName)}</select></div>
             <div class="field"><label class="label" for="milaListeningProfile">Listening</label><select class="select" id="milaListeningProfile">${optionsHTML(MILA_LISTENING_PROFILES, prefs.listeningProfile)}</select></div>
           </div>
+          <div class="field"><label class="label" for="milaInputDevice">Microphone</label><select class="select" id="milaInputDevice" disabled><option value="">Loading microphones…</option></select></div>
+          <div class="mila-mic-check">
+            <button class="btn btn-secondary" id="milaTestMicrophone" type="button" disabled>${icon("mic")}Test microphone</button>
+            <div class="mila-mic-check-meter" aria-hidden="true"><span id="milaMicCheckLevel"></span></div>
+            <span class="mila-mic-check-result" id="milaMicCheckResult">Choose the Windows input you speak into.</span>
+          </div>
           <fieldset class="mila-setting-group"><legend>Conversation style</legend><div class="mila-segments four">${segmentsHTML("milaStyle", MILA_STYLES, prefs.style)}</div></fieldset>
           <div class="mila-settings-grid">
             <fieldset class="mila-setting-group"><legend>Speaking pace</legend><div class="mila-segments">${segmentsHTML("milaPace", MILA_PACES, prefs.pace)}</div></fieldset>
@@ -188,6 +195,41 @@ export default {
         </div>`,
         footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="milaSavePreferences">${icon("check")}Save</button>`,
         onMount: (modal) => {
+          const microphone = modal.querySelector("#milaInputDevice");
+          const testButton = modal.querySelector("#milaTestMicrophone");
+          const testLevel = modal.querySelector("#milaMicCheckLevel");
+          const testResult = modal.querySelector("#milaMicCheckResult");
+          listMilaMicrophones().then((devices) => {
+            microphone.innerHTML = [
+              `<option value="">System default</option>`,
+              ...devices.filter((device) => device.id !== "default")
+                .map((device) => `<option value="${esc(device.id)}">${esc(device.label)}</option>`),
+            ].join("");
+            microphone.value = devices.some((device) => device.id === prefs.inputDeviceId) ? prefs.inputDeviceId : "";
+            microphone.disabled = false;
+            testButton.disabled = false;
+          }).catch((error) => {
+            microphone.innerHTML = `<option value="">Microphones unavailable</option>`;
+            testResult.textContent = error.message || "Allow microphone access in the browser";
+          });
+          testButton.onclick = async () => {
+            testButton.disabled = true;
+            testResult.textContent = "Speak normally for a few seconds…";
+            try {
+              const maximum = await testMilaMicrophone(microphone.value, (level) => {
+                testLevel.style.width = `${Math.round(level * 100)}%`;
+              });
+              testResult.textContent = maximum >= 0.08
+                ? "Good signal. This microphone can hear you."
+                : maximum >= 0.025
+                  ? "Signal is quiet. Move closer or choose another microphone."
+                  : "No voice detected. Choose another microphone.";
+            } catch (error) {
+              testResult.textContent = error.message || "Microphone test failed";
+            } finally {
+              testButton.disabled = false;
+            }
+          };
           modal.querySelector("#milaSavePreferences").onclick = () => {
             const selected = (name) => modal.querySelector(`input[name="${name}"]:checked`)?.value;
             const saved = milaHub.setPreferences({
@@ -197,6 +239,7 @@ export default {
               pace: selected("milaPace"),
               responseLength: selected("milaResponseLength"),
               userName: modal.querySelector("#milaUserName").value,
+              inputDeviceId: microphone.value,
             });
             if (!saved) return toast("warning", "Voice preferences", "End the current call before saving changes");
             closeOverlay();

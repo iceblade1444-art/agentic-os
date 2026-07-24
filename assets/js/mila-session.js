@@ -44,6 +44,7 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
   listeningProfile: "balanced",
   responseLength: "brief",
   userName: "Бахадыр",
+  inputDeviceId: "",
 });
 
 const ACTIVE_PHASES = new Set(["connecting", "listening", "thinking", "speaking", "muted"]);
@@ -71,6 +72,7 @@ export function normalizeMilaPreferences(value = {}) {
     listeningProfile: allowed(MILA_LISTENING_PROFILES, value.listeningProfile, MILA_DEFAULT_PREFERENCES.listeningProfile),
     responseLength: allowed(MILA_RESPONSE_LENGTHS, value.responseLength, MILA_DEFAULT_PREFERENCES.responseLength),
     userName: userName || MILA_DEFAULT_PREFERENCES.userName,
+    inputDeviceId: String(value.inputDeviceId || "").slice(0, 256),
   };
 }
 
@@ -236,6 +238,7 @@ class MilaSessionHub {
       voiceName: this.state.preferences.voiceName,
       listeningProfile: this.state.preferences.listeningProfile,
       transcriptionLanguage: this.state.language,
+      inputDeviceId: this.state.preferences.inputDeviceId,
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {

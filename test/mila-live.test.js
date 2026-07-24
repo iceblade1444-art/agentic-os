@@ -36,7 +36,9 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   assert.match(source, /assets\/vendor\/livekit-client\.umd\.js/);
   assert.match(source, /liveKitClientGlobal/);
   assert.match(source, /_connectLiveKit/);
-  assert.match(source, /setMicrophoneEnabled\(true\)/);
+  assert.match(source, /setMicrophoneEnabled\(true, this\._microphoneConstraints\(\)\)/);
+  assert.match(source, /this\.usingLiveKit \|\| !Recognition/);
+  assert.match(source, /inputDeviceId/);
   assert.match(api, /milaLiveKitToken/);
   assert.match(hub, /milaLiveKitToken/);
   assert.match(hub, /milaVoiceToken/);
@@ -53,10 +55,11 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
 test("Mila preferences are validated and shape the voice behavior prompt", () => {
   const preferences = normalizeMilaPreferences({
     voiceName: "not-a-voice", style: "friend", pace: "slow", listeningProfile: "deliberate",
-    responseLength: "brief", userName: " Бахадыр ",
+    responseLength: "brief", userName: " Бахадыр ", inputDeviceId: "windows-mic-1",
   });
   assert.equal(preferences.voiceName, "Sulafat");
   assert.equal(preferences.userName, "Бахадыр");
+  assert.equal(preferences.inputDeviceId, "windows-mic-1");
   const prompt = buildMilaSystemInstruction({
     language: "ru-RU", preferences, currentTime: "2026-07-17T10:00:00.000Z",
   });
@@ -83,13 +86,16 @@ test("Mila attachment prompt includes bounded text context and image names", () 
 test("Mila workspace exposes language, attachment and transcript actions", () => {
   const source = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
   const hub = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
-  for (const id of ["milaLanguage", "milaPreferences", "milaAttach", "milaFile", "milaCopy", "milaExport", "milaDropOverlay"]) {
+  for (const id of ["milaLanguage", "milaPreferences", "milaInputDevice", "milaTestMicrophone", "milaAttach", "milaFile", "milaCopy", "milaExport", "milaDropOverlay"]) {
     assert.match(source, new RegExp(`id=\\"${id}\\"`));
   }
   assert.match(source, /prepareMilaAttachment/);
   assert.match(source, /Mila voice preferences/);
   for (const route of ["#\/workflows", "#\/knowledge", "#\/claude-code", "#\/hermes"]) assert.match(source, new RegExp(route));
   assert.match(hub, /transcriptionLanguage/);
+  assert.match(hub, /inputDeviceId/);
+  assert.match(source, /listMilaMicrophones/);
+  assert.match(source, /testMilaMicrophone/);
 });
 
 test("Mila session persists across Agentic OS route unmounts", () => {

@@ -235,7 +235,10 @@ export class MilaLiveSession {
     this.muted = !this.muted;
     for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
     if (this.usingLiveKit) {
-      this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(!this.muted).catch?.(() => {});
+      const action = this.muted
+        ? this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(false)
+        : this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(true, this._microphoneConstraints());
+      action?.catch?.(() => {});
     } else if (this.muted) {
       if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
       this._stopSpeechRecognition();
@@ -270,7 +273,7 @@ export class MilaLiveSession {
   _startSpeechRecognition() {
     const language = this.options.transcriptionLanguage || "auto";
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
+    if (this.usingLiveKit || !Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
       this.browserTranscription = false;
       this.options.onTranscriptionMode?.("gemini");
       return;
@@ -342,9 +345,14 @@ export class MilaLiveSession {
 
   async _openAudio() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access is unavailable in this browser");
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: this._microphoneConstraints() });
+    } catch (error) {
+      if (this.options.inputDeviceId && ["NotFoundError", "OverconstrainedError"].includes(error?.name)) {
+        throw new Error("The selected microphone is unavailable. Choose another microphone in Mila voice preferences.");
+      }
+      throw error;
+    }
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("Web Audio is unavailable in this browser");
     this.audioContext = new AudioContextClass({ latencyHint: "interactive" });
@@ -368,6 +376,17 @@ export class MilaLiveSession {
       this.socket.send(JSON.stringify({
         realtimeInput: { audio: { data: bytesToBase64(pcm), mimeType: `audio/pcm;rate=${INPUT_RATE}` } },
       }));
+    };
+  }
+
+  _microphoneConstraints() {
+    const deviceId = String(this.options.inputDeviceId || "");
+    return {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      ...(deviceId && deviceId !== "default" ? { deviceId: { exact: deviceId } } : {}),
     };
   }
 
@@ -468,10 +487,11 @@ export class MilaLiveSession {
     });
 
     await room.connect(credentials.serverUrl, credentials.participantToken);
-    await room.localParticipant.setMicrophoneEnabled(true);
+    await room.localParticipant.setMicrophoneEnabled(true, this._microphoneConstraints());
     this.ready = true;
     this._state("listening");
-    this._startSpeechRecognition();
+    this._stopSpeechRecognition();
+    this.options.onTranscriptionMode?.("gemini");
   }
 
   async _handleFrame(frame) {
