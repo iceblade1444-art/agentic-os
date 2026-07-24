@@ -93,7 +93,7 @@ export default {
             <span class="mila-mark">${icon("mic")}</span>
             <div class="stack"><strong>Mila</strong><span class="muted text-sm" id="milaModel">Voice backend</span></div>
             <span class="badge neutral mila-profile" id="milaProfile">Warm · Assistant</span>
-            <span class="badge neutral mila-stt" id="milaSttMode">Gemini STT</span>
+            <span class="badge neutral mila-stt" id="milaSttMode">Direct audio</span>
             <a class="mila-handoff" href="#/hermes">${icon("brain")}Hermes</a>
           </div>
 
@@ -286,7 +286,7 @@ export default {
       const style = MILA_STYLES.find((item) => item.id === state.preferences.style)?.label || state.preferences.style;
       root.querySelector("#milaProfile").textContent = `${voice} · ${style}`;
       const stt = root.querySelector("#milaSttMode");
-      stt.textContent = state.transcriptionMode === "browser" ? "Browser STT" : "Gemini STT";
+      stt.textContent = state.transcriptionMode === "browser" ? "Browser STT" : "Direct audio";
       stt.className = `badge mila-stt ${state.transcriptionMode === "browser" ? "success" : "neutral"}`;
       caption.textContent = state.partials.assistant || state.partials.user || "";
       end.classList.toggle("hidden", !state.active);
