@@ -28,8 +28,12 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   const source = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
   assert.match(source, /BROWSER_STT_FALLBACK_MS/);
   assert.match(source, /THINKING_TIMEOUT_MS/);
+  assert.match(source, /INPUT_ACTIVITY_LEVEL/);
+  assert.match(source, /silenceTurnMs/);
   assert.match(source, /clientContent/);
   assert.match(source, /turnComplete: true/);
+  assert.match(source, /finalChanged/);
+  assert.match(source, /_trackInputActivity\(level\)/);
   assert.match(source, /_scheduleBrowserTextFallback\(this\.recognitionFinal\)/);
   assert.doesNotMatch(source, /realtimeInput: \{ text:/);
   assert.doesNotMatch(source, /userText && !this\.browserTranscription/);
