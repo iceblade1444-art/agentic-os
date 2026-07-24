@@ -59,6 +59,14 @@ function initialLanguage() {
   return "ru-RU";
 }
 
+export function resolveMilaSpeechLanguage(language, browserLanguage = "") {
+  if (["ru-RU", "uz-UZ", "en-US"].includes(language)) return language;
+  const locale = String(browserLanguage || "").toLowerCase();
+  if (locale.startsWith("uz")) return "uz-UZ";
+  if (locale.startsWith("en")) return "en-US";
+  return "ru-RU";
+}
+
 function allowed(collection, value, fallback) {
   return collection.some((item) => item.id === value) ? value : fallback;
 }
@@ -232,20 +240,24 @@ class MilaSessionHub {
     if (this.state.phase === "checking") await this.loadStatus();
     if (!this.state.backendReady) throw new Error(this.state.error || "Mila Live is not configured");
 
+    const speechLanguage = resolveMilaSpeechLanguage(
+      this.state.language,
+      typeof navigator === "undefined" ? "" : navigator.language,
+    );
     let live;
     live = new MilaLiveSession({
       model: this.state.model,
       voiceName: this.state.preferences.voiceName,
       listeningProfile: this.state.preferences.listeningProfile,
-      transcriptionLanguage: this.state.language,
+      transcriptionLanguage: speechLanguage,
       inputDeviceId: this.state.preferences.inputDeviceId,
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {
         try {
-          return await api.integrations.milaLiveKitToken({ language: this.state.language });
+          return await api.integrations.milaLiveKitToken({ language: speechLanguage });
         } catch {
-          return api.integrations.milaVoiceToken({ language: this.state.language });
+          return api.integrations.milaVoiceToken({ language: speechLanguage });
         }
       },
       onState: ({ phase, error }) => this.handleState(live, phase, error),
