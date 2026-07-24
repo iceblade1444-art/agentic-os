@@ -270,7 +270,7 @@ export class MilaLiveSession {
   _startSpeechRecognition() {
     const language = this.options.transcriptionLanguage || "auto";
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
+    if (this.usingLiveKit || !Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
       this.browserTranscription = false;
       this.options.onTranscriptionMode?.("gemini");
       return;
@@ -468,10 +468,16 @@ export class MilaLiveSession {
     });
 
     await room.connect(credentials.serverUrl, credentials.participantToken);
-    await room.localParticipant.setMicrophoneEnabled(true);
+    await room.localParticipant.setMicrophoneEnabled(true, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+    });
     this.ready = true;
     this._state("listening");
-    this._startSpeechRecognition();
+    this._stopSpeechRecognition();
+    this.options.onTranscriptionMode?.("gemini");
   }
 
   async _handleFrame(frame) {
@@ -612,6 +618,7 @@ export class MilaLiveSession {
   }
 
   _scheduleBrowserTextFallback(text) {
+    if (this.usingLiveKit) return;
     clearTimeout(this.browserTextTimer);
     this.browserTextTimer = setTimeout(() => {
       const value = String(text || this.recognitionFinal || this.currentUser || "").trim();
