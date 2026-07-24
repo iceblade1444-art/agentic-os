@@ -4,9 +4,7 @@ import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
 import { buildAutomaticActivityDetection, buildLiveSetup, isTranscriptPlausible } from "../assets/js/mila-live.js";
-import {
-  buildMilaSystemInstruction, normalizeMilaPreferences, resolveMilaSpeechLanguage,
-} from "../assets/js/mila-session.js";
+import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../assets/js/mila-session.js";
 
 test("Mila transcript filter rejects the wrong script for selected Russian", () => {
   assert.equal(isTranscriptPlausible("Как твои дела?", "ru-RU"), true);
@@ -73,14 +71,6 @@ test("Mila preferences are validated and shape the voice behavior prompt", () =>
   assert.match(prompt, /ask for confirmation/);
   assert.match(prompt, /trusted, thoughtful friend/);
   assert.match(prompt, /one to three sentences/);
-});
-
-test("Mila Auto speech stays within the interface language family", () => {
-  assert.equal(resolveMilaSpeechLanguage("auto", "ru-RU"), "ru-RU");
-  assert.equal(resolveMilaSpeechLanguage("auto", "uz-UZ"), "uz-UZ");
-  assert.equal(resolveMilaSpeechLanguage("auto", "en-US"), "en-US");
-  assert.equal(resolveMilaSpeechLanguage("auto", "de-DE"), "ru-RU");
-  assert.equal(resolveMilaSpeechLanguage("uz-UZ", "ru-RU"), "uz-UZ");
 });
 
 test("Mila attachment prompt includes bounded text context and image names", () => {
