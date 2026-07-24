@@ -185,6 +185,15 @@ export const api = {
   },
   hermes: { status: () => j("/api/hermes/control/status") },
   llm: { status: () => j("/api/llm/status") },
+  pulse: {
+    status: () => j("/api/pulse"),
+    decideApproval: (id, decision) => j(`/api/pulse/approvals/${encodeURIComponent(id)}/${encodeURIComponent(decision)}`, { method: "POST" }),
+    stream(since, onEvent) {
+      const source = new EventSource(`/api/pulse/stream?since=${encodeURIComponent(since || Date.now())}`);
+      source.onmessage = (message) => { try { onEvent(JSON.parse(message.data)); } catch { /* keep-alive */ } };
+      return source;
+    },
+  },
   operations: {
     status: () => j("/api/operations/status"),
     backup: () => j("/api/operations/backup", { method: "POST" }),
