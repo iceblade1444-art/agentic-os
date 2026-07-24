@@ -162,7 +162,7 @@ async function loadDashboard(force = false) {
     bounded(api.knowledge.usage(12), []),
     bounded(api.skills.list("default"), []),
     bounded(api.hermes.status(), { ready: false, error: "Timed out" }, 3500),
-    bounded(api.claude.status(false), { ready: false, error: "Timed out" }, 5000),
+    bounded(api.claude.status(true), { ready: false, error: "Timed out" }, 5000),
     bounded(api.integrations.milaStatus(), { ok: false, error: "Timed out" }, 3500),
     bounded(api.onboarding.get(), { workspace: {} }),
   ]);
