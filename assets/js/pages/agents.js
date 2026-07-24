@@ -4,8 +4,8 @@ import { closeOverlay, esc, openModal } from "../ui.js";
 
 const META = {
   default: { label: "Hermes", role: "Primary orchestrator", icon: "brain", color: "violet" },
-  scout: { label: "Scout", role: "Research and intelligence", icon: "search", color: "blue" },
-  scribe: { label: "Scribe", role: "Writing and documentation", icon: "edit", color: "cyan" },
+  scout: { label: "Scout", role: "Research and intelligence", icon: "search", color: "teal" },
+  scribe: { label: "Scribe", role: "Writing and documentation", icon: "edit", color: "blue" },
   reach: { label: "Reach", role: "Growth and monetization", icon: "up", color: "amber" },
   dev: { label: "Dev", role: "Engineering and automation", icon: "code", color: "green" },
 };

@@ -15,6 +15,7 @@ import kanban from "./routes/kanban.js";
 import claudeCode from "./routes/claude-code.js";
 import milaActions from "./routes/mila-actions.js";
 import operations from "./routes/operations.js";
+import pulse from "./routes/pulse.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
 import skills from "./routes/skills.js";
@@ -38,8 +39,8 @@ app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 const CSP = [
   "default-src 'self'",
   "img-src 'self' data:",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "connect-src 'self' https://api.openai.com https://api.anthropic.com wss://generativelanguage.googleapis.com",
   "script-src 'self'",
   "media-src 'self' blob:",
@@ -98,6 +99,7 @@ app.use("/api/kanban", kanban);
 app.use("/api/claude-code", claudeCode);
 app.use("/api/mila", milaActions);
 app.use("/api/operations", operations);
+app.use("/api/pulse", pulse);
 app.use("/api/speech", speech);
 app.use("/api/onboarding", onboarding);
 app.use("/api/skills", skills);

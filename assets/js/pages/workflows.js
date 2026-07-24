@@ -15,8 +15,8 @@ const COLUMNS = [
 
 const PROFILE_META = {
   default: { label: "Hermes", role: "Orchestrator", icon: "brain", color: "violet" },
-  scout: { label: "Scout", role: "Research", icon: "search", color: "blue" },
-  scribe: { label: "Scribe", role: "Writing", icon: "edit", color: "cyan" },
+  scout: { label: "Scout", role: "Research", icon: "search", color: "teal" },
+  scribe: { label: "Scribe", role: "Writing", icon: "edit", color: "blue" },
   reach: { label: "Reach", role: "Growth", icon: "up", color: "amber" },
   dev: { label: "Dev", role: "Engineering", icon: "code", color: "green" },
 };
