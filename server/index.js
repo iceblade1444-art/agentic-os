@@ -41,7 +41,7 @@ const CSP = [
   "img-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "connect-src 'self' https://api.openai.com https://api.anthropic.com wss://generativelanguage.googleapis.com",
+  "connect-src 'self' https://api.openai.com https://api.anthropic.com wss://agent.milanapremium.uz wss://generativelanguage.googleapis.com",
   "script-src 'self'",
   "media-src 'self' blob:",
   "frame-src 'self'",
