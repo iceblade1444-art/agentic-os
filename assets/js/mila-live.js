@@ -1,5 +1,5 @@
 const LIVE_ENDPOINT = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained";
-const LIVEKIT_SDK_URL = "https://cdn.jsdelivr.net/npm/livekit-client@2.15.14/dist/livekit-client.umd.min.js";
+const LIVEKIT_SDK_URL = "./assets/vendor/livekit-client.umd.js";
 const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
@@ -77,14 +77,22 @@ export function isTranscriptPlausible(text, language = "auto") {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let liveKitSdkPromise = null;
 
+function liveKitClientGlobal() {
+  return window.LivekitClient || window.LiveKitClient;
+}
+
 function loadLiveKitSdk() {
-  if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
+  const existingSdk = liveKitClientGlobal();
+  if (existingSdk) return Promise.resolve(existingSdk);
   if (liveKitSdkPromise) return liveKitSdkPromise;
   liveKitSdkPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = LIVEKIT_SDK_URL;
     script.async = true;
-    script.onload = () => window.LivekitClient ? resolve(window.LivekitClient) : reject(new Error("LiveKit SDK did not initialize"));
+    script.onload = () => {
+      const sdk = liveKitClientGlobal();
+      sdk ? resolve(sdk) : reject(new Error("LiveKit SDK did not initialize"));
+    };
     script.onerror = () => reject(new Error("Could not load LiveKit SDK"));
     document.head.appendChild(script);
   });

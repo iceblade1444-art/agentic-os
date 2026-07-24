@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "http-proxy": "^1.18.1",
+    "livekit-client": "^2.15.14",
     "zod": "^3.23.8"
   },
   "overrides": {

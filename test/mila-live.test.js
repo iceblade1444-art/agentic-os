@@ -33,6 +33,8 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   assert.match(source, /INPUT_ACTIVITY_LEVEL/);
   assert.match(source, /silenceTurnMs/);
   assert.match(source, /LIVEKIT_SDK_URL/);
+  assert.match(source, /assets\/vendor\/livekit-client\.umd\.js/);
+  assert.match(source, /liveKitClientGlobal/);
   assert.match(source, /_connectLiveKit/);
   assert.match(source, /setMicrophoneEnabled\(true\)/);
   assert.match(api, /milaLiveKitToken/);
