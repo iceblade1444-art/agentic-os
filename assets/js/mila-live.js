@@ -62,11 +62,10 @@ export function buildLiveSetup(options = {}) {
 }
 
 export function isTranscriptPlausible(text, language = "auto") {
-  const value = String(text || "").trim();
-  if (!value || /^<[^>]+>$/.test(value)) return false;
+  const value = String(text || "");
+  if (!value || language === "auto") return true;
   const letters = value.match(/\p{L}/gu) || [];
-  if (letters.length < 2) return false;
-  if (language === "auto") return true;
+  if (letters.length < 2) return true;
   const unexpected = language === "ru-RU"
     ? value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
     : language === "en-US"
@@ -164,7 +163,6 @@ export class MilaLiveSession {
     this.options = options;
     this.socket = null;
     this.livekitRoom = null;
-    this.livekitLocalTrack = null;
     this.livekitAudio = new Set();
     this.usingLiveKit = false;
     this.audioContext = null;
@@ -226,7 +224,6 @@ export class MilaLiveSession {
       try { await this.livekitRoom.disconnect(); } catch { /* already disconnected */ }
       this.livekitRoom = null;
     }
-    this.livekitLocalTrack = null;
     for (const element of this.livekitAudio) element.remove();
     this.livekitAudio.clear();
     this.usingLiveKit = false;
@@ -236,18 +233,14 @@ export class MilaLiveSession {
 
   toggleMute() {
     this.muted = !this.muted;
+    for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
     if (this.usingLiveKit) {
-      const action = this.muted ? this.livekitLocalTrack?.mute?.() : this.livekitLocalTrack?.unmute?.();
-      action?.catch?.(() => {});
+      this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(!this.muted).catch?.(() => {});
     } else if (this.muted) {
-      for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = false;
       if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
       this._stopSpeechRecognition();
       this.options.onLevel?.("input", 0);
-    } else {
-      for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = true;
-      this._startSpeechRecognition();
-    }
+    } else this._startSpeechRecognition();
     this._state(this.muted ? "muted" : "listening");
     return this.muted;
   }
@@ -277,7 +270,7 @@ export class MilaLiveSession {
   _startSpeechRecognition() {
     const language = this.options.transcriptionLanguage || "auto";
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (this.usingLiveKit || !Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
+    if (!Recognition || language === "auto" || !this.ready || this.muted || this.intentionalClose) {
       this.browserTranscription = false;
       this.options.onTranscriptionMode?.("gemini");
       return;
@@ -475,30 +468,10 @@ export class MilaLiveSession {
     });
 
     await room.connect(credentials.serverUrl, credentials.participantToken);
-    const mediaTrack = this.mediaStream?.getAudioTracks?.()[0];
-    if (!mediaTrack || mediaTrack.readyState !== "live") throw new Error("The selected microphone is no longer available");
-    const constraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-    };
-    this.livekitLocalTrack = new LK.LocalAudioTrack(
-      mediaTrack,
-      constraints,
-      true,
-      this.audioContext,
-    );
-    await room.localParticipant.publishTrack(this.livekitLocalTrack, {
-      name: "mila-microphone",
-      source: LK.Track.Source.Microphone,
-      dtx: true,
-      red: true,
-    });
+    await room.localParticipant.setMicrophoneEnabled(true);
     this.ready = true;
     this._state("listening");
-    this._stopSpeechRecognition();
-    this.options.onTranscriptionMode?.("gemini");
+    this._startSpeechRecognition();
   }
 
   async _handleFrame(frame) {
@@ -639,7 +612,6 @@ export class MilaLiveSession {
   }
 
   _scheduleBrowserTextFallback(text) {
-    if (this.usingLiveKit) return;
     clearTimeout(this.browserTextTimer);
     this.browserTextTimer = setTimeout(() => {
       const value = String(text || this.recognitionFinal || this.currentUser || "").trim();
