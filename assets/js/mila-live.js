@@ -3,6 +3,8 @@ const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
 const AUDIO_CHUNK_SIZE = 1024;
+const BROWSER_STT_FALLBACK_MS = 900;
+const THINKING_TIMEOUT_MS = 18000;
 
 const ACTIVITY_PROFILES = {
   balanced: {
@@ -140,6 +142,9 @@ export class MilaLiveSession {
     this.recognitionShouldRun = false;
     this.browserTranscription = false;
     this.transcriptWarningSent = false;
+    this.browserTextTimer = null;
+    this.thinkingTimer = null;
+    this.lastTextPrompt = "";
   }
 
   async start() {
@@ -163,6 +168,8 @@ export class MilaLiveSession {
     this._commitTurn();
     this._clearPlayback();
     this._stopSpeechRecognition();
+    clearTimeout(this.thinkingTimer);
+    clearTimeout(this.browserTextTimer);
     if (this.socket && this.socket.readyState < WebSocket.CLOSING) this.socket.close(1000, "Session ended");
     this.socket = null;
     await this._cleanupAudio();
@@ -198,7 +205,7 @@ export class MilaLiveSession {
       }));
       if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
     }
-    this.socket.send(JSON.stringify({ realtimeInput: { text: message } }));
+    this._sendTextTurn(message);
     this._state("thinking");
   }
 
@@ -238,6 +245,7 @@ export class MilaLiveSession {
       }
       this.currentUser = value;
       this.options.onPartial?.("user", value);
+      if (this.browserTranscription && this.recognitionFinal) this._scheduleBrowserTextFallback(this.recognitionFinal);
       if (!this.currentAssistant) this._state("thinking");
     };
     recognition.onerror = (event) => {
@@ -262,6 +270,8 @@ export class MilaLiveSession {
 
   _stopSpeechRecognition() {
     this.recognitionShouldRun = false;
+    clearTimeout(this.browserTextTimer);
+    this.browserTextTimer = null;
     const recognition = this.speechRecognition;
     if (recognition) recognition.onend = null;
     try { recognition?.stop(); } catch { /* already stopped */ }
@@ -357,6 +367,7 @@ export class MilaLiveSession {
       }
       const assistantText = content.outputTranscription?.text;
       if (assistantText) {
+        clearTimeout(this.thinkingTimer);
         this.currentAssistant += assistantText;
         this.options.onPartial?.("assistant", this.currentAssistant);
       }
@@ -396,6 +407,7 @@ export class MilaLiveSession {
 
   _play(bytes) {
     if (!this.audioContext || bytes.length < 2) return;
+    clearTimeout(this.thinkingTimer);
     this._state("speaking");
     this.options.onLevel?.("output", rmsPcm16(bytes));
     const sampleCount = Math.floor(bytes.length / 2);
@@ -436,12 +448,41 @@ export class MilaLiveSession {
     this.currentAssistant = "";
     this.recognitionFinal = "";
     this.transcriptWarningSent = false;
+    this.lastTextPrompt = "";
     this.options.onPartial?.("user", "");
     this.options.onPartial?.("assistant", "");
   }
 
+  _sendTextTurn(text) {
+    const value = String(text || "").trim();
+    if (!value || this.lastTextPrompt === value || this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.lastTextPrompt = value;
+    this.socket.send(JSON.stringify({
+      clientContent: {
+        turns: [{ role: "user", parts: [{ text: value }] }],
+        turnComplete: true,
+      },
+    }));
+    return true;
+  }
+
+  _scheduleBrowserTextFallback(text) {
+    clearTimeout(this.browserTextTimer);
+    this.browserTextTimer = setTimeout(() => {
+      const value = String(text || this.recognitionFinal || this.currentUser || "").trim();
+      if (!value || this.currentAssistant) return;
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+        this._sendTextTurn(value);
+        this._state("thinking");
+      }
+    }, BROWSER_STT_FALLBACK_MS);
+  }
+
   async _cleanupAudio() {
     this._stopSpeechRecognition();
+    clearTimeout(this.thinkingTimer);
+    clearTimeout(this.browserTextTimer);
     if (this.processor) this.processor.onaudioprocess = null;
     try { this.processor?.disconnect(); } catch { /* disconnected */ }
     try { this.inputSource?.disconnect(); } catch { /* disconnected */ }
@@ -456,6 +497,14 @@ export class MilaLiveSession {
   }
 
   _state(phase, error = "") {
+    clearTimeout(this.thinkingTimer);
+    if (phase === "thinking" && !error) {
+      this.thinkingTimer = setTimeout(() => {
+        if (this.intentionalClose || this.currentAssistant) return;
+        this._commitTurn();
+        this._state(this.ready && !this.muted ? "listening" : "idle");
+      }, THINKING_TIMEOUT_MS);
+    }
     this.options.onState?.({ phase, error, muted: this.muted });
   }
 }

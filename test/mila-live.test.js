@@ -24,6 +24,16 @@ test("Mila Live setup uses a warm voice and explicit activity detection", () => 
   assert.deepEqual(setup.outputAudioTranscription, {});
 });
 
+test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
+  const source = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  assert.match(source, /BROWSER_STT_FALLBACK_MS/);
+  assert.match(source, /THINKING_TIMEOUT_MS/);
+  assert.match(source, /clientContent/);
+  assert.match(source, /turnComplete: true/);
+  assert.match(source, /_scheduleBrowserTextFallback\(this\.recognitionFinal\)/);
+  assert.doesNotMatch(source, /realtimeInput: \{ text:/);
+});
+
 test("Mila preferences are validated and shape the voice behavior prompt", () => {
   const preferences = normalizeMilaPreferences({
     voiceName: "not-a-voice", style: "friend", pace: "slow", listeningProfile: "deliberate",
