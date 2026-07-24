@@ -167,8 +167,10 @@ function feedEntries(data) {
       agent: null,
     });
   }
-  for (const mission of (data.missions || []).slice(0, 8)) {
-    for (const event of (mission.events || []).slice(-3)) {
+  // GET /api/missions summarizes events as a count, not an array — only walk
+  // real arrays so the feed never breaks on the summary shape.
+  for (const mission of (Array.isArray(data.missions) ? data.missions : []).slice(0, 8)) {
+    for (const event of (Array.isArray(mission.events) ? mission.events : []).slice(-3)) {
       entries.push({ at: event.at, actor: "Mission", message: `${mission.title}: ${event.message || event.type}`, agent: null });
     }
   }
