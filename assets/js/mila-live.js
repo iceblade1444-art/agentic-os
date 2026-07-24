@@ -62,10 +62,11 @@ export function buildLiveSetup(options = {}) {
 }
 
 export function isTranscriptPlausible(text, language = "auto") {
-  const value = String(text || "");
-  if (!value || language === "auto") return true;
+  const value = String(text || "").trim();
+  if (!value || /^<[^>]+>$/.test(value)) return false;
   const letters = value.match(/\p{L}/gu) || [];
-  if (letters.length < 2) return true;
+  if (letters.length < 2) return false;
+  if (language === "auto") return true;
   const unexpected = language === "ru-RU"
     ? value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
     : language === "en-US"
@@ -163,6 +164,7 @@ export class MilaLiveSession {
     this.options = options;
     this.socket = null;
     this.livekitRoom = null;
+    this.livekitLocalTrack = null;
     this.livekitAudio = new Set();
     this.usingLiveKit = false;
     this.audioContext = null;
@@ -224,6 +226,7 @@ export class MilaLiveSession {
       try { await this.livekitRoom.disconnect(); } catch { /* already disconnected */ }
       this.livekitRoom = null;
     }
+    this.livekitLocalTrack = null;
     for (const element of this.livekitAudio) element.remove();
     this.livekitAudio.clear();
     this.usingLiveKit = false;
@@ -233,14 +236,18 @@ export class MilaLiveSession {
 
   toggleMute() {
     this.muted = !this.muted;
-    for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
     if (this.usingLiveKit) {
-      this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(!this.muted).catch?.(() => {});
+      const action = this.muted ? this.livekitLocalTrack?.mute?.() : this.livekitLocalTrack?.unmute?.();
+      action?.catch?.(() => {});
     } else if (this.muted) {
+      for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = false;
       if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
       this._stopSpeechRecognition();
       this.options.onLevel?.("input", 0);
-    } else this._startSpeechRecognition();
+    } else {
+      for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = true;
+      this._startSpeechRecognition();
+    }
     this._state(this.muted ? "muted" : "listening");
     return this.muted;
   }
@@ -468,11 +475,25 @@ export class MilaLiveSession {
     });
 
     await room.connect(credentials.serverUrl, credentials.participantToken);
-    await room.localParticipant.setMicrophoneEnabled(true, {
+    const mediaTrack = this.mediaStream?.getAudioTracks?.()[0];
+    if (!mediaTrack || mediaTrack.readyState !== "live") throw new Error("The selected microphone is no longer available");
+    const constraints = {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
       channelCount: 1,
+    };
+    this.livekitLocalTrack = new LK.LocalAudioTrack(
+      mediaTrack,
+      constraints,
+      true,
+      this.audioContext,
+    );
+    await room.localParticipant.publishTrack(this.livekitLocalTrack, {
+      name: "mila-microphone",
+      source: LK.Track.Source.Microphone,
+      dtx: true,
+      red: true,
     });
     this.ready = true;
     this._state("listening");

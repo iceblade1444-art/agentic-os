@@ -9,6 +9,8 @@ import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../assets/
 test("Mila transcript filter rejects the wrong script for selected Russian", () => {
   assert.equal(isTranscriptPlausible("Как твои дела?", "ru-RU"), true);
   assert.equal(isTranscriptPlausible("आपने का मिला", "ru-RU"), false);
+  assert.equal(isTranscriptPlausible("<noise>", "ru-RU"), false);
+  assert.equal(isTranscriptPlausible(".", "ru-RU"), false);
   assert.equal(isTranscriptPlausible("Agentic OS работает", "ru-RU"), true);
   assert.equal(isTranscriptPlausible("Agentic OS ishlayapti", "uz-UZ"), true);
 });
@@ -36,7 +38,9 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   assert.match(source, /assets\/vendor\/livekit-client\.umd\.js/);
   assert.match(source, /liveKitClientGlobal/);
   assert.match(source, /_connectLiveKit/);
-  assert.match(source, /setMicrophoneEnabled\(true, \{/);
+  assert.match(source, /new LK\.LocalAudioTrack/);
+  assert.match(source, /publishTrack\(this\.livekitLocalTrack/);
+  assert.doesNotMatch(source, /setMicrophoneEnabled\(true, \{/);
   assert.match(source, /echoCancellation: true/);
   assert.match(source, /noiseSuppression: true/);
   assert.match(source, /this\.usingLiveKit \|\| !Recognition/);
