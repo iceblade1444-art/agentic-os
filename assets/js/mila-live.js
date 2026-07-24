@@ -163,6 +163,7 @@ export class MilaLiveSession {
     this.options = options;
     this.socket = null;
     this.livekitRoom = null;
+    this.livekitLocalTrack = null;
     this.livekitAudio = new Set();
     this.usingLiveKit = false;
     this.audioContext = null;
@@ -233,17 +234,19 @@ export class MilaLiveSession {
 
   toggleMute() {
     this.muted = !this.muted;
-    for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
     if (this.usingLiveKit) {
       const action = this.muted
-        ? this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(false)
-        : this.livekitRoom?.localParticipant?.setMicrophoneEnabled?.(true, this._microphoneConstraints());
+        ? this.livekitLocalTrack?.mute?.()
+        : this.livekitLocalTrack?.unmute?.();
       action?.catch?.(() => {});
-    } else if (this.muted) {
+    } else {
+      for (const track of this.mediaStream?.getAudioTracks() || []) track.enabled = !this.muted;
+    }
+    if (!this.usingLiveKit && this.muted) {
       if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
       this._stopSpeechRecognition();
       this.options.onLevel?.("input", 0);
-    } else this._startSpeechRecognition();
+    } else if (!this.usingLiveKit) this._startSpeechRecognition();
     this._state(this.muted ? "muted" : "listening");
     return this.muted;
   }
@@ -487,7 +490,24 @@ export class MilaLiveSession {
     });
 
     await room.connect(credentials.serverUrl, credentials.participantToken);
-    await room.localParticipant.setMicrophoneEnabled(true, this._microphoneConstraints());
+    const mediaTrack = this.mediaStream?.getAudioTracks()?.[0];
+    if (!mediaTrack || mediaTrack.readyState !== "live") {
+      throw new Error("The selected microphone stopped before it could join the LiveKit room");
+    }
+    const localTrack = new LK.LocalAudioTrack(
+      mediaTrack,
+      this._microphoneConstraints(),
+      true,
+      this.audioContext,
+    );
+    localTrack.source = LK.Track.Source.Microphone;
+    this.livekitLocalTrack = localTrack;
+    await room.localParticipant.publishTrack(localTrack, {
+      name: "mila-microphone",
+      source: LK.Track.Source.Microphone,
+      dtx: true,
+      red: true,
+    });
     this.ready = true;
     this._state("listening");
     this._stopSpeechRecognition();
@@ -653,6 +673,7 @@ export class MilaLiveSession {
     try { this.processor?.disconnect(); } catch { /* disconnected */ }
     try { this.inputSource?.disconnect(); } catch { /* disconnected */ }
     try { this.silentGain?.disconnect(); } catch { /* disconnected */ }
+    this.livekitLocalTrack = null;
     for (const track of this.mediaStream?.getTracks() || []) track.stop();
     this.mediaStream = null;
     this.processor = null;
