@@ -119,6 +119,15 @@ function rmsPcm16(bytes) {
   return Math.min(1, Math.sqrt(sum / Math.max(1, count)) * 3);
 }
 
+function mergeTranscript(existing, addition) {
+  const left = String(existing || "").trim();
+  const right = String(addition || "").trim();
+  if (!right) return left;
+  if (!left) return right;
+  if (left.endsWith(right) || left.includes(right)) return left;
+  return `${left} ${right}`.trim();
+}
+
 export class MilaLiveSession {
   constructor(options) {
     this.options = options;
@@ -355,9 +364,9 @@ export class MilaLiveSession {
         this._state("listening");
       }
       const userText = content.inputTranscription?.text;
-      if (userText && !this.browserTranscription) {
+      if (userText) {
         if (isTranscriptPlausible(userText, this.options.transcriptionLanguage)) {
-          this.currentUser += userText;
+          this.currentUser = mergeTranscript(this.currentUser, userText);
           this.options.onPartial?.("user", this.currentUser);
           if (!this.currentAssistant) this._state("thinking");
         } else if (!this.transcriptWarningSent) {

@@ -32,6 +32,8 @@ test("Mila Live has Browser STT text fallback and a thinking timeout", () => {
   assert.match(source, /turnComplete: true/);
   assert.match(source, /_scheduleBrowserTextFallback\(this\.recognitionFinal\)/);
   assert.doesNotMatch(source, /realtimeInput: \{ text:/);
+  assert.doesNotMatch(source, /userText && !this\.browserTranscription/);
+  assert.match(source, /mergeTranscript\(this\.currentUser, userText\)/);
 });
 
 test("Mila preferences are validated and shape the voice behavior prompt", () => {
