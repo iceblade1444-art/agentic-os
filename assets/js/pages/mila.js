@@ -6,8 +6,8 @@ import {
 import { listMilaMicrophones, testMilaMicrophone } from "../mila-audio-devices.js";
 import { supportsAffectiveDialog } from "../mila-live.js";
 import {
-  MILA_DELIVERIES, MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
-  MILA_STYLES, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT, MILA_VOICE_GROUPS, milaHub,
+  MILA_DELIVERIES, MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_PERSONA_LIMIT,
+  MILA_RESPONSE_LENGTHS, MILA_STYLES, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT, MILA_VOICE_GROUPS, milaHub,
 } from "../mila-session.js";
 
 let pendingAttachments = [];
@@ -214,6 +214,10 @@ export default {
             <fieldset class="mila-setting-group"><legend>Voice answers</legend><div class="mila-segments two">${segmentsHTML("milaResponseLength", MILA_RESPONSE_LENGTHS, prefs.responseLength)}</div></fieldset>
           </div>
           <fieldset class="mila-setting-group"><legend>Delivery</legend><div class="mila-segments five">${segmentsHTML("milaDelivery", MILA_DELIVERIES, prefs.delivery)}</div></fieldset>
+          <div class="field"><label class="label" for="milaPersona">Who Mila is <span class="muted">(optional)</span></label>
+            <textarea class="input mila-persona" id="milaPersona" rows="4" maxlength="${MILA_PERSONA_LIMIT}" placeholder="Опишите её характер: кто она, как держится, что для неё важно, чего избегает.&#10;Например: Тебя зовут Мила. Ты спокойная и внимательная, говоришь просто и по делу, без канцелярита. Ты не льстишь и не извиняешься попусту. Если чего-то не знаешь — говоришь прямо.">${esc(prefs.persona)}</textarea>
+            <span class="hint">Her character in your own words — it takes precedence over the built-in manner, in both voice and writing. Safety rules and confirmations stay in force.</span>
+          </div>
           <div class="field"><label class="label" for="milaVoiceDirection">Voice direction <span class="muted">(optional)</span></label>
             <input class="input" id="milaVoiceDirection" maxlength="${MILA_VOICE_DIRECTION_LIMIT}" value="${esc(prefs.voiceDirection)}" placeholder="e.g. Speak like a calm night-radio host, never hurry"/>
             <span class="hint">Your own note on how Mila should sound. She also follows spoken cues — “whisper”, “speak faster” — and bracketed cues like [excited] without reading them aloud.</span>
@@ -277,6 +281,7 @@ export default {
               style: selected("milaStyle"),
               pace: selected("milaPace"),
               delivery: selected("milaDelivery"),
+              persona: modal.querySelector("#milaPersona").value,
               voiceDirection: modal.querySelector("#milaVoiceDirection").value,
               affectiveDialog: modal.querySelector("#milaAffectiveDialog").checked,
               proactiveAudio: modal.querySelector("#milaProactiveAudio").checked,
@@ -359,10 +364,14 @@ export default {
         if (stream && selfVideo.srcObject !== stream) selfVideo.srcObject = stream;
       } else if (selfVideo.srcObject) selfVideo.srcObject = null;
 
-      const thinkingInText = !state.active && (state.sendingTurn || state.textPhase === "thinking");
-      text.placeholder = thinkingInText
+      // On a LiveKit call typing still works, but the answer comes back written
+      // rather than spoken — say so instead of letting it look broken.
+      const writtenReply = !state.active || milaHub.session?.usingLiveKit;
+      const thinkingInText = state.sendingTurn || state.textPhase === "thinking";
+      text.placeholder = thinkingInText && writtenReply
         ? "Mila is writing…"
-        : state.active ? "Message Mila…" : "Write to Mila — no call needed…";
+        : !state.active ? "Write to Mila — no call needed…"
+          : writtenReply ? "Type — Mila answers in the transcript…" : "Message Mila…";
       if (!state.active && state.textPhase === "error" && state.textError) {
         errorBox.classList.remove("hidden");
         root.querySelector("#milaErrorText").textContent = state.textError;

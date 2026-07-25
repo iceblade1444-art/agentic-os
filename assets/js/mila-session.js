@@ -93,6 +93,7 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
   pace: "medium",
   delivery: "natural",
   voiceDirection: "",
+  persona: "",
   affectiveDialog: true,
   proactiveAudio: true,
   directConnection: false,
@@ -103,6 +104,7 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
 });
 
 export const MILA_VOICE_DIRECTION_LIMIT = 240;
+export const MILA_PERSONA_LIMIT = 1200;
 
 const ACTIVE_PHASES = new Set(["connecting", "listening", "thinking", "speaking", "muted"]);
 function initialLanguage() {
@@ -127,6 +129,8 @@ export function normalizeMilaPreferences(value = {}) {
     style: allowed(MILA_STYLES, value.style, MILA_DEFAULT_PREFERENCES.style),
     delivery: allowed(MILA_DELIVERIES, value.delivery, MILA_DEFAULT_PREFERENCES.delivery),
     voiceDirection: String(value.voiceDirection ?? "").replace(/\s+/g, " ").trim().slice(0, MILA_VOICE_DIRECTION_LIMIT),
+    // Line breaks are kept: a persona is usually written as several lines.
+    persona: String(value.persona ?? "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, MILA_PERSONA_LIMIT),
     affectiveDialog: value.affectiveDialog !== false,
     proactiveAudio: value.proactiveAudio !== false,
     directConnection: value.directConnection === true,
@@ -205,8 +209,14 @@ ${profile.voiceDirection ? `Additional delivery direction from ${profile.userNam
 Silently repair obvious speech-to-text mistakes using the conversation context. Focus on intended meaning, never criticize grammar or pronunciation, and only ask a clarifying question when the ambiguity changes the action or answer.
 Never read markdown, JSON, URLs, file paths or full file contents aloud. Say numbers, dates, times and prices naturally in the language you are speaking.
 When the user shares their camera or screen, look at the incoming frames and answer about what you can actually see. Say plainly when something is unreadable instead of guessing.`;
+  // The owner's own description of who Mila is. It shapes character and manner,
+  // and sits above the built-in style so it genuinely takes precedence — but it
+  // never loosens the safety, confirmation or honesty rules further down.
+  const persona = profile.persona
+    ? `\nWho you are, as defined by ${profile.userName} — this is your character and it takes precedence over the generic manner described below:\n${profile.persona}\nStay in this character throughout, including when you decline something. It does not change your safety rules, your confirmation steps, or your duty to say plainly what you cannot do.\n`
+    : "";
   return `You are MILA, ${profile.userName}'s ${textMode ? "assistant" : "live voice assistant"} inside Agentic OS. Hermes is the primary orchestrator and executes real work.
-${languageInstruction(language)} If the user mixes Russian, Uzbek and English, preserve useful technical terms and reply in the language that makes the answer easiest to understand.
+${persona}${languageInstruction(language)} If the user mixes Russian, Uzbek and English, preserve useful technical terms and reply in the language that makes the answer easiest to understand.
 ${STYLE_INSTRUCTIONS[profile.style]}
 ${channelRules}
 ${lengthInstruction}
@@ -514,9 +524,11 @@ class MilaSessionHub {
   async sendTurn(text, attachments = []) {
     if (this.state.sendingTurn) throw new Error("Wait for the current turn to finish");
     this.state.sendingTurn = true;
-    // On a call the words join the call; otherwise they go to the written
-    // channel, so the composer works whether or not Mila is on air.
-    if (!this.active || !this.session) {
+    // On a direct call the words join the call and Mila speaks the answer. With
+    // no call — or on a LiveKit room, which carries no client content — they go
+    // to the written channel and she answers in the transcript. Either way the
+    // composer works; it never refuses the message.
+    if (!this.active || !this.session || this.session.usingLiveKit) {
       this.notify();
       return this.sendWritten(text, attachments);
     }
