@@ -70,6 +70,7 @@ export const api = {
   onboarding: {
     get: () => j("/api/onboarding"),
     save: (body) => j("/api/onboarding", { method: "PUT", body }),
+    sync: () => j("/api/onboarding/sync-context", { method: "POST" }),
   },
   member: {
     dashboard: () => j("/api/member/dashboard"),
@@ -81,6 +82,9 @@ export const api = {
     createNote: (body) => j("/api/member/notes", { method: "POST", body }),
     updateNote: (id, body) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "PATCH", body }),
     deleteNote: (id) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+  personal: {
+    dashboard: () => j("/api/personal"),
   },
   mcp: {
     list: () => j("/api/mcp/servers"),

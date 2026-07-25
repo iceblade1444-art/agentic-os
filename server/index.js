@@ -19,6 +19,7 @@ import pulse from "./routes/pulse.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
 import member from "./routes/member.js";
+import personal from "./routes/personal.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import {
@@ -98,6 +99,7 @@ app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHan
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);
+app.use("/api/personal", personal);
 app.use("/api/speech", requireOperator, speech);
 app.use("/api/mcp", requireOperator, mcp);
 app.use("/api/integrations", requireOperator, integrations);

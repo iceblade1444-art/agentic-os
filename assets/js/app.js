@@ -18,6 +18,7 @@ import settings from "./pages/settings.js";
 import speech from "./pages/speech.js";
 import routines from "./pages/routines.js";
 import components from "./pages/components.js";
+import personal from "./pages/personal.js";
 import { memberHome, memberNotes, memberTasks } from "./pages/member.js";
 import * as misc from "./pages/misc.js";
 
@@ -25,6 +26,7 @@ import * as misc from "./pages/misc.js";
 const OPERATOR_NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
+    { route: "personal", icon: "user", label: "Personal" },
     { route: "missions", icon: "rocket", label: "Missions" },
     { route: "hermes", icon: "brain", label: "Hermes Control" },
     { route: "claude", icon: "code", label: "Claude Workspace" },
@@ -54,6 +56,7 @@ const OPERATOR_NAV = [
 const MEMBER_NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
+    { route: "personal", icon: "user", label: "Personal" },
     { route: "chat", icon: "chat", label: "Mila Assistant" },
     { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
     { route: "my-notes", icon: "knowledge", label: "My Notes" },
@@ -64,12 +67,13 @@ const MEMBER_NAV = [
 ];
 
 const OPERATOR_PAGES = {
-  "": dashboard, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
+  "": dashboard, personal, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
+  "my-tasks": memberTasks, "my-notes": memberNotes,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
 };
-const MEMBER_PAGES = { "": memberHome, chat, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
+const MEMBER_PAGES = { "": memberHome, personal, chat, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
 const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : MEMBER_NAV;
 
 /* ---------------- Theme ---------------- */
@@ -147,7 +151,7 @@ function wireShell() {
   const um = qs("#user-menu");
   if (um) um.onclick = () => import("./ui.js").then((m) => m.openMenu(um, [
     { label: store.state.profile.name },
-    { text: "Profile", icon: "user", onClick: () => (location.hash = "#/settings") },
+    { text: "Personal", icon: "user", onClick: () => (location.hash = "#/personal") },
     { text: "Settings", icon: "settings", onClick: () => (location.hash = "#/settings") },
     ...(api.auth.canAdmin ? [{ text: "Component library", icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
     { sep: true },

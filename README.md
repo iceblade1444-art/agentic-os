@@ -540,9 +540,9 @@ Dockerfile · .env.example · package.json
 - Fonts (Inter, JetBrains Mono) load from Google Fonts; the UI falls back to system fonts if
   offline. To self-host, download the fonts and swap the `<link>` in `index.html`.
 - **What's real with the backend running:** MCP tool discovery & calls, integration credential
-  checks, streaming LLM chat, Kanban, Obsidian, Hermes and Claude workspace. Personal UI state
-  such as chat history and appearance remains client-side in a separate `localStorage` namespace
-  for every authenticated user; it does not yet synchronize between that user's devices.
+  checks, streaming LLM chat, Kanban, Obsidian, Hermes, Claude workspace, personal tasks,
+  personal notes and per-user SOUL profiles. Appearance and transient chat UI state remain
+  client-side in a separate `localStorage` namespace for every authenticated user.
 - **Observability is host-backed:** after installing the operations units, the dashboard reports
   real API, Docker, Hermes, disk and backup health. Daily backups include app data, Obsidian and
   runtime workspaces with configurable retention. See [Operations](docs/OPERATIONS.md).
@@ -562,6 +562,10 @@ accounts. Creator/Admin can assign Admin, Member or Viewer access in
 **Settings > Team**. Passwords are protected with `scrypt`, and role or account
 status changes revoke active sessions. See [Access control](docs/ACCESS_CONTROL.md)
 for the role matrix and shared/personal data boundaries.
+
+The **Personal** workspace combines the current user's daily brief, private
+tasks and notes, MILA preferences, `SOUL.md`, approval queue and web/mobile
+account state. See [Personal workspace](docs/PERSONAL_RU.md).
 
 ## 🙏 Design credits
 
