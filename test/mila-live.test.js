@@ -8,7 +8,8 @@ import {
   supportsAffectiveDialog,
 } from "../assets/js/mila-live.js";
 import {
-  MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, normalizeMilaPreferences,
+  MILA_TRANSPORTS, MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, milaTokenPlan,
+  normalizeMilaPreferences,
 } from "../assets/js/mila-session.js";
 
 test("Mila transcript filter rejects the wrong script for selected Russian", () => {
@@ -237,6 +238,36 @@ test("the chat route bounds history, image types and payload size", async () => 
   assert.deepEqual(chatMessages(undefined), []);
 });
 
+test("the direct socket is the default transport because LiveKit cannot speak typed turns", () => {
+  // Probed on the running stack: the agent log says "generate_reply is not
+  // compatible with gemini-3.1-flash-live-preview", while the direct socket
+  // answered the same typed turn with 117 KB of audio.
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  assert.deepEqual(MILA_TRANSPORTS.map((item) => item.id), ["direct", "livekit"]);
+  assert.equal(normalizeMilaPreferences({}).transport, "direct");
+  assert.equal(normalizeMilaPreferences({ transport: "livekit" }).transport, "livekit");
+  assert.equal(normalizeMilaPreferences({ transport: "carrier-pigeon" }).transport, "direct");
+  // The stale boolean must not linger and quietly force LiveKit.
+  assert.doesNotMatch(session, /directConnection/);
+
+  // Direct must never silently end up on LiveKit, where a typed turn is lost.
+  assert.deepEqual(milaTokenPlan("direct"), ["direct"]);
+  assert.deepEqual(milaTokenPlan(undefined), ["direct"]);
+  // LiveKit may fall through when the room cannot be created, so a call happens.
+  assert.deepEqual(milaTokenPlan("livekit"), ["livekit", "direct"]);
+});
+
+test("Shift, Ctrl or Cmd with Enter sends; Enter alone writes a new line", () => {
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+  const handler = /text\.onkeydown = \(event\) => \{[\s\S]*?\n    \};/.exec(page)[0];
+  assert.match(handler, /event\.key !== "Enter"/);
+  assert.match(handler, /event\.isComposing/, "an IME composition must not send mid-word");
+  assert.match(handler, /!event\.shiftKey && !event\.ctrlKey && !event\.metaKey/);
+  assert.match(handler, /preventDefault/);
+  assert.match(handler, /submitMessage\(\)/);
+  assert.match(page, /Shift\+Enter to send/, "the shortcut is discoverable in the composer");
+});
+
 test("video rides the call and needs the direct connection", () => {
   const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
@@ -249,11 +280,11 @@ test("video rides the call and needs the direct connection", () => {
   assert.match(live, /Video needs the direct connection/);
   assert.match(page, /shareVideo\("camera"\)/);
   assert.match(page, /shareVideo\("screen"\)/);
-  assert.match(page, /milaDirectConnection/);
-  assert.match(session, /directConnection/);
+  assert.match(page, /milaTransport/);
+  assert.match(session, /transport === "livekit"/);
 });
 
-test("typing on a LiveKit call is spoken, and only images fall back to writing", () => {
+test("typed turns reach the LiveKit chat topic, and only images fall back to writing", () => {
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
   const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
@@ -266,7 +297,9 @@ test("typing on a LiveKit call is spoken, and only images fall back to writing",
   const sendTurnBody = /async sendTurn\(text, attachments = \[\]\) \{[\s\S]*?\n  \}/.exec(session)[0];
   assert.match(sendTurnBody, /onLiveKit && hasImages/, "only pictures divert to writing");
   assert.match(sendTurnBody, /this\.sendWritten\(text, attachments\)/);
-  assert.match(page, /Mila answers out loud/);
+  // The composer names the outcome, which differs by transport: the direct
+  // socket speaks a typed turn, LiveKit can only write it back.
+  assert.match(page, /Mila answers \$\{milaHub\.session\?\.usingLiveKit \? "in the transcript" : "out loud"\}/);
 });
 
 test("the LiveKit transcript is filtered like the direct one", () => {
