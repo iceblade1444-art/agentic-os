@@ -364,14 +364,11 @@ export default {
         if (stream && selfVideo.srcObject !== stream) selfVideo.srcObject = stream;
       } else if (selfVideo.srcObject) selfVideo.srcObject = null;
 
-      // On a LiveKit call typing still works, but the answer comes back written
-      // rather than spoken — say so instead of letting it look broken.
-      const writtenReply = !state.active || milaHub.session?.usingLiveKit;
-      const thinkingInText = state.sendingTurn || state.textPhase === "thinking";
-      text.placeholder = thinkingInText && writtenReply
+      // On a call Mila speaks whatever you type; without one she writes back.
+      const thinkingInText = !state.active && (state.sendingTurn || state.textPhase === "thinking");
+      text.placeholder = thinkingInText
         ? "Mila is writing…"
-        : !state.active ? "Write to Mila — no call needed…"
-          : writtenReply ? "Type — Mila answers in the transcript…" : "Message Mila…";
+        : state.active ? "Type — Mila answers out loud…" : "Write to Mila — no call needed…";
       if (!state.active && state.textPhase === "error" && state.textError) {
         errorBox.classList.remove("hidden");
         root.querySelector("#milaErrorText").textContent = state.textError;

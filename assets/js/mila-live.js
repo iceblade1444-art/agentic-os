@@ -5,6 +5,8 @@ const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
 const AUDIO_CHUNK_SIZE = 1024;
 const MAX_VIDEO_EDGE = 960;
+// livekit-agents registers a text handler on this topic and replies by voice.
+const LIVEKIT_CHAT_TOPIC = "lk.chat";
 const BROWSER_STT_FALLBACK_MS = 1600;
 const THINKING_TIMEOUT_MS = 18000;
 const INPUT_ACTIVITY_LEVEL = 0.025;
@@ -358,7 +360,20 @@ export class MilaLiveSession {
   }
 
   async sendTurn({ prompt, displayText, images = [] }) {
-    if (this.usingLiveKit) throw new Error("Writing is unavailable during a LiveKit voice call");
+    // A LiveKit room takes typed turns on the agent's chat topic, and the agent
+    // answers them out loud like any spoken turn. Pictures cannot ride that
+    // channel, so the hub sends those through the written one instead.
+    if (this.usingLiveKit) {
+      if (!this.livekitRoom?.localParticipant) throw new Error("Mila Live is not connected");
+      if (images.length) throw new Error("Images need the written channel during a LiveKit call");
+      const message = String(prompt || "").trim();
+      if (!message) throw new Error("Add a message or attachment");
+      this.currentUser = String(displayText || message).trim();
+      this.options.onPartial?.("user", this.currentUser);
+      await this.livekitRoom.localParticipant.sendText(message, { topic: LIVEKIT_CHAT_TOPIC });
+      this._state("thinking");
+      return;
+    }
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) throw new Error("Mila Live is not connected");
     const message = String(prompt || "").trim();
     if (!message) throw new Error("Add a message or attachment");
@@ -590,6 +605,15 @@ export class MilaLiveSession {
       for (const segment of segments) {
         const text = String(segment.text || "").trim();
         if (!text) continue;
+        // The same guard the direct socket applies: a recogniser that renders
+        // speech in a script this workspace never uses must not reach the turn.
+        if (role === "user" && !isTranscriptPlausible(text, this.options.transcriptionLanguage)) {
+          if (!this.transcriptWarningSent) {
+            this.transcriptWarningSent = true;
+            this.options.onTranscriptWarning?.();
+          }
+          continue;
+        }
         if (segment.final === false) this.options.onPartial?.(role, text);
         else {
           if (role === "assistant") {
