@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
-import { milaConnectionCode, milaDevices, milaLiveKitToken, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
+import { milaConnectionCode, milaDevices, milaGeminiChat, milaLiveKitToken, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
 import { authenticatedUser, requireRoles } from "../lib/auth.js";
 
 const r = Router();
@@ -56,14 +56,35 @@ r.post("/slack/send", requireAdmin, async (req, res) => {
 const milaConfig = () => db.integrations.byProvider("mila")?.config || {};
 const milaAction = (handler) => async (req, res) => {
   try { res.json(await handler(milaConfig(), req.body || {}, req)); }
-  catch (e) { res.status(502).json({ error: e.message }); }
+  catch (e) { res.status(e.status >= 400 && e.status < 600 ? e.status : 502).json({ error: e.message }); }
 };
+
+// Bound what the browser can push into the upstream chat: recent turns only,
+// four images per turn, and text clamped well under the backend's own limit.
+const MAX_IMAGE_CHARS = 8 * 1024 * 1024;
+function chatMessages(value) {
+  return (Array.isArray(value) ? value : []).slice(-24).map((message) => ({
+    role: message?.role === "assistant" ? "assistant" : "user",
+    content: String(message?.content || "").trim().slice(0, 30000),
+    // Filter before capping, so unsupported files cannot crowd out real images.
+    attachments: (Array.isArray(message?.attachments) ? message.attachments : [])
+      .filter((item) => typeof item?.data === "string" && item.data.length <= MAX_IMAGE_CHARS
+        && /^image\/(jpeg|png|webp)$/.test(String(item?.mimeType || "")))
+      .slice(0, 4)
+      .map((item) => ({ mimeType: item.mimeType, data: item.data })),
+  })).filter((message) => message.content || message.attachments.length);
+}
 
 r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
 r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
 r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));
 r.post("/mila/voice-token", milaAction((cfg, body) => milaVoiceToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
 r.post("/mila/livekit-token", milaAction((cfg, body) => milaLiveKitToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
+r.post("/mila/chat", milaAction((cfg, body) => milaGeminiChat(cfg, "Agentic OS dashboard", {
+  messages: chatMessages(body?.messages),
+  systemPrompt: String(body?.systemPrompt || "").slice(0, 30000),
+  model: /^[a-zA-Z0-9._-]{1,100}$/.test(String(body?.model || "")) ? String(body.model) : "",
+})));
 r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body, req) => {
   const user = authenticatedUser(req);
   return milaConnectionCode(cfg, body.label || user.email || user.name, {

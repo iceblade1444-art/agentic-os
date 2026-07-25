@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
 import {
-  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible, modelTurnText,
+  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible,
 } from "../assets/js/mila-live.js";
 import {
   MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, normalizeMilaPreferences,
@@ -146,56 +146,80 @@ test("delivery direction reaches the prompt without leaking stage directions", (
   assert.match(prompt, /never pronounce the bracketed words/);
 });
 
-test("text mode is the same Mila answering in writing, without the audio rig", () => {
-  const setup = buildLiveSetup({ mode: "text", model: "gemini-live", systemInstruction: "Be helpful", tools: [{ name: "x" }] });
-  assert.deepEqual(setup.generationConfig.responseModalities, ["TEXT"]);
-  assert.equal(setup.generationConfig.speechConfig, undefined, "text turns need no voice");
-  assert.equal("enableAffectiveDialog" in setup, false, "affective dialog is an audio concept");
-  assert.equal(setup.realtimeInputConfig, undefined);
-  assert.equal(setup.inputAudioTranscription, undefined);
-  assert.equal(setup.outputAudioTranscription, undefined);
-  // Identity, tools and memory must not fork between the two channels.
+test("the live socket stays audio-only — live models cannot answer in text", () => {
+  const setup = buildLiveSetup({ model: "gemini-live", systemInstruction: "Be helpful", tools: [{ name: "x" }] });
+  assert.deepEqual(setup.generationConfig.responseModalities, ["AUDIO"]);
+  assert.ok(setup.generationConfig.speechConfig, "a call always needs a voice");
   assert.equal(setup.systemInstruction.parts[0].text, "Be helpful");
   assert.deepEqual(setup.tools, [{ functionDeclarations: [{ name: "x" }] }]);
-  assert.deepEqual(setup.contextWindowCompression, { slidingWindow: {} });
-
-  const voice = buildLiveSetup({ model: "gemini-live" });
-  assert.deepEqual(voice.generationConfig.responseModalities, ["AUDIO"]);
-  assert.ok(voice.generationConfig.speechConfig);
 });
 
-test("written answers are read from model turn parts", () => {
-  assert.equal(modelTurnText({ parts: [{ text: "Hello " }, { text: "there" }] }), "Hello there");
-  assert.equal(modelTurnText({ parts: [{ inlineData: { data: "x" } }, { text: "ok" }] }), "ok");
-  assert.equal(modelTurnText({ parts: [] }), "");
-  assert.equal(modelTurnText(undefined), "");
-  assert.equal(modelTurnText({}), "");
-});
-
-test("the chat composer works without a call and video rides the call", () => {
+test("writing goes to the Gemini chat endpoint, not the live socket", () => {
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
-  const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
-  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+  const apiClient = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
+  const route = fs.readFileSync(new URL("../server/routes/integrations.js", import.meta.url), "utf8");
+  const milaLib = fs.readFileSync(new URL("../server/lib/mila.js", import.meta.url), "utf8");
 
   // Sending text no longer demands an active call — only the mic toggle does.
   const sendTurnBody = /async sendTurn\(text, attachments = \[\]\) \{[\s\S]*?\n  \}/.exec(session)?.[0] || "";
   assert.ok(sendTurnBody, "sendTurn should still exist");
   assert.doesNotMatch(sendTurnBody, /Start a live call first/);
-  assert.match(sendTurnBody, /ensureTextSession/);
-  assert.match(session, /milaVoiceToken\(\{ language/, "text uses the direct token, not a LiveKit room");
-  assert.match(session, /await this\.stopTextSession\(\)/, "a call takes the written channel over");
+  assert.match(sendTurnBody, /this\.sendWritten\(text, attachments\)/);
+  assert.match(session, /api\.integrations\.milaChat/);
+  assert.match(session, /systemInstruction\("text"\)/);
 
-  // Video is sampled as frames on the existing realtime input.
+  assert.match(apiClient, /\/api\/integrations\/mila\/chat/);
+  assert.match(route, /\/mila\/chat/);
+  assert.match(milaLib, /\/v1\/gemini\/chat/);
+});
+
+test("the chat route bounds history, image types and payload size", async () => {
+  const route = fs.readFileSync(new URL("../server/routes/integrations.js", import.meta.url), "utf8");
+  const limit = /const MAX_IMAGE_CHARS = ([^;]+);/.exec(route)[0];
+  const source = /function chatMessages\(value\) \{[\s\S]*?\n\}/.exec(route)[0];
+  const chatMessages = new Function(`${limit}\n${source.replace("function chatMessages", "return function chatMessages")}`)();
+
+  const many = Array.from({ length: 40 }, (_, i) => ({ role: "user", content: `m${i}` }));
+  assert.equal(chatMessages(many).length, 24, "only recent turns travel upstream");
+  assert.equal(chatMessages(many)[0].content, "m16");
+
+  const [message] = chatMessages([{
+    role: "assistant",
+    content: "x".repeat(40000),
+    attachments: [
+      { mimeType: "image/png", data: "ok" },
+      { mimeType: "application/pdf", data: "nope" },
+      { mimeType: "image/jpeg", data: "y".repeat(9 * 1024 * 1024) },
+      { mimeType: "image/webp", data: "fine" },
+      { mimeType: "image/png", data: "third" },
+      { mimeType: "image/png", data: "fourth" },
+      { mimeType: "image/png", data: "fifth" },
+    ],
+  }]);
+  assert.equal(message.role, "assistant");
+  assert.equal(message.content.length, 30000, "text is clamped");
+  // Unsupported and oversize files are dropped first, so they cannot crowd out
+  // real images; only then are the remaining images capped at four.
+  assert.deepEqual(message.attachments.map((item) => item.data), ["ok", "fine", "third", "fourth"]);
+
+  assert.deepEqual(chatMessages([{ role: "user", content: "   " }]), [], "empty turns are not sent");
+  assert.deepEqual(chatMessages(undefined), []);
+});
+
+test("video rides the call and needs the direct connection", () => {
+  const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+
   assert.match(live, /getDisplayMedia/);
   assert.match(live, /realtimeInput: \{ video:/);
-  assert.match(live, /Start a call before sharing video/);
   assert.match(live, /MAX_VIDEO_EDGE/);
+  // The LiveKit agent has no video path, so the error says what to do about it.
+  assert.match(live, /Video needs the direct connection/);
   assert.match(page, /shareVideo\("camera"\)/);
   assert.match(page, /shareVideo\("screen"\)/);
-
-  // In writing an image belongs to the question; in a call it is a realtime frame.
-  assert.match(live, /inlineData: \{ data: item\.data/);
-  assert.match(live, /if \(this\.textMode\) \{\s*\n\s*this\._sendTextTurn\(message, images\)/);
+  assert.match(page, /milaDirectConnection/);
+  assert.match(session, /directConnection/);
 });
 
 test("the written channel drops voice-only coaching from the prompt", () => {

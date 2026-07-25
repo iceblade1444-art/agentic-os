@@ -42,18 +42,16 @@ function silenceTurnMs(profile = "balanced") {
   return (ACTIVITY_PROFILES[profile] || ACTIVITY_PROFILES.balanced).silenceDurationMs + SILENCE_BUFFER_MS;
 }
 
-// Two shapes of the same Mila: an audio call, or a text session that answers in
-// writing. Text mode keeps the identical system instruction and tools, so the
-// assistant, her memory of the conversation and her permissions do not fork.
+// Live models answer in audio only — writing goes through MILA's Gemini chat
+// endpoint instead (see milaChat), not through this socket.
 export function buildLiveSetup(options = {}) {
   const setup = {
     model: `models/${options.model}`,
-    generationConfig: { responseModalities: options.mode === "text" ? ["TEXT"] : ["AUDIO"] },
+    generationConfig: { responseModalities: ["AUDIO"] },
     systemInstruction: { parts: [{ text: options.systemInstruction || "" }] },
     contextWindowCompression: { slidingWindow: {} },
     tools: [{ functionDeclarations: options.tools || [] }],
   };
-  if (options.mode === "text") return setup;
 
   setup.generationConfig.speechConfig = {
     voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } },
@@ -174,14 +172,6 @@ function rmsPcm16(bytes) {
   return Math.min(1, Math.sqrt(sum / Math.max(1, count)) * 3);
 }
 
-// Text turns come back as parts on the model turn rather than as a transcription.
-export function modelTurnText(modelTurn) {
-  const parts = modelTurn?.parts || modelTurn?.Parts || [];
-  return (Array.isArray(parts) ? parts : [])
-    .map((part) => (typeof part?.text === "string" ? part.text : ""))
-    .join("");
-}
-
 function mergeTranscript(existing, addition) {
   const left = String(existing || "").trim();
   const right = String(addition || "").trim();
@@ -224,7 +214,6 @@ export class MilaLiveSession {
     this.heardSpeech = false;
     this.audioTurnEnded = false;
     this.lastVoiceAt = 0;
-    this.textMode = options.mode === "text";
     this.videoStream = null;
     this.videoElement = null;
     this.videoCanvas = null;
@@ -236,11 +225,9 @@ export class MilaLiveSession {
     this.intentionalClose = false;
     this._state("connecting");
     try {
-      // A text session needs no microphone and no playback graph — it is the same
-      // assistant answering in writing, so it never asks for device permissions.
-      if (!this.textMode) await this._openAudio();
+      await this._openAudio();
       const credentials = await this.options.getToken();
-      if (!this.textMode && credentials?.participantToken && credentials?.serverUrl) {
+      if (credentials?.participantToken && credentials?.serverUrl) {
         await this._connectLiveKit(credentials);
       } else {
         if (!credentials?.token) throw new Error("Mila did not return a Live token");
@@ -301,8 +288,7 @@ export class MilaLiveSession {
   // Gemini Live takes video as periodic stills rather than a stream, so the
   // camera or screen is sampled about once a second and pushed as JPEG frames.
   async startVideo(source = "camera") {
-    if (this.textMode) throw new Error("Start a call before sharing video");
-    if (this.usingLiveKit) throw new Error("Video sharing needs the direct audio connection");
+    if (this.usingLiveKit) throw new Error("Video needs the direct connection — turn it on in voice preferences and call again");
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser cannot capture video");
     await this.stopVideo();
     const stream = source === "screen"
@@ -362,20 +348,16 @@ export class MilaLiveSession {
     if (!message) throw new Error("Add a message or attachment");
     this.currentUser = String(displayText || message).trim();
     this.options.onPartial?.("user", this.currentUser);
-    if (this.textMode) {
-      this._sendTextTurn(message, images);
-    } else {
-      // A live call is already streaming, so images go in as realtime frames
-      // ahead of the spoken-style turn.
-      for (let index = 0; index < images.length; index++) {
-        const item = images[index];
-        this.socket.send(JSON.stringify({
-          realtimeInput: { video: { data: item.data, mimeType: item.type || "image/jpeg" } },
-        }));
-        if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
-      }
-      this._sendTextTurn(message);
+    // A live call is already streaming, so images go in as realtime frames
+    // ahead of the spoken-style turn.
+    for (let index = 0; index < images.length; index++) {
+      const item = images[index];
+      this.socket.send(JSON.stringify({
+        realtimeInput: { video: { data: item.data, mimeType: item.type || "image/jpeg" } },
+      }));
+      if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
     }
+    this._sendTextTurn(message);
     this._state("thinking");
   }
 
@@ -643,11 +625,6 @@ export class MilaLiveSession {
 
     if (message.setupComplete) {
       this.ready = true;
-      if (this.textMode) {
-        this._state("ready");
-        this.readyResolve?.();
-        return;
-      }
       this._state("listening");
       this._startSpeechRecognition();
       this.readyResolve?.();
@@ -674,13 +651,13 @@ export class MilaLiveSession {
       }
       // Voice turns stream through outputTranscription; text turns arrive as
       // plain parts on the model turn.
-      const assistantText = content.outputTranscription?.text || (this.textMode ? modelTurnText(content.modelTurn) : "");
+      const assistantText = content.outputTranscription?.text;
       if (assistantText) {
         clearTimeout(this.thinkingTimer);
         this.currentAssistant += assistantText;
         this.options.onPartial?.("assistant", this.currentAssistant);
       }
-      if (!this.textMode) this._emitAudio(content.modelTurn);
+      this._emitAudio(content.modelTurn);
       if (content.turnComplete) this._commitTurn();
     }
 
@@ -765,18 +742,12 @@ export class MilaLiveSession {
     this.options.onPartial?.("assistant", "");
   }
 
-  _sendTextTurn(text, images = []) {
+  _sendTextTurn(text) {
     const value = String(text || "").trim();
     if (!value || this.lastTextPrompt === value || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.lastTextPrompt = value;
-    // Pictures travel inside the turn itself, so the model sees them as part of
-    // the question rather than as unrelated frames arriving beforehand.
-    const parts = [
-      ...images.map((item) => ({ inlineData: { data: item.data, mimeType: item.type || "image/jpeg" } })),
-      { text: value },
-    ];
     this.socket.send(JSON.stringify({
-      clientContent: { turns: [{ role: "user", parts }], turnComplete: true },
+      clientContent: { turns: [{ role: "user", parts: [{ text: value }] }], turnComplete: true },
     }));
     return true;
   }
@@ -819,7 +790,7 @@ export class MilaLiveSession {
       this.thinkingTimer = setTimeout(() => {
         if (this.intentionalClose || this.currentAssistant) return;
         this._commitTurn();
-        this._state(this.textMode ? "ready" : this.ready && !this.muted ? "listening" : "idle");
+        this._state(this.ready && !this.muted ? "listening" : "idle");
       }, THINKING_TIMEOUT_MS);
     }
     this.options.onState?.({ phase, error, muted: this.muted });

@@ -94,6 +94,7 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
   delivery: "natural",
   voiceDirection: "",
   affectiveDialog: true,
+  directConnection: false,
   listeningProfile: "balanced",
   responseLength: "brief",
   userName: "Бахадыр",
@@ -126,6 +127,7 @@ export function normalizeMilaPreferences(value = {}) {
     delivery: allowed(MILA_DELIVERIES, value.delivery, MILA_DEFAULT_PREFERENCES.delivery),
     voiceDirection: String(value.voiceDirection ?? "").replace(/\s+/g, " ").trim().slice(0, MILA_VOICE_DIRECTION_LIMIT),
     affectiveDialog: value.affectiveDialog !== false,
+    directConnection: value.directConnection === true,
     pace: allowed(MILA_PACES, value.pace, MILA_DEFAULT_PREFERENCES.pace),
     listeningProfile: allowed(MILA_LISTENING_PROFILES, value.listeningProfile, MILA_DEFAULT_PREFERENCES.listeningProfile),
     responseLength: allowed(MILA_RESPONSE_LENGTHS, value.responseLength, MILA_DEFAULT_PREFERENCES.responseLength),
@@ -243,7 +245,6 @@ class MilaSessionHub {
       sendingTurn: false,
       textPhase: "idle", textError: "", videoSource: "off",
     };
-    this.textSession = null;
   }
 
   get active() {
@@ -315,57 +316,51 @@ class MilaSessionHub {
     });
   }
 
-  // The written channel is the same Mila on a second Live connection that
-  // answers in text. It opens on the first message and stays up while the page
-  // does, so a chat costs one connection rather than one per message.
-  async ensureTextSession() {
-    if (this.textSession) return this.textSession;
-    if (this.state.phase === "checking") await this.loadStatus();
-    if (!this.state.backendReady) throw new Error(this.state.error || "Mila is not configured");
-
-    const session = new MilaLiveSession({
-      mode: "text",
-      model: this.state.model,
-      transcriptionLanguage: this.state.language,
-      systemInstruction: this.systemInstruction("text"),
-      tools: MILA_TOOLS,
-      // Text cannot ride a LiveKit voice room, so it always takes the direct token.
-      getToken: () => api.integrations.milaVoiceToken({ language: this.state.language }),
-      onState: ({ phase, error }) => {
-        this.state.textPhase = phase === "error" ? "error" : phase;
-        this.state.textError = error || "";
-        if (phase === "error") {
-          this.state.sendingTurn = false;
-          if (this.textSession === session) this.textSession = null;
-        }
-        this.notify();
-      },
-      onPartial: (role, value) => { this.state.partials[role] = value; this.notify(); },
-      onTurn: ({ user, assistant }) => {
-        if (user) this.state.history.push({ role: "user", text: user, attachments: this.state.pendingTurnAttachments, at: now() });
-        if (assistant) this.state.history.push({ role: "assistant", text: assistant, at: now() });
-        this.state.pendingTurnAttachments = [];
-        this.state.partials = { user: "", assistant: "" };
-        this.state.sendingTurn = false;
-        this.notify();
-      },
-      onToolCall: (name, args) => this.runAgenticAction(name, args),
-    });
-    this.textSession = session;
+  // Writing does not use the Live socket: live models answer in audio only, so
+  // the written channel goes to MILA's Gemini chat endpoint, which takes text
+  // and inline images in one request.
+  async sendWritten(text, attachments = []) {
+    let optimistic = null;
     try {
-      await session.start();
-    } catch (error) {
-      if (this.textSession === session) this.textSession = null;
-      throw error;
-    }
-    return session;
-  }
+      if (this.state.phase === "checking") await this.loadStatus();
+      if (!this.state.backendReady) throw new Error(this.state.error || "Mila is not configured");
+      const prompt = composeAttachmentPrompt(text, attachments, this.state.language);
+      const images = attachments.filter((item) => item.kind === "image")
+        .map((item) => ({ mimeType: item.type || "image/jpeg", data: item.data }));
 
-  async stopTextSession() {
-    const session = this.textSession;
-    this.textSession = null;
-    this.state.textPhase = "idle";
-    if (session) await session.stop().catch(() => { /* already gone */ });
+      // Show the question immediately, but take it back if it never got through,
+      // so a retry does not leave the same message in the transcript twice.
+      optimistic = {
+        role: "user",
+        text: attachmentDisplayText(text, attachments, this.state.language),
+        attachments: attachments.map(publicAttachment),
+        at: now(),
+      };
+      this.state.history.push(optimistic);
+      this.state.textPhase = "thinking";
+      this.state.textError = "";
+      this.notify();
+
+      const result = await api.integrations.milaChat({
+        systemPrompt: this.systemInstruction("text"),
+        messages: [
+          ...this.state.history.slice(-13, -1)
+            .filter((item) => item.role !== "system")
+            .map((item) => ({ role: item.role, content: item.text })),
+          { role: "user", content: prompt, attachments: images },
+        ],
+      });
+      this.state.history.push({ role: "assistant", text: result.text || "", at: now() });
+      this.state.textPhase = "idle";
+    } catch (error) {
+      if (optimistic) this.state.history = this.state.history.filter((item) => item !== optimistic);
+      this.state.textPhase = "error";
+      this.state.textError = error.message || "Mila could not answer";
+      throw error;
+    } finally {
+      this.state.sendingTurn = false;
+      this.notify();
+    }
   }
 
   async setVideo(source) {
@@ -381,8 +376,6 @@ class MilaSessionHub {
     if (this.session) return;
     if (this.state.phase === "checking") await this.loadStatus();
     if (!this.state.backendReady) throw new Error(this.state.error || "Mila Live is not configured");
-    // The call handles writing too, so the separate text connection stands down.
-    await this.stopTextSession();
 
     let live;
     live = new MilaLiveSession({
@@ -395,6 +388,11 @@ class MilaSessionHub {
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {
+        // The LiveKit agent has no video path, so camera and screen sharing need
+        // the direct socket. Everything else prefers LiveKit for call quality.
+        if (this.state.preferences.directConnection) {
+          return api.integrations.milaVoiceToken({ language: this.state.language });
+        }
         try {
           return await api.integrations.milaLiveKitToken({ language: this.state.language });
         } catch {
@@ -512,14 +510,17 @@ class MilaSessionHub {
 
   async sendTurn(text, attachments = []) {
     if (this.state.sendingTurn) throw new Error("Wait for the current turn to finish");
-    // During a call the words go into the call; otherwise they open (or reuse)
-    // the written channel, so the composer works whether or not Mila is on air.
-    const session = this.active && this.session ? this.session : await this.ensureTextSession();
-    this.state.pendingTurnAttachments = attachments.map(publicAttachment);
     this.state.sendingTurn = true;
+    // On a call the words join the call; otherwise they go to the written
+    // channel, so the composer works whether or not Mila is on air.
+    if (!this.active || !this.session) {
+      this.notify();
+      return this.sendWritten(text, attachments);
+    }
+    this.state.pendingTurnAttachments = attachments.map(publicAttachment);
     this.notify();
     try {
-      await session.sendTurn({
+      await this.session.sendTurn({
         prompt: composeAttachmentPrompt(text, attachments, this.state.language),
         displayText: attachmentDisplayText(text, attachments, this.state.language),
         images: attachments.filter((item) => item.kind === "image"),
