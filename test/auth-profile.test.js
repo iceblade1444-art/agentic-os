@@ -3,11 +3,25 @@ import fs from "node:fs";
 import { test } from "node:test";
 
 import { config } from "../server/config.js";
-import { creatorUser, userFromSession } from "../server/lib/auth.js";
+import { authenticatedUser, creatorUser, mobileSessionToken, userFromSession } from "../server/lib/auth.js";
 
 test("owner authentication exposes the Creator identity", () => {
   assert.deepEqual(creatorUser(), config.creator);
   assert.equal(creatorUser().role, "Creator");
+});
+
+test("mobile bearer sessions authenticate through the same account identity", () => {
+  const previous = config.authToken;
+  config.authToken = "test-owner-password";
+  try {
+    const token = mobileSessionToken(creatorUser());
+    const user = authenticatedUser({ headers: { authorization: `Bearer ${token}` } });
+    assert.equal(user.id, "creator");
+    assert.equal(user.role, "Creator");
+    assert.equal(authenticatedUser({ headers: { authorization: "Bearer invalid" } }), null);
+  } finally {
+    config.authToken = previous;
+  }
 });
 
 test("signed user sessions preserve registered user display names", () => {

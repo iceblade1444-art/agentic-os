@@ -23,7 +23,8 @@ import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
-  registerHandler, requireAuth, requireRoles, requireWriteAccess, updateUserHandler,
+  mobileLoginHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
+  requireWriteAccess, updateUserHandler,
 } from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
@@ -83,6 +84,8 @@ app.get("/api/health", (req, res) =>
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
+app.post("/api/auth/mobile/login", rateLimit({ windowMs: 60000, max: 10 }), mobileLoginHandler);
+app.post("/api/auth/mobile/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), mobileRegisterHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
 

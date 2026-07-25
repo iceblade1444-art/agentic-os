@@ -54,7 +54,16 @@ export function userFromSession(payload) {
 export function authenticatedUser(req) {
   if (!authEnabled()) return creatorUser();
   const auth = req.headers.authorization || "";
-  if (auth.startsWith("Bearer ")) return constEq(auth.slice(7), config.authToken) ? creatorUser() : null;
+  if (auth.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    if (constEq(token, config.authToken)) return creatorUser();
+    const payload = verify(token);
+    if (payload?.kind !== "mobile" || !payload.user?.id) return null;
+    if (payload.user.id === "creator") return creatorUser();
+    const user = users.sessionUser(String(payload.user.id));
+    if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
+    return userFromSession({ user });
+  }
   const payload = verify(parseCookies(req)[COOKIE]);
   if (!payload?.user) return null;
   if (payload.user.id === "creator") return creatorUser();
@@ -103,6 +112,15 @@ export function sessionCookie(req, user = creatorUser()) {
   return `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 86400}${secure}`;
 }
 
+export function mobileSessionToken(user) {
+  return sign({
+    exp: Date.now() + 30 * 864e5,
+    kind: "mobile",
+    user: userFromSession({ user }),
+    sessionVersion: Number(user.sessionVersion) || 1,
+  });
+}
+
 export function loginHandler(req, res) {
   if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
   const { email = "", password = "" } = req.body || {};
@@ -117,6 +135,36 @@ export function registerHandler(req, res) {
     const user = users.register(req.body || {});
     res.setHeader("Set-Cookie", sessionCookie(req, user));
     res.status(201).json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
+  } catch (error) {
+    res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
+  }
+}
+
+export function mobileLoginHandler(req, res) {
+  if (!authEnabled()) return res.status(503).json({ error: "Authentication is not configured" });
+  const { email = "", password = "" } = req.body || {};
+  const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
+  if (!user) return res.status(401).json({ error: "Invalid email or password" });
+  res.json({
+    ok: true,
+    accessToken: mobileSessionToken(user),
+    expiresInSeconds: 30 * 86400,
+    user: userFromSession({ user }),
+    capabilities: capabilities(user),
+  });
+}
+
+export function mobileRegisterHandler(req, res) {
+  if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
+  try {
+    const user = users.register(req.body || {});
+    res.status(201).json({
+      ok: true,
+      accessToken: mobileSessionToken(user),
+      expiresInSeconds: 30 * 86400,
+      user: userFromSession({ user }),
+      capabilities: capabilities(user),
+    });
   } catch (error) {
     res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
   }

@@ -73,6 +73,8 @@ test("frontend and server expose distinct member and operator surfaces", () => {
   assert.match(app, /if \(api\.auth\.canAdmin\) mountMilaDock\(\)/);
   assert.match(api, /\/api\/member\/tasks/);
   assert.match(server, /app\.use\("\/api\/member", member\)/);
+  assert.match(server, /\/api\/auth\/mobile\/login/);
+  assert.match(server, /\/api\/auth\/mobile\/register/);
   for (const route of ["mcp", "integrations", "kanban", "claude-code", "operations", "skills"]) {
     assert.equal(server.includes(`app.use("/api/${route}", requireOperator`), true);
   }
