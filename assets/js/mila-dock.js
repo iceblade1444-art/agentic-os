@@ -1,3 +1,4 @@
+import { brandMark } from "./brand.js";
 import { icon } from "./icons.js";
 import { esc, toast } from "./ui.js";
 import {
@@ -52,7 +53,7 @@ export function mountMilaDock() {
     </button>
     <div class="mila-dock-panel">
       <header class="mila-dock-head">
-        <span class="mila-dock-avatar">${icon("mic")}</span>
+        <span class="mila-dock-avatar">${brandMark()}</span>
         <div><strong>Mila Live</strong><span id="milaDockPhase">Listening</span></div>
         <time class="mono" id="milaDockTimer">00:00</time>
         <a class="icon-btn tip" data-tip="Open full Mila Live" href="#/mila" aria-label="Open full Mila Live">${icon("up")}</a>

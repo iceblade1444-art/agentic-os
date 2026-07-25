@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { brandMark } from "./brand.js";
 import { icon } from "./icons.js";
 import { milaHub } from "./mila-session.js";
 import { esc } from "./ui.js";
@@ -81,7 +82,7 @@ export function renderOnboarding(initial) {
   app.removeAttribute("aria-busy");
   app.innerHTML = `<main class="onboarding">
     <aside class="onboarding-rail">
-      <div class="onboarding-brand"><span>${icon("rocket")}</span><strong>Agentic OS</strong></div>
+      <div class="onboarding-brand"><span>${brandMark()}</span><strong>Mila</strong></div>
       <ol id="onboardingSteps"></ol>
       <div class="onboarding-context">${icon("knowledge")}<span>Obsidian<br/><small>Shared agent context</small></span></div>
     </aside>
