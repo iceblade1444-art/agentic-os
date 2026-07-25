@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
 import {
   buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible,
+  supportsAffectiveDialog,
 } from "../assets/js/mila-live.js";
 import {
   MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, normalizeMilaPreferences,
@@ -110,12 +111,27 @@ test("the full Gemini voice catalogue is exposed and every voice is groupable", 
   }
 });
 
-test("affective dialog is requested by default and can be turned off", () => {
-  const on = buildLiveSetup({ model: "gemini-live", voiceName: "Kore" });
-  assert.equal(on.enableAffectiveDialog, true);
-  assert.equal(on.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Kore");
-  const off = buildLiveSetup({ model: "gemini-live", affectiveDialog: false });
-  assert.equal("enableAffectiveDialog" in off, false, "the field must be absent, not false");
+test("affective dialog rides generationConfig and only on models that take it", () => {
+  // Probed against the live API: at setup top level every model answers
+  // "unknown field"; inside generationConfig only native-audio models accept it,
+  // and gemini-3.1-flash-live-preview fails the whole setup with 1011.
+  assert.equal(supportsAffectiveDialog("gemini-2.5-flash-native-audio-latest"), true);
+  assert.equal(supportsAffectiveDialog("gemini-2.5-flash-native-audio-preview-12-2025"), true);
+  assert.equal(supportsAffectiveDialog("gemini-3.1-flash-live-preview"), false);
+  assert.equal(supportsAffectiveDialog(""), false);
+
+  const supported = buildLiveSetup({ model: "gemini-2.5-flash-native-audio-latest", voiceName: "Kore" });
+  assert.equal(supported.generationConfig.enableAffectiveDialog, true);
+  assert.equal("enableAffectiveDialog" in supported, false, "never at setup top level — that placement is rejected");
+  assert.equal(supported.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Kore");
+
+  // A model that cannot take it must not receive it: the setup would be refused
+  // and every call would pay a failed connection before the retry.
+  const unsupported = buildLiveSetup({ model: "gemini-3.1-flash-live-preview" });
+  assert.equal("enableAffectiveDialog" in unsupported.generationConfig, false);
+
+  const off = buildLiveSetup({ model: "gemini-2.5-flash-native-audio-latest", affectiveDialog: false });
+  assert.equal("enableAffectiveDialog" in off.generationConfig, false, "the field must be absent, not false");
 });
 
 test("only an affective-dialog rejection triggers the plain retry", () => {

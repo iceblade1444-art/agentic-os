@@ -4,6 +4,7 @@ import {
   MILA_ATTACHMENT_ACCEPT, formatAttachmentSize, prepareMilaAttachment,
 } from "../mila-attachments.js";
 import { listMilaMicrophones, testMilaMicrophone } from "../mila-audio-devices.js";
+import { supportsAffectiveDialog } from "../mila-live.js";
 import {
   MILA_DELIVERIES, MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
   MILA_STYLES, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT, MILA_VOICE_GROUPS, milaHub,
@@ -218,7 +219,9 @@ export default {
             <span class="hint">Your own note on how Mila should sound. She also follows spoken cues — “whisper”, “speak faster” — and bracketed cues like [excited] without reading them aloud.</span>
           </div>
           <label class="mila-toggle-row"><input type="checkbox" id="milaAffectiveDialog"${prefs.affectiveDialog ? " checked" : ""}/>
-            <span><strong>Affective dialog</strong><small>Mila hears your tone and answers in kind. Needs a native-audio model; switched off automatically if unsupported.</small></span>
+            <span><strong>Affective dialog</strong><small>Mila hears your tone and answers in kind. ${supportsAffectiveDialog(milaHub.state.model)
+              ? `Active on ${esc(milaHub.state.model)}.`
+              : `Not available on ${esc(milaHub.state.model)} — it needs a native-audio model, set by GEMINI_LIVE_MODEL on the MILA backend.`}</small></span>
           </label>
           <label class="mila-toggle-row"><input type="checkbox" id="milaDirectConnection"${prefs.directConnection ? " checked" : ""}/>
             <span><strong>Direct connection — enables camera and screen</strong><small>Calls go straight to Gemini instead of through the LiveKit room, which cannot carry video. Turn off for LiveKit's echo handling on noisy setups.</small></span>

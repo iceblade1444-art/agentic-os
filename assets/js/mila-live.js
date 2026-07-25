@@ -42,6 +42,12 @@ function silenceTurnMs(profile = "balanced") {
   return (ACTIVITY_PROFILES[profile] || ACTIVITY_PROFILES.balanced).silenceDurationMs + SILENCE_BUFFER_MS;
 }
 
+// Verified by probing the live API: only the native-audio models accept
+// affective dialog. Other live models reject the setup outright.
+export function supportsAffectiveDialog(model = "") {
+  return /native-audio/i.test(String(model));
+}
+
 // Live models answer in audio only — writing goes through MILA's Gemini chat
 // endpoint instead (see milaChat), not through this socket.
 export function buildLiveSetup(options = {}) {
@@ -56,10 +62,15 @@ export function buildLiveSetup(options = {}) {
   setup.generationConfig.speechConfig = {
     voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } },
   };
-  // Affective dialog lets native-audio models read the caller's tone and answer
-  // in kind. Only native-audio models accept it, so _connect retries without it
-  // when the server rejects the field rather than failing the whole call.
-  if (options.affectiveDialog !== false) setup.enableAffectiveDialog = true;
+  // Affective dialog lets the model read the caller's tone and answer in kind.
+  // Probed against the live API: the field belongs in generationConfig (at the
+  // top level every model calls it unknown), and only the native-audio family
+  // accepts it — gemini-3.1-flash-live-preview fails the whole setup with an
+  // internal error. Sending it only where it works keeps calls connecting on
+  // the first attempt; _connect still retries without it as a safety net.
+  if (options.affectiveDialog !== false && supportsAffectiveDialog(options.model)) {
+    setup.generationConfig.enableAffectiveDialog = true;
+  }
   setup.realtimeInputConfig = {
     automaticActivityDetection: buildAutomaticActivityDetection(options.listeningProfile),
     activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
