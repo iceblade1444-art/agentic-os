@@ -4,6 +4,7 @@ const INPUT_RATE = 16000;
 const OUTPUT_RATE = 24000;
 const FRAME_INTERVAL_MS = 1050;
 const AUDIO_CHUNK_SIZE = 1024;
+const MAX_VIDEO_EDGE = 960;
 const BROWSER_STT_FALLBACK_MS = 1600;
 const THINKING_TIMEOUT_MS = 18000;
 const INPUT_ACTIVITY_LEVEL = 0.025;
@@ -41,28 +42,34 @@ function silenceTurnMs(profile = "balanced") {
   return (ACTIVITY_PROFILES[profile] || ACTIVITY_PROFILES.balanced).silenceDurationMs + SILENCE_BUFFER_MS;
 }
 
+// Two shapes of the same Mila: an audio call, or a text session that answers in
+// writing. Text mode keeps the identical system instruction and tools, so the
+// assistant, her memory of the conversation and her permissions do not fork.
 export function buildLiveSetup(options = {}) {
-  return {
+  const setup = {
     model: `models/${options.model}`,
-    // Affective dialog lets native-audio models read the caller's tone and answer
-    // in kind. Only native-audio models accept it, so _connect retries without it
-    // when the server rejects the field rather than failing the whole call.
-    ...(options.affectiveDialog === false ? {} : { enableAffectiveDialog: true }),
-    generationConfig: {
-      responseModalities: ["AUDIO"],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } } },
-    },
+    generationConfig: { responseModalities: options.mode === "text" ? ["TEXT"] : ["AUDIO"] },
     systemInstruction: { parts: [{ text: options.systemInstruction || "" }] },
-    realtimeInputConfig: {
-      automaticActivityDetection: buildAutomaticActivityDetection(options.listeningProfile),
-      activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
-      turnCoverage: "TURN_INCLUDES_ONLY_ACTIVITY",
-    },
-    inputAudioTranscription: {},
-    outputAudioTranscription: {},
     contextWindowCompression: { slidingWindow: {} },
     tools: [{ functionDeclarations: options.tools || [] }],
   };
+  if (options.mode === "text") return setup;
+
+  setup.generationConfig.speechConfig = {
+    voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } },
+  };
+  // Affective dialog lets native-audio models read the caller's tone and answer
+  // in kind. Only native-audio models accept it, so _connect retries without it
+  // when the server rejects the field rather than failing the whole call.
+  if (options.affectiveDialog !== false) setup.enableAffectiveDialog = true;
+  setup.realtimeInputConfig = {
+    automaticActivityDetection: buildAutomaticActivityDetection(options.listeningProfile),
+    activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+    turnCoverage: "TURN_INCLUDES_ONLY_ACTIVITY",
+  };
+  setup.inputAudioTranscription = {};
+  setup.outputAudioTranscription = {};
+  return setup;
 }
 
 // A model that does not support affective dialog closes the socket complaining
@@ -167,6 +174,14 @@ function rmsPcm16(bytes) {
   return Math.min(1, Math.sqrt(sum / Math.max(1, count)) * 3);
 }
 
+// Text turns come back as parts on the model turn rather than as a transcription.
+export function modelTurnText(modelTurn) {
+  const parts = modelTurn?.parts || modelTurn?.Parts || [];
+  return (Array.isArray(parts) ? parts : [])
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .join("");
+}
+
 function mergeTranscript(existing, addition) {
   const left = String(existing || "").trim();
   const right = String(addition || "").trim();
@@ -209,16 +224,25 @@ export class MilaLiveSession {
     this.heardSpeech = false;
     this.audioTurnEnded = false;
     this.lastVoiceAt = 0;
+    this.textMode = options.mode === "text";
+    this.videoStream = null;
+    this.videoElement = null;
+    this.videoCanvas = null;
+    this.videoTimer = null;
+    this.videoSource = "off";
   }
 
   async start() {
     this.intentionalClose = false;
     this._state("connecting");
     try {
-      await this._openAudio();
+      // A text session needs no microphone and no playback graph — it is the same
+      // assistant answering in writing, so it never asks for device permissions.
+      if (!this.textMode) await this._openAudio();
       const credentials = await this.options.getToken();
-      if (credentials?.participantToken && credentials?.serverUrl) await this._connectLiveKit(credentials);
-      else {
+      if (!this.textMode && credentials?.participantToken && credentials?.serverUrl) {
+        await this._connectLiveKit(credentials);
+      } else {
         if (!credentials?.token) throw new Error("Mila did not return a Live token");
         await this._connect(credentials.token);
       }
@@ -233,6 +257,7 @@ export class MilaLiveSession {
     this.intentionalClose = true;
     this.ready = false;
     this._commitTurn();
+    await this.stopVideo();
     this._clearPlayback();
     this._stopSpeechRecognition();
     clearTimeout(this.thinkingTimer);
@@ -273,21 +298,84 @@ export class MilaLiveSession {
     return this.sendTurn({ prompt: text, displayText: text });
   }
 
+  // Gemini Live takes video as periodic stills rather than a stream, so the
+  // camera or screen is sampled about once a second and pushed as JPEG frames.
+  async startVideo(source = "camera") {
+    if (this.textMode) throw new Error("Start a call before sharing video");
+    if (this.usingLiveKit) throw new Error("Video sharing needs the direct audio connection");
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser cannot capture video");
+    await this.stopVideo();
+    const stream = source === "screen"
+      ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false })
+      : await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play().catch(() => { /* frames are grabbed even if autoplay is blocked */ });
+
+    this.videoStream = stream;
+    this.videoElement = video;
+    this.videoCanvas = document.createElement("canvas");
+    this.videoSource = source;
+    // Stopping a screen share from the browser's own bar must end sharing here too.
+    for (const track of stream.getVideoTracks()) track.addEventListener("ended", () => this.stopVideo());
+    this.videoTimer = setInterval(() => this._sendVideoFrame(), FRAME_INTERVAL_MS);
+    this.options.onVideo?.({ source, stream });
+    return source;
+  }
+
+  async stopVideo() {
+    clearInterval(this.videoTimer);
+    this.videoTimer = null;
+    for (const track of this.videoStream?.getTracks() || []) track.stop();
+    if (this.videoElement) this.videoElement.srcObject = null;
+    this.videoStream = null;
+    this.videoElement = null;
+    this.videoCanvas = null;
+    if (this.videoSource !== "off") {
+      this.videoSource = "off";
+      this.options.onVideo?.({ source: "off", stream: null });
+    }
+  }
+
+  _sendVideoFrame() {
+    const video = this.videoElement;
+    const canvas = this.videoCanvas;
+    if (!video || !canvas || !this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) return;
+    const scale = Math.min(1, MAX_VIDEO_EDGE / Math.max(width, height));
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const data = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+    if (data) this.socket.send(JSON.stringify({ realtimeInput: { video: { data, mimeType: "image/jpeg" } } }));
+  }
+
   async sendTurn({ prompt, displayText, images = [] }) {
-    if (this.usingLiveKit) throw new Error("Text fallback is unavailable during a LiveKit voice call");
+    if (this.usingLiveKit) throw new Error("Writing is unavailable during a LiveKit voice call");
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) throw new Error("Mila Live is not connected");
     const message = String(prompt || "").trim();
     if (!message) throw new Error("Add a message or attachment");
     this.currentUser = String(displayText || message).trim();
     this.options.onPartial?.("user", this.currentUser);
-    for (let index = 0; index < images.length; index++) {
-      const item = images[index];
-      this.socket.send(JSON.stringify({
-        realtimeInput: { video: { data: item.data, mimeType: item.type || "image/jpeg" } },
-      }));
-      if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
+    if (this.textMode) {
+      this._sendTextTurn(message, images);
+    } else {
+      // A live call is already streaming, so images go in as realtime frames
+      // ahead of the spoken-style turn.
+      for (let index = 0; index < images.length; index++) {
+        const item = images[index];
+        this.socket.send(JSON.stringify({
+          realtimeInput: { video: { data: item.data, mimeType: item.type || "image/jpeg" } },
+        }));
+        if (index < images.length - 1) await wait(FRAME_INTERVAL_MS);
+      }
+      this._sendTextTurn(message);
     }
-    this._sendTextTurn(message);
     this._state("thinking");
   }
 
@@ -555,6 +643,11 @@ export class MilaLiveSession {
 
     if (message.setupComplete) {
       this.ready = true;
+      if (this.textMode) {
+        this._state("ready");
+        this.readyResolve?.();
+        return;
+      }
       this._state("listening");
       this._startSpeechRecognition();
       this.readyResolve?.();
@@ -579,13 +672,15 @@ export class MilaLiveSession {
           this.options.onTranscriptWarning?.();
         }
       }
-      const assistantText = content.outputTranscription?.text;
+      // Voice turns stream through outputTranscription; text turns arrive as
+      // plain parts on the model turn.
+      const assistantText = content.outputTranscription?.text || (this.textMode ? modelTurnText(content.modelTurn) : "");
       if (assistantText) {
         clearTimeout(this.thinkingTimer);
         this.currentAssistant += assistantText;
         this.options.onPartial?.("assistant", this.currentAssistant);
       }
-      this._emitAudio(content.modelTurn);
+      if (!this.textMode) this._emitAudio(content.modelTurn);
       if (content.turnComplete) this._commitTurn();
     }
 
@@ -670,15 +765,18 @@ export class MilaLiveSession {
     this.options.onPartial?.("assistant", "");
   }
 
-  _sendTextTurn(text) {
+  _sendTextTurn(text, images = []) {
     const value = String(text || "").trim();
     if (!value || this.lastTextPrompt === value || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.lastTextPrompt = value;
+    // Pictures travel inside the turn itself, so the model sees them as part of
+    // the question rather than as unrelated frames arriving beforehand.
+    const parts = [
+      ...images.map((item) => ({ inlineData: { data: item.data, mimeType: item.type || "image/jpeg" } })),
+      { text: value },
+    ];
     this.socket.send(JSON.stringify({
-      clientContent: {
-        turns: [{ role: "user", parts: [{ text: value }] }],
-        turnComplete: true,
-      },
+      clientContent: { turns: [{ role: "user", parts }], turnComplete: true },
     }));
     return true;
   }
@@ -721,7 +819,7 @@ export class MilaLiveSession {
       this.thinkingTimer = setTimeout(() => {
         if (this.intentionalClose || this.currentAssistant) return;
         this._commitTurn();
-        this._state(this.ready && !this.muted ? "listening" : "idle");
+        this._state(this.textMode ? "ready" : this.ready && !this.muted ? "listening" : "idle");
       }, THINKING_TIMEOUT_MS);
     }
     this.options.onState?.({ phase, error, muted: this.muted });

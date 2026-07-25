@@ -83,6 +83,8 @@ const P = {
   key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8-8M15 5l3 3M18.5 8.5 21 6"/>',
   flow: '<circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/>',
   rocket: '<path d="M5 15c-1 1-1.5 4-1.5 4s3-.5 4-1.5a2.1 2.1 0 0 0-2.5-2.5Z"/><path d="M9 12a15 15 0 0 1 8-9c2 0 3 1 3 3a15 15 0 0 1-9 8Z"/><path d="M9 12l3 3"/><circle cx="14.5" cy="8.5" r="1.2"/>',
+  video: '<rect x="2" y="6" width="13" height="12" rx="2.5"/><path d="m15 11 5-3.2v8.4L15 13Z"/>',
+  monitor: '<rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/>',
 };
 
 export function icon(name, attrs = {}) {

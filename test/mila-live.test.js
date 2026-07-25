@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
 import {
-  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible,
+  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible, modelTurnText,
 } from "../assets/js/mila-live.js";
 import {
   MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, normalizeMilaPreferences,
@@ -144,6 +144,79 @@ test("delivery direction reaches the prompt without leaking stage directions", (
   assert.match(prompt, /calm night-radio host/);
   assert.match(prompt, /\[whispers\]/);
   assert.match(prompt, /never pronounce the bracketed words/);
+});
+
+test("text mode is the same Mila answering in writing, without the audio rig", () => {
+  const setup = buildLiveSetup({ mode: "text", model: "gemini-live", systemInstruction: "Be helpful", tools: [{ name: "x" }] });
+  assert.deepEqual(setup.generationConfig.responseModalities, ["TEXT"]);
+  assert.equal(setup.generationConfig.speechConfig, undefined, "text turns need no voice");
+  assert.equal("enableAffectiveDialog" in setup, false, "affective dialog is an audio concept");
+  assert.equal(setup.realtimeInputConfig, undefined);
+  assert.equal(setup.inputAudioTranscription, undefined);
+  assert.equal(setup.outputAudioTranscription, undefined);
+  // Identity, tools and memory must not fork between the two channels.
+  assert.equal(setup.systemInstruction.parts[0].text, "Be helpful");
+  assert.deepEqual(setup.tools, [{ functionDeclarations: [{ name: "x" }] }]);
+  assert.deepEqual(setup.contextWindowCompression, { slidingWindow: {} });
+
+  const voice = buildLiveSetup({ model: "gemini-live" });
+  assert.deepEqual(voice.generationConfig.responseModalities, ["AUDIO"]);
+  assert.ok(voice.generationConfig.speechConfig);
+});
+
+test("written answers are read from model turn parts", () => {
+  assert.equal(modelTurnText({ parts: [{ text: "Hello " }, { text: "there" }] }), "Hello there");
+  assert.equal(modelTurnText({ parts: [{ inlineData: { data: "x" } }, { text: "ok" }] }), "ok");
+  assert.equal(modelTurnText({ parts: [] }), "");
+  assert.equal(modelTurnText(undefined), "");
+  assert.equal(modelTurnText({}), "");
+});
+
+test("the chat composer works without a call and video rides the call", () => {
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+
+  // Sending text no longer demands an active call — only the mic toggle does.
+  const sendTurnBody = /async sendTurn\(text, attachments = \[\]\) \{[\s\S]*?\n  \}/.exec(session)?.[0] || "";
+  assert.ok(sendTurnBody, "sendTurn should still exist");
+  assert.doesNotMatch(sendTurnBody, /Start a live call first/);
+  assert.match(sendTurnBody, /ensureTextSession/);
+  assert.match(session, /milaVoiceToken\(\{ language/, "text uses the direct token, not a LiveKit room");
+  assert.match(session, /await this\.stopTextSession\(\)/, "a call takes the written channel over");
+
+  // Video is sampled as frames on the existing realtime input.
+  assert.match(live, /getDisplayMedia/);
+  assert.match(live, /realtimeInput: \{ video:/);
+  assert.match(live, /Start a call before sharing video/);
+  assert.match(live, /MAX_VIDEO_EDGE/);
+  assert.match(page, /shareVideo\("camera"\)/);
+  assert.match(page, /shareVideo\("screen"\)/);
+
+  // In writing an image belongs to the question; in a call it is a realtime frame.
+  assert.match(live, /inlineData: \{ data: item\.data/);
+  assert.match(live, /if \(this\.textMode\) \{\s*\n\s*this\._sendTextTurn\(message, images\)/);
+});
+
+test("the written channel drops voice-only coaching from the prompt", () => {
+  const preferences = normalizeMilaPreferences({ delivery: "quiet", voiceDirection: "night-radio host" });
+  const args = { language: "ru-RU", preferences, currentTime: "2026-07-25T10:00:00.000Z" };
+  const spoken = buildMilaSystemInstruction(args);
+  const written = buildMilaSystemInstruction({ ...args, mode: "text" });
+
+  assert.match(spoken, /\[whispers\]/);
+  assert.match(spoken, /night-radio host/);
+  assert.doesNotMatch(written, /\[whispers\]/, "stage directions are meaningless in writing");
+  assert.doesNotMatch(written, /night-radio host/);
+  assert.doesNotMatch(written, /Never read markdown/, "markdown is wanted in the chat");
+  assert.match(written, /Markdown renders/);
+  assert.match(written, /fenced code blocks/);
+  // Shared identity, language rule and tool discipline survive in both.
+  for (const prompt of [spoken, written]) {
+    assert.match(prompt, /You are MILA/);
+    assert.match(prompt, /Cyrillic rather than transliteration/);
+    assert.match(prompt, /two-step confirmation/);
+  }
 });
 
 test("Mila attachment prompt includes bounded text context and image names", () => {
