@@ -2,7 +2,7 @@ import httpProxy from "http-proxy";
 import http from "node:http";
 
 import { config } from "../config.js";
-import { isAuthed, requireAuth } from "./auth.js";
+import { authenticatedUser, requireRoles } from "./auth.js";
 
 const PREFIX = "/hermes";
 
@@ -13,6 +13,10 @@ export function stripHermesPrefix(url = "/") {
 
 export function isBareHermesRequest(method, url) {
   return method === "GET" && String(url || "").split("?", 1)[0] === PREFIX;
+}
+
+export function hasHermesAccess(req) {
+  return ["Creator", "Admin"].includes(authenticatedUser(req)?.role);
 }
 
 export function hermesForwardedHeaders(req) {
@@ -68,11 +72,11 @@ export function createHermesProxy() {
 export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
   app.use((req, res, next) => {
     if (isBareHermesRequest(req.method, req.originalUrl || req.url)) {
-      return requireAuth(req, res, () => res.redirect(302, `${PREFIX}/`));
+      return requireRoles("Creator", "Admin")(req, res, () => res.redirect(302, `${PREFIX}/`));
     }
     next();
   });
-  app.use(PREFIX, requireAuth, (req, res) => {
+  app.use(PREFIX, requireRoles("Creator", "Admin"), (req, res) => {
     req.url = stripHermesPrefix(req.originalUrl || req.url);
     proxy.web(req, res);
   });
@@ -80,7 +84,7 @@ export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
   server.on("upgrade", (req, socket, head) => {
     const path = new URL(req.url || "/", "http://agentic-os.local").pathname;
     if (path !== PREFIX && !path.startsWith(`${PREFIX}/`)) return;
-    if (!isAuthed(req)) return rejectUpgrade(socket);
+    if (!hasHermesAccess(req)) return rejectUpgrade(socket, "403 Forbidden");
     req.url = stripHermesPrefix(req.url);
     proxy.ws(req, socket, head);
   });

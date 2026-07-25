@@ -46,9 +46,34 @@ test("members cannot overwrite completed shared business context", (t) => {
     profile: { locale: "uz-UZ", assistantStyle: "friend" },
     workspace: { name: "Overwritten Workspace", goals: ["Wrong goal"] },
   });
-  assert.equal(state.workspace.name, "Owner Workspace");
-  assert.deepEqual(state.workspace.goals, ["Keep this goal"]);
+  assert.deepEqual(state.workspace, {});
   assert.equal(state.profile.locale, "uz-UZ");
+  assert.equal(state.canEditWorkspace, false);
+  assert.equal(state.needsOnboarding, false);
+  assert.deepEqual(onboardingContextDocuments(member, state).map((item) => item.path), [
+    "Agentic OS/People/usr_member.md",
+    "Agentic OS/People/usr_member/SOUL.md",
+  ]);
+  const creatorState = store.get(creator);
+  assert.equal(creatorState.workspace.name, "Owner Workspace");
+  assert.deepEqual(creatorState.workspace.goals, ["Keep this goal"]);
+  const memberContext = sharedAgentContext(member, state);
+  assert.doesNotMatch(memberContext, /Owner Workspace|Keep this goal/);
+  assert.match(memberContext, /Current user: Member/);
+});
+
+test("a new member completes personal onboarding without owning shared workspace setup", (t) => {
+  const { store } = temporaryStore(t);
+  const member = { id: "usr_first", name: "First Member", role: "Member" };
+  const initial = store.get(member);
+  assert.equal(initial.needsOnboarding, true);
+  assert.equal(initial.canEditWorkspace, false);
+  const state = store.update(member, {
+    profile: { locale: "ru-RU", roleFocus: "Customer", assistantStyle: "assistant" },
+    workspace: { name: "Must not become global" },
+  });
+  assert.equal(state.needsOnboarding, false);
+  assert.equal(state.workspace.completedAt, undefined);
 });
 
 test("onboarding produces shared Obsidian context without secrets", (t) => {

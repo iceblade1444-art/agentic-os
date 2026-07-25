@@ -76,6 +76,8 @@ export function renderOnboarding(initial) {
   const app = document.querySelector("#app");
   const profile = initial.profile || {};
   const workspace = initial.workspace || {};
+  const personalOnly = !initial.canEditWorkspace;
+  const lastStep = personalOnly ? 0 : 2;
   let step = 0;
   let locale = profile.locale || (navigator.language?.startsWith("uz") ? "uz-UZ" : navigator.language?.startsWith("en") ? "en-US" : "ru-RU");
 
@@ -133,16 +135,16 @@ export function renderOnboarding(initial) {
   const draw = () => {
     const copy = COPY[locale];
     const fields = copy.fields;
-    app.querySelector("#onboardingTitle").textContent = copy.title;
-    app.querySelector("#onboardingSubtitle").textContent = copy.subtitle;
-    app.querySelector("#onboardingCounter").textContent = `${step + 1} / 3`;
-    app.querySelector("#onboardingSteps").innerHTML = copy.steps.map((label, index) =>
+    app.querySelector("#onboardingTitle").textContent = personalOnly ? copy.steps[0] : copy.title;
+    app.querySelector("#onboardingSubtitle").textContent = personalOnly ? fields.mila : copy.subtitle;
+    app.querySelector("#onboardingCounter").textContent = `${step + 1} / ${lastStep + 1}`;
+    app.querySelector("#onboardingSteps").innerHTML = copy.steps.slice(0, lastStep + 1).map((label, index) =>
       `<li class="${index === step ? "active" : index < step ? "done" : ""}"><span>${index < step ? icon("check") : index + 1}</span><strong>${label}</strong></li>`).join("");
     form.querySelectorAll(".onboarding-page").forEach((page) => page.classList.toggle("active", Number(page.dataset.step) === step));
     const back = app.querySelector("#obBack");
     back.textContent = copy.back;
     back.classList.toggle("hidden", step === 0);
-    app.querySelector("#obNext span").textContent = step === 2 ? copy.finish : copy.next;
+    app.querySelector("#obNext span").textContent = step === lastStep ? copy.finish : copy.next;
     app.querySelector("#obLanguageLabel").textContent = fields.language;
     app.querySelector("#obFocusLabel").textContent = fields.focus;
     app.querySelector("#obRoleFocus").placeholder = fields.focusPlaceholder;
@@ -181,7 +183,7 @@ export function renderOnboarding(initial) {
       app.querySelector("#obName").focus();
       return;
     }
-    if (step < 2) { step += 1; draw(); return; }
+    if (step < lastStep) { step += 1; draw(); return; }
     const button = app.querySelector("#obNext");
     button.classList.add("loading");
     try {

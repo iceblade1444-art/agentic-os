@@ -3,6 +3,17 @@ import { icon } from "../icons.js";
 import { api } from "../api.js";
 import { agentIcon, esc, toast, qs, initials } from "../ui.js";
 
+const MILA_AGENT = {
+  id: "mila-member",
+  name: "Mila",
+  icon: "sparkles",
+  color: "violet",
+  instructions: "You are Mila, a warm and practical personal assistant. Keep answers concise, use the user's language, respect account privacy, and ask for confirmation before important external actions.",
+};
+
+const activeAgent = (state, session) =>
+  api.auth.canAdmin ? (state.agents.find((agent) => agent.id === session.agentId) || state.agents[0]) : MILA_AGENT;
+
 /* ---------- minimal markdown ---------- */
 function mdToHtml(src) {
   let out = esc(src);
@@ -80,7 +91,7 @@ export default {
   render() {
     const s = store.state;
     const session = s.chat.sessions.find((x) => x.id === s.chat.activeSession) || s.chat.sessions[0];
-    const agent = s.agents.find((a) => a.id === session.agentId) || s.agents[0];
+    const agent = activeAgent(s, session);
     const clientKey = !!s.settings.llm.apiKey;
     const serverLLM = api.on && api.serverHasLLM();
     const connected = clientKey || serverLLM;
@@ -115,7 +126,7 @@ export default {
     const send = root.querySelector("#chatSend");
     const s = store.state;
     const session = s.chat.sessions.find((x) => x.id === s.chat.activeSession) || s.chat.sessions[0];
-    const agent = s.agents.find((a) => a.id === session.agentId) || s.agents[0];
+    const agent = activeAgent(s, session);
     const scrollDown = () => (scroll.scrollTop = scroll.scrollHeight);
     scrollDown();
 

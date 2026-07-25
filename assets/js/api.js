@@ -71,6 +71,17 @@ export const api = {
     get: () => j("/api/onboarding"),
     save: (body) => j("/api/onboarding", { method: "PUT", body }),
   },
+  member: {
+    dashboard: () => j("/api/member/dashboard"),
+    tasks: () => j("/api/member/tasks"),
+    createTask: (body) => j("/api/member/tasks", { method: "POST", body }),
+    updateTask: (id, body) => j(`/api/member/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    deleteTask: (id) => j(`/api/member/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    notes: () => j("/api/member/notes"),
+    createNote: (body) => j("/api/member/notes", { method: "POST", body }),
+    updateNote: (id, body) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    deleteNote: (id) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
   mcp: {
     list: () => j("/api/mcp/servers"),
     connect: (id) => j(`/api/mcp/servers/${id}/connect`, { method: "POST" }),

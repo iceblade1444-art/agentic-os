@@ -49,11 +49,12 @@ export class OnboardingStore {
 
   get(user) {
     const profile = this.data.users[user.id] || {};
-    const workspace = this.data.workspace || {};
+    const canEditWorkspace = ["Creator", "Admin"].includes(user.role);
+    const workspace = canEditWorkspace ? (this.data.workspace || {}) : {};
     return {
       version: 1,
-      needsOnboarding: !profile.completedAt || !workspace.completedAt,
-      canEditWorkspace: ["Creator", "Admin"].includes(user.role) || !workspace.completedAt,
+      needsOnboarding: !profile.completedAt || (canEditWorkspace && !workspace.completedAt),
+      canEditWorkspace,
       profile,
       workspace,
     };
@@ -101,7 +102,7 @@ export class OnboardingStore {
     }
 
     this.data.users[user.id] = profile;
-    this.data.workspace = workspace;
+    if (current.canEditWorkspace) this.data.workspace = workspace;
     this.#save();
     return this.get(user);
   }
@@ -165,6 +166,28 @@ export function onboardingContextDocuments(user, state) {
   const workspace = state.workspace;
   const profile = state.profile;
   const safeUserId = safeUserSlug(user);
+  const personalDocuments = [
+    {
+      path: `Agentic OS/People/${safeUserId}.md`,
+      content: `---
+type: agentic-os-user-context
+user_id: ${safeUserId}
+updated: ${profile.updatedAt}
+---
+
+# ${user.name}
+
+- Role: ${user.role}
+- Preferred language: ${profile.locale}
+- Timezone: ${profile.timezone}
+- Work focus: ${profile.roleFocus || "Not specified"}
+- MILA style: ${profile.assistantStyle}
+- Voice answer length: ${profile.responseLength}
+`,
+    },
+    userSoulDocument(user, state),
+  ];
+  if (!["Creator", "Admin"].includes(user.role)) return personalDocuments;
   return [
     {
       path: "Agentic OS/Workspace Context.md",
@@ -200,25 +223,7 @@ ${bulletList(workspace.goals)}
 ${bulletList(workspace.constraints)}
 `,
     },
-    {
-      path: `Agentic OS/People/${safeUserId}.md`,
-      content: `---
-type: agentic-os-user-context
-user_id: ${safeUserId}
-updated: ${profile.updatedAt}
----
-
-# ${user.name}
-
-- Role: ${user.role}
-- Preferred language: ${profile.locale}
-- Timezone: ${profile.timezone}
-- Work focus: ${profile.roleFocus || "Not specified"}
-- MILA style: ${profile.assistantStyle}
-- Voice answer length: ${profile.responseLength}
-`,
-    },
-    userSoulDocument(user, state),
+    ...personalDocuments,
   ];
 }
 
@@ -227,18 +232,20 @@ export const onboarding = new OnboardingStore();
 export function sharedAgentContext(user, state = onboarding.get(user || { id: "system", role: "Viewer" })) {
   const workspace = state.workspace || {};
   const profile = state.profile || {};
-  if (!workspace.completedAt) return "";
-  const context = [
-    "Authoritative Agentic OS workspace context:",
-    `Workspace: ${workspace.name || "Not specified"}`,
-    `Industry: ${workspace.industry || "Not specified"}`,
-    `Business: ${workspace.summary || "Not specified"}`,
-    `Audience: ${workspace.audience || "Not specified"}`,
-    `Products and services: ${workspace.products || "Not specified"}`,
-    `Goals:\n${bulletList(workspace.goals)}`,
-    `Constraints:\n${bulletList(workspace.constraints)}`,
-    `Operating languages: ${workspace.operatingLanguages?.join(", ") || "Not specified"}`,
-  ];
+  const context = [];
+  if (workspace.completedAt && ["Creator", "Admin"].includes(user?.role)) {
+    context.push(
+      "Authoritative Agentic OS workspace context:",
+      `Workspace: ${workspace.name || "Not specified"}`,
+      `Industry: ${workspace.industry || "Not specified"}`,
+      `Business: ${workspace.summary || "Not specified"}`,
+      `Audience: ${workspace.audience || "Not specified"}`,
+      `Products and services: ${workspace.products || "Not specified"}`,
+      `Goals:\n${bulletList(workspace.goals)}`,
+      `Constraints:\n${bulletList(workspace.constraints)}`,
+      `Operating languages: ${workspace.operatingLanguages?.join(", ") || "Not specified"}`,
+    );
+  }
   if (user?.name) {
     context.push(
       `Current user: ${user.name} (${user.role || "User"})`,

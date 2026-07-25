@@ -18,10 +18,11 @@ import settings from "./pages/settings.js";
 import speech from "./pages/speech.js";
 import routines from "./pages/routines.js";
 import components from "./pages/components.js";
+import { memberHome, memberNotes, memberTasks } from "./pages/member.js";
 import * as misc from "./pages/misc.js";
 
 /* ---------------- Navigation config ---------------- */
-const NAV = [
+const OPERATOR_NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
     { route: "missions", icon: "rocket", label: "Missions" },
@@ -50,13 +51,26 @@ const NAV = [
   ]},
 ];
 
-const PAGES = {
+const MEMBER_NAV = [
+  { group: null, items: [
+    { route: "", icon: "home", label: "Home" },
+    { route: "chat", icon: "chat", label: "Mila Assistant" },
+    { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
+    { route: "my-notes", icon: "knowledge", label: "My Notes" },
+  ]},
+  { group: "Account", items: [
+    { route: "settings", icon: "settings", label: "Settings" },
+  ]},
+];
+
+const OPERATOR_PAGES = {
   "": dashboard, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
 };
-const ADMIN_ROUTES = new Set(["mcp", "integrations", "secrets"]);
+const MEMBER_PAGES = { "": memberHome, chat, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
+const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : MEMBER_NAV;
 
 /* ---------------- Theme ---------------- */
 export function applyTheme(t) {
@@ -73,10 +87,10 @@ function toggleTheme() {
 function sidebarHTML() {
   const cur = currentRoute();
   const p = store.state.profile;
-  const groups = NAV.map((g) => `
+  const groups = navigation().map((g) => `
     ${g.group ? `<div class="nav-label">${g.group}</div>` : ""}
     <div class="nav-group">
-      ${g.items.filter((it) => api.auth.canAdmin || !ADMIN_ROUTES.has(it.route)).map((it) => `
+      ${g.items.map((it) => `
         <a class="nav-item ${it.route === cur ? "active" : ""}" href="#/${it.route}">
           ${icon(it.icon)}<span>${it.label}</span>
           ${it.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
@@ -100,15 +114,16 @@ function sidebarHTML() {
 
 function topbarHTML() {
   const t = store.state.settings.theme;
+  const member = !api.auth.canAdmin;
   return `<header class="topbar">
     <button class="icon-btn menu-toggle" id="mtoggle">${icon("grid")}</button>
-    <div class="search"><span>${icon("search")}</span><input id="globalSearch" placeholder="Search agents, tools, docs…"/><kbd>⌘K</kbd></div>
+    <div class="search"><span>${icon("search")}</span><input id="globalSearch" placeholder="${member ? "Search tasks, notes, assistant…" : "Search agents, tools, docs…"}"/><kbd>⌘K</kbd></div>
     <div class="topbar-actions">
       ${api.on ? `<span class="badge success tip" data-tip="Backend connected — real MCP, integrations & LLM"><span class="dot"></span>Live</span>` : `<span class="badge neutral tip" data-tip="No backend — demo mode (start the Node server)">Demo</span>`}
       <button class="icon-btn" id="themeBtn" title="Toggle theme">${icon(t === "dark" ? "sun" : "moon")}</button>
       <button class="icon-btn" title="Help">${icon("help")}</button>
-      <button class="icon-btn" id="bellBtn" title="Notifications" style="position:relative">${icon("bell")}<span class="dot"></span></button>
-      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/kanban/new" id="newAgentTop">${icon("plus")}<span>New task</span></a>` : ""}
+      ${api.auth.canAdmin ? `<button class="icon-btn" id="bellBtn" title="Notifications" style="position:relative">${icon("bell")}<span class="dot"></span></button>` : ""}
+      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/${member ? "my-tasks/new" : "kanban/new"}" id="newAgentTop">${icon("plus")}<span>New task</span></a>` : ""}
     </div>
   </header>`;
 }
@@ -134,7 +149,7 @@ function wireShell() {
     { label: store.state.profile.name },
     { text: "Profile", icon: "user", onClick: () => (location.hash = "#/settings") },
     { text: "Settings", icon: "settings", onClick: () => (location.hash = "#/settings") },
-    { text: "Component library", icon: "layers", onClick: () => (location.hash = "#/components") },
+    ...(api.auth.canAdmin ? [{ text: "Component library", icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
     { sep: true },
     { text: "Sign out", icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", "Signed out (demo)"); } },
   ], { align: "right", placement: "top" }));
@@ -144,13 +159,15 @@ function wireShell() {
 function buildCommands() {
   const t = store.state.settings.theme;
   const cmds = [];
-  NAV.forEach((g) => g.items.forEach((it) => cmds.push({ group: "Pages", icon: it.icon, text: it.label, hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
-  cmds.push({ group: "Pages", icon: "layers", text: "Component Library", hint: "#/components", run: () => (location.hash = "#/components") });
-  [
-    ["Hermes", "Primary orchestrator", "brain", "default"], ["Scout", "Research", "search", "scout"],
-    ["Scribe", "Writing", "edit", "scribe"], ["Reach", "Growth", "up", "reach"], ["Dev", "Engineering", "code", "dev"],
-  ].forEach(([name, role, agentIcon, profile]) => cmds.push({ group: "Agents", icon: agentIcon, text: name, hint: role, run: () => (location.hash = `#/kanban/new/${profile}`) }));
-  cmds.push({ group: "Actions", icon: "plus", text: "New Kanban task", run: () => (location.hash = "#/kanban/new") });
+  navigation().forEach((g) => g.items.forEach((it) => cmds.push({ group: "Pages", icon: it.icon, text: it.label, hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
+  if (api.auth.canAdmin) {
+    cmds.push({ group: "Pages", icon: "layers", text: "Component Library", hint: "#/components", run: () => (location.hash = "#/components") });
+    [
+      ["Hermes", "Primary orchestrator", "brain", "default"], ["Scout", "Research", "search", "scout"],
+      ["Scribe", "Writing", "edit", "scribe"], ["Reach", "Growth", "up", "reach"], ["Dev", "Engineering", "code", "dev"],
+    ].forEach(([name, role, agentIcon, profile]) => cmds.push({ group: "Agents", icon: agentIcon, text: name, hint: role, run: () => (location.hash = `#/kanban/new/${profile}`) }));
+  }
+  cmds.push({ group: "Actions", icon: "plus", text: api.auth.canAdmin ? "New Kanban task" : "New personal task", run: () => (location.hash = api.auth.canAdmin ? "#/kanban/new" : "#/my-tasks/new") });
   cmds.push({ group: "Actions", icon: "chat", text: "New chat", run: () => (location.hash = "#/chat") });
   cmds.push({ group: "Actions", icon: t === "dark" ? "sun" : "moon", text: "Toggle theme", run: toggleTheme });
   cmds.push({ group: "Actions", icon: "settings", text: "Open settings", run: () => (location.hash = "#/settings") });
@@ -235,7 +252,7 @@ let mountedPage = null;
 
 function route() {
   const r = currentRoute();
-  const page = (!api.auth.canAdmin && ADMIN_ROUTES.has(r)) ? forbidden : (PAGES[r] || notFound);
+  const page = api.auth.canAdmin ? (OPERATOR_PAGES[r] || notFound) : (MEMBER_PAGES[r] || forbidden);
   const view = qs("#view");
   if (!view) return;
   mountedPage?.unmount?.();
@@ -278,7 +295,7 @@ async function boot() {
     }
   }
   renderShell();
-  mountMilaDock();
+  if (api.auth.canAdmin) mountMilaDock();
   route();
 }
 
@@ -315,7 +332,7 @@ function renderLogin() {
   const setMode = (mode) => {
     form.dataset.mode = mode;
     form.querySelectorAll("[data-auth-mode]").forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-    qs("#loginLead").textContent = mode === "register" ? "Create a Member account for this workspace." : "Sign in to your workspace.";
+    qs("#loginLead").textContent = mode === "register" ? "Create your personal Agentic OS account." : "Sign in to your workspace.";
     qs("#authSubmit span").textContent = mode === "register" ? "Create account" : "Sign in";
     qs("#loginPw").autocomplete = mode === "register" ? "new-password" : "current-password";
     qs("#loginErr").innerHTML = "";

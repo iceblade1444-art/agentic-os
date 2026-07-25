@@ -18,6 +18,7 @@ import operations from "./routes/operations.js";
 import pulse from "./routes/pulse.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
+import member from "./routes/member.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import {
@@ -88,23 +89,25 @@ app.get("/api/auth/me", meHandler);
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
 app.use("/api", requireAuth);
 app.use("/api", requireWriteAccess);
+const requireOperator = requireRoles("Creator", "Admin");
 app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);
 app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHandler);
 app.use("/api/llm", llm);
-app.use("/api/mcp", mcp);
-app.use("/api/integrations", integrations);
-app.use("/api/missions", missions);
-app.use("/api/knowledge", knowledge);
-app.use("/api/kanban", kanban);
-app.use("/api/claude-code", claudeCode);
-app.use("/api/mila", milaActions);
-app.use("/api/operations", operations);
-app.use("/api/pulse", pulse);
-app.use("/api/speech", speech);
 app.use("/api/onboarding", onboarding);
-app.use("/api/skills", skills);
-app.use("/api/routines", routines);
-app.get("/api/hermes/control/status", async (req, res) => res.json(await hermesDashboardStatus()));
+app.use("/api/member", member);
+app.use("/api/speech", requireOperator, speech);
+app.use("/api/mcp", requireOperator, mcp);
+app.use("/api/integrations", requireOperator, integrations);
+app.use("/api/missions", requireOperator, missions);
+app.use("/api/knowledge", requireOperator, knowledge);
+app.use("/api/kanban", requireOperator, kanban);
+app.use("/api/claude-code", requireOperator, claudeCode);
+app.use("/api/mila", requireOperator, milaActions);
+app.use("/api/operations", requireOperator, operations);
+app.use("/api/pulse", requireOperator, pulse);
+app.use("/api/skills", requireOperator, skills);
+app.use("/api/routines", requireOperator, routines);
+app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
 // ---- Static frontend (only assets + index.html; never expose server/, .env, node_modules) ----

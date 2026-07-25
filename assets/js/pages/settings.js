@@ -19,11 +19,12 @@ export default {
   render() {
     const s = store.state;
     const llm = s.settings.llm;
-    const tabs = [["appearance", "Appearance"], ["model", "Model"], ["profile", "Profile"], ["workspace", "Workspace"], ["data", "Data"]];
-    if (api.auth.canAdmin) tabs.splice(3, 0, ["team", "Team"]);
+    const tabs = api.auth.canAdmin
+      ? [["appearance", "Appearance"], ["model", "Model"], ["profile", "Profile"], ["team", "Team"], ["workspace", "Workspace"], ["data", "Data"]]
+      : [["appearance", "Appearance"], ["profile", "Profile"], ["workspace", "Assistant"]];
     if (!tabs.some(([key]) => key === tab)) tab = "appearance";
     return `
-    <div class="page-head"><div><div class="page-title">Settings</div><div class="page-sub">Manage your workspace, model connection and appearance.</div></div></div>
+    <div class="page-head"><div><div class="page-title">Settings</div><div class="page-sub">${api.auth.canAdmin ? "Manage your workspace, model connection and appearance." : "Manage your account, appearance and assistant preferences."}</div></div></div>
     <div class="tabs mb-4" id="setTabs">${tabs.map(([k, l]) => `<button class="tab ${tab === k ? "active" : ""}" data-t="${k}">${l}</button>`).join("")}</div>
     <div id="setBody" style="max-width:720px">${section(s, llm)}</div>`;
   },
@@ -78,9 +79,9 @@ function section(s, llm) {
 
   if (tab === "workspace") return `
     <div class="card pad-lg">
-      <div class="section-title">Workspace context</div>
-      <p class="hint mb-4">Company details, current goals and personal assistant preferences are stored on the server and synchronized to Obsidian for Hermes, MILA, Claude and specialist agents.</p>
-      <a class="btn btn-primary" href="/?setup=1">${icon("settings")}Review workspace setup</a>
+      <div class="section-title">${api.auth.canAdmin ? "Workspace context" : "Mila preferences"}</div>
+      <p class="hint mb-4">${api.auth.canAdmin ? "Company details, current goals and personal assistant preferences are stored on the server and synchronized to Obsidian for Hermes, MILA, Claude and specialist agents." : "Your language, work focus and assistant style are stored with your account and synchronized to your personal SOUL.md."}</p>
+      <a class="btn btn-primary" href="/?setup=1">${icon("settings")}${api.auth.canAdmin ? "Review workspace setup" : "Edit assistant preferences"}</a>
     </div>`;
 
   return `
