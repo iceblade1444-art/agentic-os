@@ -9,11 +9,61 @@ export const MILA_LANGUAGES = [
   ["ru-RU", "Русский"], ["uz-UZ", "O'zbekcha"], ["en-US", "English"], ["auto", "Auto"],
 ];
 
+// The full Gemini Live prebuilt catalogue (30 HD voices). Grouped by character so
+// a long list stays navigable; ids are Google's voice names and must match exactly.
+export const MILA_VOICE_GROUPS = [
+  { id: "warm", label: "Warm and gentle" },
+  { id: "even", label: "Calm and even" },
+  { id: "bright", label: "Bright and energetic" },
+  { id: "clear", label: "Clear and businesslike" },
+  { id: "deep", label: "Firm and deep" },
+];
+
 export const MILA_VOICES = [
-  { id: "Sulafat", label: "Warm", description: "Soft and welcoming" },
-  { id: "Achird", label: "Friendly", description: "Natural and approachable" },
-  { id: "Algieba", label: "Smooth", description: "Calm and even" },
-  { id: "Aoede", label: "Bright", description: "Light and energetic" },
+  { id: "Sulafat", label: "Warm", description: "Soft and welcoming", group: "warm" },
+  { id: "Achird", label: "Friendly", description: "Natural and approachable", group: "warm" },
+  { id: "Achernar", label: "Soft", description: "Quiet and delicate", group: "warm" },
+  { id: "Vindemiatrix", label: "Gentle", description: "Unhurried and kind", group: "warm" },
+  { id: "Leda", label: "Youthful", description: "Young and lively", group: "warm" },
+
+  { id: "Algieba", label: "Smooth", description: "Calm and even", group: "even" },
+  { id: "Despina", label: "Smooth", description: "Fluid and relaxed", group: "even" },
+  { id: "Schedar", label: "Even", description: "Steady, without swings", group: "even" },
+  { id: "Callirrhoe", label: "Easy-going", description: "Light and unforced", group: "even" },
+  { id: "Umbriel", label: "Easy-going", description: "Soft and untense", group: "even" },
+  { id: "Zubenelgenubi", label: "Casual", description: "Everyday and informal", group: "even" },
+
+  { id: "Aoede", label: "Breezy", description: "Light and airy", group: "bright" },
+  { id: "Zephyr", label: "Bright", description: "Open and clear", group: "bright" },
+  { id: "Autonoe", label: "Bright", description: "Sunny and lifted", group: "bright" },
+  { id: "Puck", label: "Upbeat", description: "Cheerful and driving", group: "bright" },
+  { id: "Laomedeia", label: "Upbeat", description: "Energetic and positive", group: "bright" },
+  { id: "Sadachbia", label: "Lively", description: "Mobile and expressive", group: "bright" },
+  { id: "Fenrir", label: "Excitable", description: "Very animated", group: "bright" },
+
+  { id: "Charon", label: "Informative", description: "Neutral narrator", group: "clear" },
+  { id: "Rasalgethi", label: "Informative", description: "Precise and factual", group: "clear" },
+  { id: "Iapetus", label: "Clear", description: "Crisp diction", group: "clear" },
+  { id: "Erinome", label: "Clear", description: "Transparent and clean", group: "clear" },
+  { id: "Sadaltager", label: "Knowledgeable", description: "Expert and assured", group: "clear" },
+  { id: "Pulcherrima", label: "Forward", description: "Direct and assertive", group: "clear" },
+
+  { id: "Kore", label: "Firm", description: "Confident and grounded", group: "deep" },
+  { id: "Orus", label: "Firm", description: "Solid and weighty", group: "deep" },
+  { id: "Alnilam", label: "Firm", description: "Strong and stable", group: "deep" },
+  { id: "Gacrux", label: "Mature", description: "Older and seasoned", group: "deep" },
+  { id: "Algenib", label: "Gravelly", description: "Textured and low", group: "deep" },
+  { id: "Enceladus", label: "Breathy", description: "Airy with breath", group: "deep" },
+];
+
+// Director's notes for delivery. Gemini native audio is steered by the system
+// instruction rather than numeric knobs, so each option is a short stage direction.
+export const MILA_DELIVERIES = [
+  { id: "natural", label: "Natural", description: "Everyday conversation" },
+  { id: "warm", label: "Warm", description: "Softer and more caring" },
+  { id: "energetic", label: "Energetic", description: "Livelier and quicker" },
+  { id: "quiet", label: "Quiet", description: "Hushed, close to the mic" },
+  { id: "precise", label: "Precise", description: "Dry and businesslike" },
 ];
 
 export const MILA_STYLES = [
@@ -41,11 +91,16 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
   voiceName: "Sulafat",
   style: "assistant",
   pace: "medium",
+  delivery: "natural",
+  voiceDirection: "",
+  affectiveDialog: true,
   listeningProfile: "balanced",
   responseLength: "brief",
   userName: "Бахадыр",
   inputDeviceId: "",
 });
+
+export const MILA_VOICE_DIRECTION_LIMIT = 240;
 
 const ACTIVE_PHASES = new Set(["connecting", "listening", "thinking", "speaking", "muted"]);
 function initialLanguage() {
@@ -68,6 +123,9 @@ export function normalizeMilaPreferences(value = {}) {
   return {
     voiceName: allowed(MILA_VOICES, value.voiceName, MILA_DEFAULT_PREFERENCES.voiceName),
     style: allowed(MILA_STYLES, value.style, MILA_DEFAULT_PREFERENCES.style),
+    delivery: allowed(MILA_DELIVERIES, value.delivery, MILA_DEFAULT_PREFERENCES.delivery),
+    voiceDirection: String(value.voiceDirection ?? "").replace(/\s+/g, " ").trim().slice(0, MILA_VOICE_DIRECTION_LIMIT),
+    affectiveDialog: value.affectiveDialog !== false,
     pace: allowed(MILA_PACES, value.pace, MILA_DEFAULT_PREFERENCES.pace),
     listeningProfile: allowed(MILA_LISTENING_PROFILES, value.listeningProfile, MILA_DEFAULT_PREFERENCES.listeningProfile),
     responseLength: allowed(MILA_RESPONSE_LENGTHS, value.responseLength, MILA_DEFAULT_PREFERENCES.responseLength),
@@ -107,6 +165,20 @@ const PACE_INSTRUCTIONS = {
   fast: "Speak briskly but keep every word clear and natural.",
 };
 
+const DELIVERY_INSTRUCTIONS = {
+  natural: "Deliver lines the way people speak in a relaxed conversation.",
+  warm: "Deliver lines with extra warmth and care, as if speaking to someone you like.",
+  energetic: "Deliver lines with visible energy and momentum, without shouting or rushing the words together.",
+  quiet: "Deliver lines softly and closely, almost confiding, keeping volume low but articulation clear.",
+  precise: "Deliver lines dryly and efficiently, like a professional briefing, with minimal emotional colour.",
+};
+
+// Native audio decides *how* to say things, so delivery is directed in words.
+// Bracketed cues must never be voiced — they are stage directions, not content.
+const DELIVERY_TAG_RULE = `You control your own delivery: volume, speed, emotion and emphasis.
+Bracketed cues such as [whispers], [excited], [laughs softly], [serious], [slower] are stage directions. Perform them and never pronounce the bracketed words themselves. The same applies to any bracketed cue you plan in your own reply.
+When the user asks you to whisper, calm down, speed up, slow down, sound happier or be more serious, change your delivery immediately and keep it until they ask otherwise.`;
+
 export function buildMilaSystemInstruction({ language = "auto", preferences = {}, history = [], currentTime, agentContext = "" } = {}) {
   const profile = normalizeMilaPreferences(preferences);
   const recent = history.slice(-8).filter((item) => item.role !== "system")
@@ -118,6 +190,9 @@ export function buildMilaSystemInstruction({ language = "auto", preferences = {}
 ${languageInstruction(language)} If the user mixes Russian, Uzbek and English, preserve useful technical terms and reply in the language that makes the answer easiest to understand.
 Your voice should feel warm, calm, confident and natural. Avoid a robotic, theatrical or overly formal tone. ${PACE_INSTRUCTIONS[profile.pace]}
 ${STYLE_INSTRUCTIONS[profile.style]}
+${DELIVERY_INSTRUCTIONS[profile.delivery]}
+${DELIVERY_TAG_RULE}
+${profile.voiceDirection ? `Additional delivery direction from ${profile.userName}: ${profile.voiceDirection}` : ""}
 ${lengthInstruction}
 Silently repair obvious speech-to-text mistakes using the conversation context. Focus on intended meaning, never criticize grammar or pronunciation, and only ask a clarifying question when the ambiguity changes the action or answer.
 Never read markdown, JSON, URLs, file paths or full file contents aloud. Say numbers, dates, times and prices naturally in the language you are speaking.
@@ -236,6 +311,7 @@ class MilaSessionHub {
     live = new MilaLiveSession({
       model: this.state.model,
       voiceName: this.state.preferences.voiceName,
+      affectiveDialog: this.state.preferences.affectiveDialog,
       listeningProfile: this.state.preferences.listeningProfile,
       transcriptionLanguage: this.state.language,
       inputDeviceId: this.state.preferences.inputDeviceId,

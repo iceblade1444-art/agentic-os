@@ -3,8 +3,12 @@ import fs from "node:fs";
 import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
-import { buildAutomaticActivityDetection, buildLiveSetup, isTranscriptPlausible } from "../assets/js/mila-live.js";
-import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../assets/js/mila-session.js";
+import {
+  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible,
+} from "../assets/js/mila-live.js";
+import {
+  MILA_VOICES, MILA_VOICE_GROUPS, buildMilaSystemInstruction, normalizeMilaPreferences,
+} from "../assets/js/mila-session.js";
 
 test("Mila transcript filter rejects the wrong script for selected Russian", () => {
   assert.equal(isTranscriptPlausible("Как твои дела?", "ru-RU"), true);
@@ -71,6 +75,56 @@ test("Mila preferences are validated and shape the voice behavior prompt", () =>
   assert.match(prompt, /ask for confirmation/);
   assert.match(prompt, /trusted, thoughtful friend/);
   assert.match(prompt, /one to three sentences/);
+});
+
+test("the full Gemini voice catalogue is exposed and every voice is groupable", () => {
+  assert.equal(MILA_VOICES.length, 30, "Gemini Live ships 30 prebuilt voices");
+  const ids = MILA_VOICES.map((voice) => voice.id);
+  assert.equal(new Set(ids).size, 30, "voice ids must be unique");
+  for (const id of ["Sulafat", "Kore", "Puck", "Charon", "Zephyr", "Enceladus"]) {
+    assert.ok(ids.includes(id), `${id} should be selectable`);
+  }
+  const groups = new Set(MILA_VOICE_GROUPS.map((group) => group.id));
+  for (const voice of MILA_VOICES) {
+    assert.ok(groups.has(voice.group), `${voice.id} needs a known group`);
+    assert.ok(voice.label && voice.description, `${voice.id} needs a label and description`);
+  }
+});
+
+test("affective dialog is requested by default and can be turned off", () => {
+  const on = buildLiveSetup({ model: "gemini-live", voiceName: "Kore" });
+  assert.equal(on.enableAffectiveDialog, true);
+  assert.equal(on.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Kore");
+  const off = buildLiveSetup({ model: "gemini-live", affectiveDialog: false });
+  assert.equal("enableAffectiveDialog" in off, false, "the field must be absent, not false");
+});
+
+test("only an affective-dialog rejection triggers the plain retry", () => {
+  assert.equal(isAffectiveDialogRejection("Unknown field enableAffectiveDialog"), true);
+  assert.equal(isAffectiveDialogRejection("enable_affective_dialog is not supported for this model"), true);
+  assert.equal(isAffectiveDialogRejection("Quota exceeded"), false);
+  assert.equal(isAffectiveDialogRejection("Mila Live disconnected"), false);
+  assert.equal(isAffectiveDialogRejection(""), false);
+  const source = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  assert.match(source, /affectiveDialog: false/, "the retry must drop the field");
+});
+
+test("delivery direction reaches the prompt without leaking stage directions", () => {
+  const preferences = normalizeMilaPreferences({
+    delivery: "quiet", voiceDirection: "  Speak   like a calm night-radio host  ", affectiveDialog: false,
+  });
+  assert.equal(preferences.delivery, "quiet");
+  assert.equal(preferences.voiceDirection, "Speak like a calm night-radio host");
+  assert.equal(preferences.affectiveDialog, false);
+  assert.equal(normalizeMilaPreferences({ delivery: "nope" }).delivery, "natural");
+  assert.equal(normalizeMilaPreferences({}).affectiveDialog, true);
+  assert.equal(normalizeMilaPreferences({ voiceDirection: "x".repeat(500) }).voiceDirection.length, 240);
+
+  const prompt = buildMilaSystemInstruction({ language: "ru-RU", preferences, currentTime: "2026-07-25T10:00:00.000Z" });
+  assert.match(prompt, /Deliver lines softly and closely/);
+  assert.match(prompt, /calm night-radio host/);
+  assert.match(prompt, /\[whispers\]/);
+  assert.match(prompt, /never pronounce the bracketed words/);
 });
 
 test("Mila attachment prompt includes bounded text context and image names", () => {

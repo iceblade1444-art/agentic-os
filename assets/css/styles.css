@@ -1120,6 +1120,16 @@ body.compact .card.pad-lg { padding: 16px; }
 }
 .mila-segments.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mila-segments.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mila-segments.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mila-toggle-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.mila-toggle-row input { margin-top: 2px; flex: none; }
+.mila-toggle-row strong { display: block; font-size: var(--text-sm); font-weight: 600; }
+.mila-toggle-row small { color: var(--text-3); font-size: var(--text-xs); }
+@media (max-width: 620px) { .mila-segments.five { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .mila-segments label { min-width: 0; cursor: pointer; }
 .mila-segments input { position: absolute; opacity: 0; pointer-events: none; }
 .mila-segments span {
