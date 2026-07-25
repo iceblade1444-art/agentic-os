@@ -113,7 +113,14 @@ export default {
             <div class="mila-caption" id="milaCaption" aria-live="polite"></div>
             <div class="mila-controls">
               <button class="mila-mic tip" id="milaMic" data-tip="Start live call" aria-label="Start live call">${icon("mic")}</button>
+              <button class="icon-btn mila-video-btn tip hidden" id="milaCamera" data-tip="Show your camera to Mila" aria-label="Share camera" type="button">${icon("video")}</button>
+              <button class="icon-btn mila-video-btn tip hidden" id="milaScreen" data-tip="Show your screen to Mila" aria-label="Share screen" type="button">${icon("monitor")}</button>
               <button class="mila-end tip hidden" id="milaEnd" data-tip="End call" aria-label="End call">${icon("x")}</button>
+            </div>
+            <div class="mila-selfview hidden" id="milaSelfView">
+              <video id="milaSelfVideo" muted playsinline autoplay></video>
+              <span class="mila-selfview-label" id="milaSelfLabel">Camera</span>
+              <button class="icon-btn tip" id="milaVideoStop" data-tip="Stop sharing" aria-label="Stop sharing" type="button">${icon("x")}</button>
             </div>
             <div class="mila-meters">
               <span>${icon("mic")}<i><b id="milaInputLevel"></b></i></span>
@@ -171,6 +178,11 @@ export default {
     const fileInput = root.querySelector("#milaFile");
     const stage = root.querySelector("#milaStage");
     const preferencesButton = root.querySelector("#milaPreferences");
+    const cameraButton = root.querySelector("#milaCamera");
+    const screenButton = root.querySelector("#milaScreen");
+    const selfView = root.querySelector("#milaSelfView");
+    const selfVideo = root.querySelector("#milaSelfVideo");
+    const selfLabel = root.querySelector("#milaSelfLabel");
     let lastTranscriptKey = "";
     let lastWarning = milaHub.state.transcriptWarning;
 
@@ -323,6 +335,28 @@ export default {
       root.querySelector("#milaErrorText").textContent = state.error;
       drawLevels(state);
 
+      // Video only rides the call; writing works with or without one.
+      cameraButton.classList.toggle("hidden", !state.active);
+      screenButton.classList.toggle("hidden", !state.active);
+      cameraButton.classList.toggle("active", state.videoSource === "camera");
+      screenButton.classList.toggle("active", state.videoSource === "screen");
+      const sharing = state.videoSource !== "off";
+      selfView.classList.toggle("hidden", !sharing);
+      if (sharing) {
+        selfLabel.textContent = state.videoSource === "screen" ? "Screen" : "Camera";
+        const stream = milaHub.session?.videoStream || null;
+        if (stream && selfVideo.srcObject !== stream) selfVideo.srcObject = stream;
+      } else if (selfVideo.srcObject) selfVideo.srcObject = null;
+
+      const thinkingInText = !state.active && (state.sendingTurn || state.textPhase === "thinking");
+      text.placeholder = thinkingInText
+        ? "Mila is writing…"
+        : state.active ? "Message Mila…" : "Write to Mila — no call needed…";
+      if (!state.active && state.textPhase === "error" && state.textError) {
+        errorBox.classList.remove("hidden");
+        root.querySelector("#milaErrorText").textContent = state.textError;
+      }
+
       const transcriptKey = `${state.history.length}|${state.history.at(-1)?.text || ""}|${state.partials.user}|${state.partials.assistant}|${state.pendingTurnAttachments.map((item) => item.id).join(",")}`;
       if (transcriptKey !== lastTranscriptKey) {
         lastTranscriptKey = transcriptKey;
@@ -368,6 +402,23 @@ export default {
         }
       } catch (error) { toast("error", "Mila Live", error.message); }
     };
+
+    const shareVideo = async (source) => {
+      try {
+        const next = milaHub.state.videoSource === source ? "off" : source;
+        await milaHub.setVideo(next);
+        if (next !== "off") {
+          toast("success", "Mila can see", source === "screen" ? "Your screen is shared" : "Your camera is shared");
+        }
+      } catch (error) {
+        // The browser's own "cancel" on the picker is a choice, not a failure.
+        if (error.name === "NotAllowedError" || error.name === "AbortError") return;
+        toast("error", "Video", error.message);
+      }
+    };
+    cameraButton.onclick = () => shareVideo("camera");
+    screenButton.onclick = () => shareVideo("screen");
+    root.querySelector("#milaVideoStop").onclick = () => shareVideo(milaHub.state.videoSource);
     end.onclick = () => milaHub.stop();
     language.onchange = () => milaHub.setLanguage(language.value);
     preferencesButton.onclick = openPreferences;
