@@ -147,7 +147,7 @@ function languageInstruction(language) {
     "ru-RU": "The selected language is Russian. Interpret speech as Russian, reply in natural Russian, and use Cyrillic rather than transliteration or Devanagari.",
     "uz-UZ": "The selected language is Uzbek. Interpret speech as Uzbek, including Uzbek Latin, Uzbek Cyrillic and Russian-Uzbek code switching. Reply in natural Uzbek Latin unless the user asks otherwise.",
     "en-US": "The selected language is English. Interpret speech as English and reply in natural English.",
-    auto: "Reply in the language of the user's latest message. You are fluent in Russian, Uzbek and English.",
+    auto: "The user always speaks Russian, Uzbek or English — never any other language. Interpret every utterance as one of those three, even when the audio is unclear, and reply in the language of the user's latest message. If a phrase is genuinely unintelligible, ask them to repeat it instead of guessing at a different language.",
   };
   return instructions[language] || instructions.auto;
 }
