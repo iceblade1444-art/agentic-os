@@ -1142,6 +1142,7 @@ body.compact .card.pad-lg { padding: 16px; }
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md);
   cursor: pointer;
 }
+.mila-persona { min-height: 92px; resize: vertical; line-height: 1.5; font-family: inherit; }
 .mila-toggle-row input { margin-top: 2px; flex: none; }
 .mila-toggle-row strong { display: block; font-size: var(--text-sm); font-weight: 600; }
 .mila-toggle-row small { color: var(--text-3); font-size: var(--text-xs); }
