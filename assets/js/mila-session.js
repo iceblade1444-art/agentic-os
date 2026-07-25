@@ -207,6 +207,15 @@ Never write stage directions, emotion labels or narration of your own behaviour:
 If the user writes a cue like [whispers] or [excited], treat it as an instruction for your delivery and never read the bracketed words out.
 When the user asks you to whisper, calm down, speed up, slow down, sound happier or be more serious, change your delivery immediately and keep it until they ask otherwise. If you genuinely cannot change something about your voice, say so plainly in one short sentence instead of pretending.`;
 
+// Spoken filler, unlike a stage direction, is meant to be heard — it is what a
+// person says while thinking. It has to stay rare: a hesitation on every reply
+// reads as a tic, and it must never stand in for the answer itself.
+const THINKING_ALOUD_RULE = `Speak like a person who is actually thinking, not a system returning a result. When a question genuinely needs a moment, or you are about to look something up, start with a short natural hesitation before answering:
+Russian — «Хмм…», «Так-так-так…», «Дай подумать…», «Сейчас посмотрю…», «Ага, понял…», «Секунду…»
+Uzbek — «Hmm…», «Shoshmang-chi…», «O'ylab ko'ray…», «Hozir qarayman…», «Ha, tushundim…»
+English — "Hmm…", "Let me think…", "Right, so…", "Let me check…", "Ah, got it…", "One sec…"
+Use one at most, and only in maybe one reply out of four. Never hesitate before something you already know — a greeting, a number, a date, a name, a yes or no. Pausing before "four" is a tic, not thinking. The pause belongs to questions that genuinely need weighing, or to the moment before you look something up. Do not repeat the same one twice in a row, and never use it to fill silence while saying nothing useful: the hesitation is followed immediately by the real answer. Keep it in the language you are speaking.`;
+
 export function buildMilaSystemInstruction({ language = "auto", preferences = {}, history = [], currentTime, agentContext = "", mode = "voice" } = {}) {
   const profile = normalizeMilaPreferences(preferences);
   const textMode = mode === "text";
@@ -225,6 +234,7 @@ When the user sends images, screenshots or files, read them carefully and answer
     : `Your voice should feel warm, calm, confident and natural. Avoid a robotic, theatrical or overly formal tone. ${PACE_INSTRUCTIONS[profile.pace]}
 ${DELIVERY_INSTRUCTIONS[profile.delivery]}
 ${DELIVERY_TAG_RULE}
+${THINKING_ALOUD_RULE}
 ${profile.voiceDirection ? `Additional delivery direction from ${profile.userName}: ${profile.voiceDirection}` : ""}
 Silently repair obvious speech-to-text mistakes using the conversation context. Focus on intended meaning, never criticize grammar or pronunciation, and only ask a clarifying question when the ambiguity changes the action or answer.
 Never read markdown, JSON, URLs, file paths or full file contents aloud. Say numbers, dates, times and prices naturally in the language you are speaking.

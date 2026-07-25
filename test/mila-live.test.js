@@ -178,6 +178,27 @@ test("delivery direction reaches the prompt without leaking stage directions", (
   assert.match(prompt, /never read the bracketed words out/);
 });
 
+test("spoken hesitation is offered in all three languages and kept rare", () => {
+  const prompt = buildMilaSystemInstruction({ language: "ru-RU", currentTime: "2026-07-25T10:00:00.000Z" });
+  for (const filler of ["Хмм", "Так-так-так", "Дай подумать", "Hmm", "Let me think", "O'ylab ko'ray"]) {
+    assert.ok(prompt.includes(filler), `${filler} should be offered`);
+  }
+  // Rare, never doubled, and never a substitute for the answer — otherwise it
+  // turns into a tic. Probed on the live model: without the "already know"
+  // clause she paused before answering "two plus two", which reads as a tic.
+  assert.match(prompt, /Never hesitate before something you already know/);
+  assert.match(prompt, /Pausing before "four" is a tic/);
+  assert.match(prompt, /one reply out of four/);
+  assert.match(prompt, /same one twice in a row/);
+  assert.match(prompt, /followed immediately by the real answer/);
+  assert.match(prompt, /language you are speaking/);
+
+  // It is speech, so it belongs to voice only — writing would just look odd.
+  const written = buildMilaSystemInstruction({ mode: "text", currentTime: "2026-07-25T10:00:00.000Z" });
+  assert.doesNotMatch(written, /Так-так-так/);
+  assert.doesNotMatch(written, /Let me think…/);
+});
+
 test("Mila is told not to narrate her own tone, in every language", () => {
   // She was speaking her own stage directions aloud in English —
   // "[warmly, with a smile in her voice] Oh, I'm doing great" — because the
