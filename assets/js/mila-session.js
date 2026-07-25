@@ -524,11 +524,13 @@ class MilaSessionHub {
   async sendTurn(text, attachments = []) {
     if (this.state.sendingTurn) throw new Error("Wait for the current turn to finish");
     this.state.sendingTurn = true;
-    // On a direct call the words join the call and Mila speaks the answer. With
-    // no call — or on a LiveKit room, which carries no client content — they go
-    // to the written channel and she answers in the transcript. Either way the
-    // composer works; it never refuses the message.
-    if (!this.active || !this.session || this.session.usingLiveKit) {
+    // During a call the words join the call and Mila speaks the answer — over
+    // the direct socket as client content, over LiveKit on the agent's chat
+    // topic. Only pictures cannot ride the LiveKit channel, and with no call at
+    // all there is nothing to speak into: both take the written channel.
+    const onLiveKit = this.active && this.session?.usingLiveKit;
+    const hasImages = attachments.some((item) => item.kind === "image");
+    if (!this.active || !this.session || (onLiveKit && hasImages)) {
       this.notify();
       return this.sendWritten(text, attachments);
     }

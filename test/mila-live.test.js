@@ -253,15 +253,30 @@ test("video rides the call and needs the direct connection", () => {
   assert.match(session, /directConnection/);
 });
 
-test("a LiveKit call falls back to writing instead of refusing the message", () => {
+test("typing on a LiveKit call is spoken, and only images fall back to writing", () => {
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
   const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+
+  // livekit-agents answers text on this topic with generate_reply — i.e. out loud.
+  assert.match(live, /LIVEKIT_CHAT_TOPIC = "lk\.chat"/);
+  assert.match(live, /sendText\(message, \{ topic: LIVEKIT_CHAT_TOPIC \}\)/);
+  assert.doesNotMatch(live, /Writing is unavailable during a LiveKit voice call/, "the refusal is gone");
+
   const sendTurnBody = /async sendTurn\(text, attachments = \[\]\) \{[\s\S]*?\n  \}/.exec(session)[0];
-  // A LiveKit room carries no client content, so typed turns take the written path.
-  assert.match(sendTurnBody, /this\.session\.usingLiveKit/);
+  assert.match(sendTurnBody, /onLiveKit && hasImages/, "only pictures divert to writing");
   assert.match(sendTurnBody, /this\.sendWritten\(text, attachments\)/);
-  // The live session still refuses directly, but the hub never reaches that path.
-  assert.match(live, /Writing is unavailable during a LiveKit voice call/);
+  assert.match(page, /Mila answers out loud/);
+});
+
+test("the LiveKit transcript is filtered like the direct one", () => {
+  const live = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
+  const handler = /TranscriptionReceived[\s\S]*?\n    \}\);/.exec(live)[0];
+  // Korean reached a transcript because this path skipped the guard entirely.
+  assert.match(handler, /role === "user" && !isTranscriptPlausible\(text, this\.options\.transcriptionLanguage\)/);
+  assert.match(handler, /onTranscriptWarning/);
+  assert.equal(isTranscriptPlausible("가꾸지 무지워", "auto"), false, "Hangul is not a language this workspace speaks");
+  assert.equal(isTranscriptPlausible("да так ни чего просто хотел узнать как ты", "auto"), true);
 });
 
 test("the owner's persona shapes both channels without loosening the rules", () => {
