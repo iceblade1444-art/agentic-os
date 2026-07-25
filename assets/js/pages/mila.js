@@ -223,6 +223,9 @@ export default {
               ? `Active on ${esc(milaHub.state.model)}.`
               : `Not available on ${esc(milaHub.state.model)} — it needs a native-audio model, set by GEMINI_LIVE_MODEL on the MILA backend.`}</small></span>
           </label>
+          <label class="mila-toggle-row"><input type="checkbox" id="milaProactiveAudio"${prefs.proactiveAudio ? " checked" : ""}/>
+            <span><strong>Proactive audio</strong><small>Mila stays quiet when speech was not aimed at her — useful in a room with other people. Turn off if she skips something you meant for her.</small></span>
+          </label>
           <label class="mila-toggle-row"><input type="checkbox" id="milaDirectConnection"${prefs.directConnection ? " checked" : ""}/>
             <span><strong>Direct connection — enables camera and screen</strong><small>Calls go straight to Gemini instead of through the LiveKit room, which cannot carry video. Turn off for LiveKit's echo handling on noisy setups.</small></span>
           </label>
@@ -276,6 +279,7 @@ export default {
               delivery: selected("milaDelivery"),
               voiceDirection: modal.querySelector("#milaVoiceDirection").value,
               affectiveDialog: modal.querySelector("#milaAffectiveDialog").checked,
+              proactiveAudio: modal.querySelector("#milaProactiveAudio").checked,
               directConnection: modal.querySelector("#milaDirectConnection").checked,
               responseLength: selected("milaResponseLength"),
               userName: modal.querySelector("#milaUserName").value,

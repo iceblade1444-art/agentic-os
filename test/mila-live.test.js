@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { composeAttachmentPrompt, attachmentDisplayText } from "../assets/js/mila-attachments.js";
 import {
-  buildAutomaticActivityDetection, buildLiveSetup, isAffectiveDialogRejection, isTranscriptPlausible,
+  buildAutomaticActivityDetection, buildLiveSetup, isOptionalFeatureRejection, isTranscriptPlausible,
   supportsAffectiveDialog,
 } from "../assets/js/mila-live.js";
 import {
@@ -134,14 +134,29 @@ test("affective dialog rides generationConfig and only on models that take it", 
   assert.equal("enableAffectiveDialog" in off.generationConfig, false, "the field must be absent, not false");
 });
 
-test("only an affective-dialog rejection triggers the plain retry", () => {
-  assert.equal(isAffectiveDialogRejection("Unknown field enableAffectiveDialog"), true);
-  assert.equal(isAffectiveDialogRejection("enable_affective_dialog is not supported for this model"), true);
-  assert.equal(isAffectiveDialogRejection("Quota exceeded"), false);
-  assert.equal(isAffectiveDialogRejection("Mila Live disconnected"), false);
-  assert.equal(isAffectiveDialogRejection(""), false);
+test("only an optional-feature rejection triggers the plain retry", () => {
+  assert.equal(isOptionalFeatureRejection("Unknown field enableAffectiveDialog"), true);
+  assert.equal(isOptionalFeatureRejection("enable_affective_dialog is not supported for this model"), true);
+  assert.equal(isOptionalFeatureRejection(`Unknown name "proactivity" at 'setup'`), true);
+  // Real failures must surface rather than be retried away.
+  assert.equal(isOptionalFeatureRejection("Quota exceeded"), false);
+  assert.equal(isOptionalFeatureRejection("Mila Live disconnected"), false);
+  assert.equal(isOptionalFeatureRejection("1011 Internal error encountered."), false);
+  assert.equal(isOptionalFeatureRejection(""), false);
   const source = fs.readFileSync(new URL("../assets/js/mila-live.js", import.meta.url), "utf8");
-  assert.match(source, /affectiveDialog: false/, "the retry must drop the field");
+  assert.match(source, /\{ affectiveDialog: false, proactiveAudio: false \}/, "the retry drops both extras");
+});
+
+test("proactive audio is on by default and can be turned off", () => {
+  // Verified against the production path: every live model here accepts it, so
+  // it is not gated on the model the way affective dialog is.
+  for (const model of ["gemini-3.1-flash-live-preview", "gemini-2.5-flash-native-audio-latest"]) {
+    assert.deepEqual(buildLiveSetup({ model }).proactivity, { proactiveAudio: true }, `${model} should get it`);
+  }
+  const off = buildLiveSetup({ model: "gemini-3.1-flash-live-preview", proactiveAudio: false });
+  assert.equal("proactivity" in off, false, "the field must be absent, not false");
+  assert.equal(normalizeMilaPreferences({}).proactiveAudio, true);
+  assert.equal(normalizeMilaPreferences({ proactiveAudio: false }).proactiveAudio, false);
 });
 
 test("delivery direction reaches the prompt without leaking stage directions", () => {
