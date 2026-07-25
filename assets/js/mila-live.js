@@ -44,6 +44,10 @@ function silenceTurnMs(profile = "balanced") {
 export function buildLiveSetup(options = {}) {
   return {
     model: `models/${options.model}`,
+    // Affective dialog lets native-audio models read the caller's tone and answer
+    // in kind. Only native-audio models accept it, so _connect retries without it
+    // when the server rejects the field rather than failing the whole call.
+    ...(options.affectiveDialog === false ? {} : { enableAffectiveDialog: true }),
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Sulafat" } } },
@@ -59,6 +63,14 @@ export function buildLiveSetup(options = {}) {
     contextWindowCompression: { slidingWindow: {} },
     tools: [{ functionDeclarations: options.tools || [] }],
   };
+}
+
+// A model that does not support affective dialog closes the socket complaining
+// about that field; anything else is a real connection failure.
+export function isAffectiveDialogRejection(reason = "") {
+  const text = String(reason || "");
+  if (!/affective|enable_affective_dialog|enableAffectiveDialog/i.test(text)) return false;
+  return /unknown|unsupported|not supported|invalid|unexpected/i.test(text) || /affective/i.test(text);
 }
 
 export function isTranscriptPlausible(text, language = "auto") {
@@ -413,25 +425,39 @@ export class MilaLiveSession {
     }
   }
 
-  async _connect(token) {
+  async _connect(token, setupOverrides = {}) {
     const socket = new WebSocket(`${LIVE_ENDPOINT}?access_token=${encodeURIComponent(token)}`);
     this.socket = socket;
+    let rejectedSetupField = false;
     const ready = new Promise((resolve, reject) => {
       this.readyResolve = resolve;
       this.readyReject = reject;
     });
     const timeout = setTimeout(() => this.readyReject?.(new Error("Mila Live connection timed out")), 12000);
     socket.onopen = () => {
-      socket.send(JSON.stringify({ setup: buildLiveSetup(this.options) }));
+      socket.send(JSON.stringify({ setup: buildLiveSetup({ ...this.options, ...setupOverrides }) }));
     };
     socket.onmessage = (event) => this._handleFrame(event.data);
     socket.onerror = () => this.readyReject?.(new Error("Gemini Live WebSocket failed"));
     socket.onclose = (event) => {
       this.ready = false;
-      if (!this.intentionalClose) this._state("error", event.reason || "Mila Live disconnected");
+      rejectedSetupField = isAffectiveDialogRejection(event.reason);
+      if (rejectedSetupField) this.readyReject?.(new Error(event.reason || "Setup rejected"));
+      else if (!this.intentionalClose) this._state("error", event.reason || "Mila Live disconnected");
     };
     try {
       await ready;
+    } catch (error) {
+      // Older or non-native-audio models reject enableAffectiveDialog. Retry once
+      // plainly so the call still connects instead of surfacing a dead session.
+      if (rejectedSetupField && setupOverrides.affectiveDialog !== false) {
+        clearTimeout(timeout);
+        this.readyResolve = null;
+        this.readyReject = null;
+        this.affectiveDialogUnavailable = true;
+        return this._connect(token, { affectiveDialog: false });
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
       this.readyResolve = null;

@@ -5,8 +5,8 @@ import {
 } from "../mila-attachments.js";
 import { listMilaMicrophones, testMilaMicrophone } from "../mila-audio-devices.js";
 import {
-  MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
-  MILA_STYLES, MILA_VOICES, milaHub,
+  MILA_DELIVERIES, MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_RESPONSE_LENGTHS,
+  MILA_STYLES, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT, MILA_VOICE_GROUPS, milaHub,
 } from "../mila-session.js";
 
 let pendingAttachments = [];
@@ -58,6 +58,16 @@ function languageOptions() {
 
 function optionsHTML(items, selected) {
   return items.map((item) => `<option value="${esc(item.id)}"${item.id === selected ? " selected" : ""}>${esc(item.label)}${item.description ? ` · ${esc(item.description)}` : ""}</option>`).join("");
+}
+
+// 30 voices are too many for a flat list, so they are grouped by character.
+function voiceOptionsHTML(selected) {
+  return MILA_VOICE_GROUPS.map((group) => {
+    const voices = MILA_VOICES.filter((voice) => voice.group === group.id);
+    if (!voices.length) return "";
+    return `<optgroup label="${esc(group.label)}">${voices.map((voice) =>
+      `<option value="${esc(voice.id)}"${voice.id === selected ? " selected" : ""}>${esc(voice.label)} · ${esc(voice.description)} (${esc(voice.id)})</option>`).join("")}</optgroup>`;
+  }).join("");
 }
 
 function segmentsHTML(name, items, selected) {
@@ -176,7 +186,7 @@ export default {
         width: 620,
         body: `<div class="mila-settings">
           <div class="mila-settings-grid">
-            <div class="field"><label class="label" for="milaVoiceName">Voice</label><select class="select" id="milaVoiceName">${optionsHTML(MILA_VOICES, prefs.voiceName)}</select></div>
+            <div class="field"><label class="label" for="milaVoiceName">Voice</label><select class="select" id="milaVoiceName">${voiceOptionsHTML(prefs.voiceName)}</select><span class="hint">All ${MILA_VOICES.length} Gemini Live voices</span></div>
             <div class="field"><label class="label" for="milaListeningProfile">Listening</label><select class="select" id="milaListeningProfile">${optionsHTML(MILA_LISTENING_PROFILES, prefs.listeningProfile)}</select></div>
           </div>
           <div class="field"><label class="label" for="milaInputDevice">Microphone</label><select class="select" id="milaInputDevice" disabled><option value="">Loading microphones…</option></select></div>
@@ -190,6 +200,14 @@ export default {
             <fieldset class="mila-setting-group"><legend>Speaking pace</legend><div class="mila-segments">${segmentsHTML("milaPace", MILA_PACES, prefs.pace)}</div></fieldset>
             <fieldset class="mila-setting-group"><legend>Voice answers</legend><div class="mila-segments two">${segmentsHTML("milaResponseLength", MILA_RESPONSE_LENGTHS, prefs.responseLength)}</div></fieldset>
           </div>
+          <fieldset class="mila-setting-group"><legend>Delivery</legend><div class="mila-segments five">${segmentsHTML("milaDelivery", MILA_DELIVERIES, prefs.delivery)}</div></fieldset>
+          <div class="field"><label class="label" for="milaVoiceDirection">Voice direction <span class="muted">(optional)</span></label>
+            <input class="input" id="milaVoiceDirection" maxlength="${MILA_VOICE_DIRECTION_LIMIT}" value="${esc(prefs.voiceDirection)}" placeholder="e.g. Speak like a calm night-radio host, never hurry"/>
+            <span class="hint">Your own note on how Mila should sound. She also follows spoken cues — “whisper”, “speak faster” — and bracketed cues like [excited] without reading them aloud.</span>
+          </div>
+          <label class="mila-toggle-row"><input type="checkbox" id="milaAffectiveDialog"${prefs.affectiveDialog ? " checked" : ""}/>
+            <span><strong>Affective dialog</strong><small>Mila hears your tone and answers in kind. Needs a native-audio model; switched off automatically if unsupported.</small></span>
+          </label>
           <div class="field mila-name-field"><label class="label" for="milaUserName">Your name</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
           <div class="mila-settings-note">Changes apply when the next live call starts.</div>
         </div>`,
@@ -237,6 +255,9 @@ export default {
               listeningProfile: modal.querySelector("#milaListeningProfile").value,
               style: selected("milaStyle"),
               pace: selected("milaPace"),
+              delivery: selected("milaDelivery"),
+              voiceDirection: modal.querySelector("#milaVoiceDirection").value,
+              affectiveDialog: modal.querySelector("#milaAffectiveDialog").checked,
               responseLength: selected("milaResponseLength"),
               userName: modal.querySelector("#milaUserName").value,
               inputDeviceId: microphone.value,
@@ -284,7 +305,8 @@ export default {
       root.querySelector("#milaModel").textContent = state.model;
       const voice = MILA_VOICES.find((item) => item.id === state.preferences.voiceName)?.label || state.preferences.voiceName;
       const style = MILA_STYLES.find((item) => item.id === state.preferences.style)?.label || state.preferences.style;
-      root.querySelector("#milaProfile").textContent = `${voice} · ${style}`;
+      const delivery = MILA_DELIVERIES.find((item) => item.id === state.preferences.delivery)?.label || "";
+      root.querySelector("#milaProfile").textContent = [voice, style, delivery].filter(Boolean).join(" · ");
       const stt = root.querySelector("#milaSttMode");
       stt.textContent = state.transcriptionMode === "browser" ? "Browser STT" : "Direct audio";
       stt.className = `badge mila-stt ${state.transcriptionMode === "browser" ? "success" : "neutral"}`;
