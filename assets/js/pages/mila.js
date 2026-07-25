@@ -7,7 +7,8 @@ import { listMilaMicrophones, testMilaMicrophone } from "../mila-audio-devices.j
 import { supportsAffectiveDialog } from "../mila-live.js";
 import {
   MILA_DELIVERIES, MILA_LANGUAGES, MILA_LISTENING_PROFILES, MILA_PACES, MILA_PERSONA_LIMIT,
-  MILA_RESPONSE_LENGTHS, MILA_STYLES, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT, MILA_VOICE_GROUPS, milaHub,
+  MILA_RESPONSE_LENGTHS, MILA_STYLES, MILA_TRANSPORTS, MILA_VOICES, MILA_VOICE_DIRECTION_LIMIT,
+  MILA_VOICE_GROUPS, milaHub,
 } from "../mila-session.js";
 
 let pendingAttachments = [];
@@ -230,9 +231,10 @@ export default {
           <label class="mila-toggle-row"><input type="checkbox" id="milaProactiveAudio"${prefs.proactiveAudio ? " checked" : ""}/>
             <span><strong>Proactive audio</strong><small>Mila stays quiet when speech was not aimed at her — useful in a room with other people. Turn off if she skips something you meant for her.</small></span>
           </label>
-          <label class="mila-toggle-row"><input type="checkbox" id="milaDirectConnection"${prefs.directConnection ? " checked" : ""}/>
-            <span><strong>Direct connection — enables camera and screen</strong><small>Calls go straight to Gemini instead of through the LiveKit room, which cannot carry video. Turn off for LiveKit's echo handling on noisy setups.</small></span>
-          </label>
+          <fieldset class="mila-setting-group"><legend>Call connection</legend>
+            <div class="mila-segments two">${segmentsHTML("milaTransport", MILA_TRANSPORTS, prefs.transport)}</div>
+            <span class="hint">Direct goes straight to Gemini: it speaks what you type and can see your camera or screen. LiveKit handles echo better but answers typed messages in writing and carries no video.</span>
+          </fieldset>
           <div class="field mila-name-field"><label class="label" for="milaUserName">Your name</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
           <div class="mila-settings-note">Changes apply when the next live call starts.</div>
         </div>`,
@@ -285,7 +287,7 @@ export default {
               voiceDirection: modal.querySelector("#milaVoiceDirection").value,
               affectiveDialog: modal.querySelector("#milaAffectiveDialog").checked,
               proactiveAudio: modal.querySelector("#milaProactiveAudio").checked,
-              directConnection: modal.querySelector("#milaDirectConnection").checked,
+              transport: selected("milaTransport"),
               responseLength: selected("milaResponseLength"),
               userName: modal.querySelector("#milaUserName").value,
               inputDeviceId: microphone.value,
@@ -368,7 +370,9 @@ export default {
       const thinkingInText = !state.active && (state.sendingTurn || state.textPhase === "thinking");
       text.placeholder = thinkingInText
         ? "Mila is writing…"
-        : state.active ? "Type — Mila answers out loud…" : "Write to Mila — no call needed…";
+        : state.active
+          ? `Type — Mila answers ${milaHub.session?.usingLiveKit ? "in the transcript" : "out loud"}…  (Shift+Enter to send)`
+          : "Write to Mila — no call needed…  (Shift+Enter to send)";
       if (!state.active && state.textPhase === "error" && state.textError) {
         errorBox.classList.remove("hidden");
         root.querySelector("#milaErrorText").textContent = state.textError;
@@ -447,6 +451,13 @@ export default {
       if (files.length) { event.preventDefault(); addFiles(files); }
     };
     text.oninput = () => { text.style.height = "auto"; text.style.height = `${Math.min(120, text.scrollHeight)}px`; };
+    // Enter keeps writing a new line; Shift, Ctrl or Cmd with Enter sends.
+    text.onkeydown = (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      submitMessage();
+    };
     root.querySelector("#milaSystemPrompt").onclick = () => {
       const prompts = { "ru-RU": "Проверь состояние Agentic OS и кратко расскажи, что сейчас работает.", "uz-UZ": "Agentic OS holatini tekshir va nimalar ishlayotganini qisqacha ayt.", "en-US": "Check Agentic OS status and briefly tell me what is working." };
       text.value = prompts[milaHub.state.language] || prompts["en-US"];

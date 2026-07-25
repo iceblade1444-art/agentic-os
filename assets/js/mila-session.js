@@ -83,6 +83,23 @@ export const MILA_LISTENING_PROFILES = [
   { id: "deliberate", label: "Long pauses", description: "Waits longer before replying" },
 ];
 
+// Two ways to carry a call. Probed on the running stack: over LiveKit the agent
+// answers a typed turn through generate_reply, which this live model does not
+// support ("failed to generate a reply"), and its voice agent has no video path
+// at all. The direct socket speaks typed turns and carries camera frames, so it
+// is the default; LiveKit stays available for its echo handling.
+export const MILA_TRANSPORTS = [
+  { id: "direct", label: "Direct", description: "Speaks what you type · camera and screen" },
+  { id: "livekit", label: "LiveKit", description: "Better echo handling · voice only" },
+];
+
+// Which token to mint, in order. A LiveKit room that cannot be created falls
+// through to the direct socket so a call still happens; the direct choice never
+// silently ends up on LiveKit, where typed turns cannot be spoken.
+export function milaTokenPlan(transport) {
+  return transport === "livekit" ? ["livekit", "direct"] : ["direct"];
+}
+
 export const MILA_RESPONSE_LENGTHS = [
   { id: "brief", label: "Brief" }, { id: "balanced", label: "Balanced" },
 ];
@@ -96,7 +113,7 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
   persona: "",
   affectiveDialog: true,
   proactiveAudio: true,
-  directConnection: false,
+  transport: "direct",
   listeningProfile: "balanced",
   responseLength: "brief",
   userName: "Бахадыр",
@@ -133,7 +150,7 @@ export function normalizeMilaPreferences(value = {}) {
     persona: String(value.persona ?? "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, MILA_PERSONA_LIMIT),
     affectiveDialog: value.affectiveDialog !== false,
     proactiveAudio: value.proactiveAudio !== false,
-    directConnection: value.directConnection === true,
+    transport: allowed(MILA_TRANSPORTS, value.transport, MILA_DEFAULT_PREFERENCES.transport),
     pace: allowed(MILA_PACES, value.pace, MILA_DEFAULT_PREFERENCES.pace),
     listeningProfile: allowed(MILA_LISTENING_PROFILES, value.listeningProfile, MILA_DEFAULT_PREFERENCES.listeningProfile),
     responseLength: allowed(MILA_RESPONSE_LENGTHS, value.responseLength, MILA_DEFAULT_PREFERENCES.responseLength),
@@ -401,16 +418,17 @@ class MilaSessionHub {
       systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {
-        // The LiveKit agent has no video path, so camera and screen sharing need
-        // the direct socket. Everything else prefers LiveKit for call quality.
-        if (this.state.preferences.directConnection) {
-          return api.integrations.milaVoiceToken({ language: this.state.language });
+        const body = { language: this.state.language };
+        const mint = {
+          livekit: () => api.integrations.milaLiveKitToken(body),
+          direct: () => api.integrations.milaVoiceToken(body),
+        };
+        let lastError;
+        for (const step of milaTokenPlan(this.state.preferences.transport)) {
+          try { return await mint[step](); }
+          catch (error) { lastError = error; }
         }
-        try {
-          return await api.integrations.milaLiveKitToken({ language: this.state.language });
-        } catch {
-          return api.integrations.milaVoiceToken({ language: this.state.language });
-        }
+        throw lastError || new Error("Mila did not return a Live token");
       },
       onState: ({ phase, error }) => this.handleState(live, phase, error),
       onLevel: (kind, value) => {
