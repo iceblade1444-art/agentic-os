@@ -20,6 +20,13 @@ function greetingFor(hour) {
   return "Добрый вечер";
 }
 
+function greetingPeriod(hour) {
+  if (hour < 6) return "night";
+  if (hour < 12) return "morning";
+  if (hour < 18) return "day";
+  return "evening";
+}
+
 export function personalBriefing(user, dashboard, onboardingState, approvals = [], now = new Date()) {
   const timezone = onboardingState.profile?.timezone || "Asia/Tashkent";
   const openTasks = (dashboard.tasks || []).filter((task) => OPEN_TASKS.has(task.status));
@@ -27,7 +34,8 @@ export function personalBriefing(user, dashboard, onboardingState, approvals = [
   const high = openTasks.filter((task) => task.priority === "high");
   const focus = due[0] || high[0] || openTasks[0] || null;
   const pressure = Math.min(100, openTasks.length * 12 + due.length * 18 + approvals.length * 10);
-  const firstName = String(user.name || "пользователь").trim().split(/\s+/)[0];
+  const firstName = String(user.name || "User").trim().split(/\s+/)[0];
+  const hour = localHour(timezone, now);
 
   const summary = [];
   if (focus) summary.push(`Главный фокус: ${focus.title}.`);
@@ -36,7 +44,9 @@ export function personalBriefing(user, dashboard, onboardingState, approvals = [
   if (approvals.length) summary.push(`${approvals.length} действий агентов ожидают подтверждения.`);
 
   return {
-    greeting: `${greetingFor(localHour(timezone, now))}, ${firstName}`,
+    greeting: `${greetingFor(hour)}, ${firstName}`,
+    greetingPeriod: greetingPeriod(hour),
+    firstName,
     summary: summary.join(" "),
     focus,
     load: pressure,

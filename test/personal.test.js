@@ -22,6 +22,8 @@ test("personal briefing prioritizes due work and reports approval pressure", () 
   assert.equal(result.focus.id, "due");
   assert.equal(result.dueCount, 1);
   assert.equal(result.approvalCount, 1);
+  assert.equal(result.greetingPeriod, "day");
+  assert.equal(result.firstName, "Bahodir");
   assert.match(result.greeting, /Bahodir/);
   assert.match(result.summary, /Due today/);
   assert.ok(result.load > 0);

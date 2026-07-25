@@ -5,6 +5,8 @@ import { api } from "./api.js";
 import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui.js";
 import { mountMilaDock } from "./mila-dock.js";
 import { renderOnboarding } from "./onboarding.js";
+import { SUPPORTED_LOCALES, getLocale, setLocale, t as tr } from "./i18n.js";
+import { saveProfileLocale } from "./profile-locale.js";
 
 import dashboard from "./pages/dashboard.js";
 import agents from "./pages/agents.js";
@@ -75,6 +77,16 @@ const OPERATOR_PAGES = {
 };
 const MEMBER_PAGES = { "": memberHome, personal, chat, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
 const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : MEMBER_NAV;
+const NAV_KEYS = {
+  "": "home", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
+  mila: "mila", speech: "speech", agents: "agents", chat: "chat", kanban: "kanban",
+  routines: "routines", tools: "tools", knowledge: "knowledge", memory: "memory", mcp: "mcp",
+  integrations: "integrations", evaluations: "evaluations", observability: "observability",
+  guardrails: "guardrails", secrets: "secrets", settings: "settings", "my-tasks": "myTasks",
+  "my-notes": "myNotes",
+};
+const navLabel = (item) => tr(`nav.${NAV_KEYS[item.route] || item.route}`) || item.label;
+const navGroup = (group) => tr(`nav.${String(group || "").toLowerCase()}`);
 
 /* ---------------- Theme ---------------- */
 export function applyTheme(t) {
@@ -92,11 +104,11 @@ function sidebarHTML() {
   const cur = currentRoute();
   const p = store.state.profile;
   const groups = navigation().map((g) => `
-    ${g.group ? `<div class="nav-label">${g.group}</div>` : ""}
+    ${g.group ? `<div class="nav-label">${navGroup(g.group)}</div>` : ""}
     <div class="nav-group">
       ${g.items.map((it) => `
         <a class="nav-item ${it.route === cur ? "active" : ""}" href="#/${it.route}">
-          ${icon(it.icon)}<span>${it.label}</span>
+          ${icon(it.icon)}<span>${navLabel(it)}</span>
           ${it.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
         </a>`).join("")}
     </div>`).join("");
@@ -109,7 +121,7 @@ function sidebarHTML() {
     <div class="sidebar-foot">
       <div class="user-chip">
         <div class="avatar" style="width:34px;height:34px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</div>
-        <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email || (p.role === "Creator" ? "Project owner" : p.role || "User"))}</span></div>
+        <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email || (p.role === "Creator" ? tr("shell.projectOwner") : p.role || "User"))}</span></div>
         <button class="icon-btn" id="user-menu">${icon("more")}</button>
       </div>
     </div>
@@ -117,17 +129,23 @@ function sidebarHTML() {
 }
 
 function topbarHTML() {
-  const t = store.state.settings.theme;
+  const theme = store.state.settings.theme;
   const member = !api.auth.canAdmin;
   return `<header class="topbar">
     <button class="icon-btn menu-toggle" id="mtoggle">${icon("grid")}</button>
-    <div class="search"><span>${icon("search")}</span><input id="globalSearch" placeholder="${member ? "Search tasks, notes, assistant…" : "Search agents, tools, docs…"}"/><kbd>⌘K</kbd></div>
+    <div class="search"><span>${icon("search")}</span><input id="globalSearch" placeholder="${tr(member ? "shell.searchMember" : "shell.searchOperator")}"/><kbd>⌘K</kbd></div>
     <div class="topbar-actions">
-      ${api.on ? `<span class="badge success tip" data-tip="Backend connected — real MCP, integrations & LLM"><span class="dot"></span>Live</span>` : `<span class="badge neutral tip" data-tip="No backend — demo mode (start the Node server)">Demo</span>`}
-      <button class="icon-btn" id="themeBtn" title="Toggle theme">${icon(t === "dark" ? "sun" : "moon")}</button>
-      <button class="icon-btn" title="Help">${icon("help")}</button>
-      ${api.auth.canAdmin ? `<button class="icon-btn" id="bellBtn" title="Notifications" style="position:relative">${icon("bell")}<span class="dot"></span></button>` : ""}
-      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/${member ? "my-tasks/new" : "kanban/new"}" id="newAgentTop">${icon("plus")}<span>New task</span></a>` : ""}
+      <label class="ui-language tip" data-tip="${tr("shell.language")}">
+        ${icon("chat")}
+        <select id="interfaceLocale" aria-label="${tr("shell.language")}">
+          ${SUPPORTED_LOCALES.map(([code, label]) => `<option value="${code}" ${getLocale() === code ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </label>
+      ${api.on ? `<span class="badge success"><span class="dot"></span>${tr("shell.live")}</span>` : `<span class="badge neutral">${tr("shell.demo")}</span>`}
+      <button class="icon-btn" id="themeBtn" title="${tr("shell.theme")}">${icon(theme === "dark" ? "sun" : "moon")}</button>
+      <button class="icon-btn" id="helpBtn" title="${tr("shell.help")}">${icon("help")}</button>
+      ${api.auth.canAdmin ? `<button class="icon-btn" id="bellBtn" title="${tr("shell.notifications")}" style="position:relative">${icon("bell")}<span class="dot"></span></button>` : ""}
+      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/${member ? "my-tasks/new" : "kanban/new"}" id="newAgentTop">${icon("plus")}<span>${tr("shell.newTask")}</span></a>` : ""}
     </div>
   </header>`;
 }
@@ -141,6 +159,23 @@ export function renderShell() {
 
 function wireShell() {
   qs("#themeBtn").onclick = toggleTheme;
+  const language = qs("#interfaceLocale");
+  if (language) language.onchange = async () => {
+    const previous = getLocale();
+    language.disabled = true;
+    try {
+      const result = await saveProfileLocale(language.value);
+      store.set((state) => { state.profile.locale = result.profile?.locale || language.value; });
+      renderShell();
+      route();
+      toast("success", tr("personal.languageSaved"));
+    } catch (error) {
+      setLocale(previous);
+      language.value = previous;
+      language.disabled = false;
+      toast("error", tr("personal.languageError"), error.message);
+    }
+  };
   const mt = qs("#mtoggle");
   if (mt) mt.onclick = () => qs("#sidebar").classList.toggle("open");
   qsa(".nav-item").forEach((a) => a.addEventListener("click", () => qs("#sidebar")?.classList.remove("open")));
@@ -151,30 +186,30 @@ function wireShell() {
   const um = qs("#user-menu");
   if (um) um.onclick = () => import("./ui.js").then((m) => m.openMenu(um, [
     { label: store.state.profile.name },
-    { text: "Personal", icon: "user", onClick: () => (location.hash = "#/personal") },
-    { text: "Settings", icon: "settings", onClick: () => (location.hash = "#/settings") },
-    ...(api.auth.canAdmin ? [{ text: "Component library", icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
+    { text: tr("nav.personal"), icon: "user", onClick: () => (location.hash = "#/personal") },
+    { text: tr("shell.settings"), icon: "settings", onClick: () => (location.hash = "#/settings") },
+    ...(api.auth.canAdmin ? [{ text: tr("shell.componentLibrary"), icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
     { sep: true },
-    { text: "Sign out", icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", "Signed out (demo)"); } },
+    { text: tr("shell.signOut"), icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", tr("shell.signOut")); } },
   ], { align: "right", placement: "top" }));
 }
 
 /* ---------------- Command palette (⌘K) ---------------- */
 function buildCommands() {
-  const t = store.state.settings.theme;
+  const theme = store.state.settings.theme;
   const cmds = [];
-  navigation().forEach((g) => g.items.forEach((it) => cmds.push({ group: "Pages", icon: it.icon, text: it.label, hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
+  navigation().forEach((g) => g.items.forEach((it) => cmds.push({ group: tr("shell.pages"), icon: it.icon, text: navLabel(it), hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
   if (api.auth.canAdmin) {
-    cmds.push({ group: "Pages", icon: "layers", text: "Component Library", hint: "#/components", run: () => (location.hash = "#/components") });
+    cmds.push({ group: tr("shell.pages"), icon: "layers", text: tr("shell.componentLibrary"), hint: "#/components", run: () => (location.hash = "#/components") });
     [
       ["Hermes", "Primary orchestrator", "brain", "default"], ["Scout", "Research", "search", "scout"],
       ["Scribe", "Writing", "edit", "scribe"], ["Reach", "Growth", "up", "reach"], ["Dev", "Engineering", "code", "dev"],
-    ].forEach(([name, role, agentIcon, profile]) => cmds.push({ group: "Agents", icon: agentIcon, text: name, hint: role, run: () => (location.hash = `#/kanban/new/${profile}`) }));
+    ].forEach(([name, role, agentIcon, profile]) => cmds.push({ group: tr("shell.agents"), icon: agentIcon, text: name, hint: role, run: () => (location.hash = `#/kanban/new/${profile}`) }));
   }
-  cmds.push({ group: "Actions", icon: "plus", text: api.auth.canAdmin ? "New Kanban task" : "New personal task", run: () => (location.hash = api.auth.canAdmin ? "#/kanban/new" : "#/my-tasks/new") });
-  cmds.push({ group: "Actions", icon: "chat", text: "New chat", run: () => (location.hash = "#/chat") });
-  cmds.push({ group: "Actions", icon: t === "dark" ? "sun" : "moon", text: "Toggle theme", run: toggleTheme });
-  cmds.push({ group: "Actions", icon: "settings", text: "Open settings", run: () => (location.hash = "#/settings") });
+  cmds.push({ group: tr("shell.actions"), icon: "plus", text: tr(api.auth.canAdmin ? "shell.newKanbanTask" : "shell.newPersonalTask"), run: () => (location.hash = api.auth.canAdmin ? "#/kanban/new" : "#/my-tasks/new") });
+  cmds.push({ group: tr("shell.actions"), icon: "chat", text: tr("shell.newChat"), run: () => (location.hash = "#/chat") });
+  cmds.push({ group: tr("shell.actions"), icon: theme === "dark" ? "sun" : "moon", text: tr("shell.theme"), run: toggleTheme });
+  cmds.push({ group: tr("shell.actions"), icon: "settings", text: tr("shell.openSettings"), run: () => (location.hash = "#/settings") });
   return cmds;
 }
 function openCommandPalette() {
@@ -184,9 +219,9 @@ function openCommandPalette() {
   const root = qs("#overlay-root");
   const scrim = el(`<div class="scrim"></div>`);
   const box = el(`<div class="cmdk" role="dialog" aria-modal="true">
-    <div class="cmdk-search">${icon("search")}<input id="cmdkInput" placeholder="Search pages, agents, actions…" autocomplete="off"/></div>
+    <div class="cmdk-search">${icon("search")}<input id="cmdkInput" placeholder="${tr("shell.searchPalette")}" autocomplete="off"/></div>
     <div class="cmdk-list" id="cmdkList"></div>
-    <div class="cmdk-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> select</span><span><kbd>esc</kbd> close</span></div>
+    <div class="cmdk-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> ${tr("shell.navigate")}</span><span><kbd>↵</kbd> ${tr("shell.select")}</span><span><kbd>esc</kbd> ${tr("shell.close")}</span></div>
   </div>`);
   scrim.onclick = closeOverlay;
   root.append(scrim, box);
@@ -198,7 +233,7 @@ function openCommandPalette() {
     filtered = q ? cmds.filter((c) => (c.text + " " + c.group).toLowerCase().includes(q)) : cmds;
     active = 0;
     let html = "", last = null;
-    if (!filtered.length) html = `<div class="cmdk-group">No results</div>`;
+    if (!filtered.length) html = `<div class="cmdk-group">${tr("shell.noResults")}</div>`;
     filtered.forEach((c, i) => {
       if (c.group !== last) { html += `<div class="cmdk-group">${c.group}</div>`; last = c.group; }
       html += `<div class="cmdk-item ${i === active ? "active" : ""}" data-i="${i}">${icon(c.icon)}<span>${esc(c.text)}</span>${c.hint ? `<span class="k">${esc(c.hint)}</span>` : ""}</div>`;
@@ -266,13 +301,15 @@ function route() {
   mountedPage = page;
   // update active nav without full re-render
   qsa(".nav-item").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#/" + r));
-  document.title = (page.title ? page.title + " · " : "") + "Agentic OS";
+  const item = navigation().flatMap((group) => group.items).find((entry) => entry.route === r);
+  const title = item ? navLabel(item) : page.title;
+  document.title = (title ? title + " · " : "") + "Agentic OS";
   qs("#view").scrollTop = 0;
   window.scrollTo(0, 0);
 }
 
-const notFound = { title: "Not found", render: () => `<div class="empty"><div class="empty-ico">${icon("search")}</div><h4>Page not found</h4><p>The page you’re looking for doesn’t exist.</p><a class="btn btn-primary" href="#/">Back home</a></div>` };
-const forbidden = { title: "Access denied", render: () => `<div class="empty"><div class="empty-ico">${icon("shield")}</div><h4>Admin access required</h4><p>This system area is available to Creator and Admin accounts.</p><a class="btn btn-primary" href="#/">Back home</a></div>` };
+const notFound = { title: "", render: () => `<div class="empty"><div class="empty-ico">${icon("search")}</div><h4>${tr("shell.notFound")}</h4><p>${tr("shell.notFoundText")}</p><a class="btn btn-primary" href="#/">${tr("shell.backHome")}</a></div>` };
+const forbidden = { title: "", render: () => `<div class="empty"><div class="empty-ico">${icon("shield")}</div><h4>${tr("shell.adminRequired")}</h4><p>${tr("shell.adminText")}</p><a class="btn btn-primary" href="#/">${tr("shell.backHome")}</a></div>` };
 
 /* ---------------- Bootstrap ---------------- */
 async function boot() {
@@ -283,6 +320,10 @@ async function boot() {
     applyThemeSilent(store.state.settings.theme || "dark");
   }
   window.addEventListener("hashchange", route);
+  window.addEventListener("aos:locale-change", () => {
+    renderShell();
+    route();
+  });
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); }
     else if (e.key === "Escape") closeOverlay();
@@ -292,6 +333,8 @@ async function boot() {
   if (api.on) {
     try {
       const onboarding = await api.onboarding.get();
+      setLocale(onboarding.profile?.locale || getLocale());
+      store.set((state) => { state.profile.locale = onboarding.profile?.locale || getLocale(); });
       const forceSetup = new URLSearchParams(location.search).get("setup") === "1";
       if (onboarding.needsOnboarding || forceSetup) return renderOnboarding(onboarding);
     } catch (error) {
@@ -308,6 +351,7 @@ function syncAuthenticatedProfile() {
   if (!user?.name) return;
   store.set((state) => {
     state.profile = {
+      ...state.profile,
       name: user.name,
       email: user.email || "",
       role: user.role || "User",
@@ -321,23 +365,30 @@ function renderLogin() {
   app.removeAttribute("aria-busy");
   const canRegister = api.auth.registration;
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
+    <label class="login-language" aria-label="${tr("login.language")}">${icon("chat")}<select id="loginLocale">
+      ${SUPPORTED_LOCALES.map(([code, label]) => `<option value="${code}" ${getLocale() === code ? "selected" : ""}>${label}</option>`).join("")}
+    </select></label>
     <div class="brand-mark brand-mark-lg">${brandMark()}</div>
     <h1 style="text-align:center;font-size:22px;font-weight:800;letter-spacing:-.02em">Mila</h1>
     <p class="brand-sub">Agentic OS</p>
-    <p class="muted" id="loginLead" style="text-align:center;margin:6px 0 18px">Sign in to your workspace.</p>
-    ${canRegister ? `<div class="login-tabs" role="tablist"><button type="button" class="active" data-auth-mode="login">Sign in</button><button type="button" data-auth-mode="register">Create account</button></div>` : ""}
-    <div class="field auth-register-only"><label class="label" for="loginName">Name</label><input class="input" id="loginName" autocomplete="name"/></div>
-    <div class="field"><label class="label" for="loginEmail">Email <span class="auth-login-only muted">(leave blank for Creator)</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
-    <div class="field"><label class="label" for="loginPw">Password</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
+    <p class="muted" id="loginLead" style="text-align:center;margin:6px 0 18px">${tr("login.lead")}</p>
+    ${canRegister ? `<div class="login-tabs" role="tablist"><button type="button" class="active" data-auth-mode="login">${tr("login.signIn")}</button><button type="button" data-auth-mode="register">${tr("login.create")}</button></div>` : ""}
+    <div class="field auth-register-only"><label class="label" for="loginName">${tr("login.name")}</label><input class="input" id="loginName" autocomplete="name"/></div>
+    <div class="field"><label class="label" for="loginEmail">${tr("login.email")} <span class="auth-login-only muted">${tr("login.creatorHint")}</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
+    <div class="field"><label class="label" for="loginPw">${tr("login.password")}</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
     <div id="loginErr"></div>
-    <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>Sign in</span></button>
+    <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>${tr("login.signIn")}</span></button>
   </form></div>`;
   const form = qs("#loginForm");
+  qs("#loginLocale").onchange = (event) => {
+    setLocale(event.target.value);
+    renderLogin();
+  };
   const setMode = (mode) => {
     form.dataset.mode = mode;
     form.querySelectorAll("[data-auth-mode]").forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-    qs("#loginLead").textContent = mode === "register" ? "Create your personal Agentic OS account." : "Sign in to your workspace.";
-    qs("#authSubmit span").textContent = mode === "register" ? "Create account" : "Sign in";
+    qs("#loginLead").textContent = tr(mode === "register" ? "login.registerLead" : "login.lead");
+    qs("#authSubmit span").textContent = tr(mode === "register" ? "login.create" : "login.signIn");
     qs("#loginPw").autocomplete = mode === "register" ? "new-password" : "current-password";
     qs("#loginErr").innerHTML = "";
     (mode === "register" ? qs("#loginName") : qs("#loginEmail")).focus();
@@ -352,7 +403,7 @@ function renderLogin() {
       if (form.dataset.mode === "register") await api.auth.register({ ...body, name: qs("#loginName").value.trim() });
       else await api.auth.login(body);
       location.reload();
-    } catch (err) { qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || "Login failed")}</div>`; btn.classList.remove("loading"); qs("#loginPw").focus(); }
+    } catch (err) { qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || tr("login.failed"))}</div>`; btn.classList.remove("loading"); qs("#loginPw").focus(); }
   };
 }
 function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", t); }
