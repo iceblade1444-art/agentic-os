@@ -136,6 +136,7 @@ export const api = {
   kanban: {
     board: () => j("/api/kanban/board"),
     profiles: () => j("/api/kanban/profiles"),
+    probeProfiles: () => j("/api/kanban/profiles/probe", { method: "POST" }),
     orchestration: () => j("/api/kanban/orchestration"),
     updateOrchestration: (body) => j("/api/kanban/orchestration", { method: "PUT", body }),
     createTask: (body) => j("/api/kanban/tasks", { method: "POST", body }),

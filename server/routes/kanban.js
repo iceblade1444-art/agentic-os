@@ -3,6 +3,7 @@ import { Router, raw } from "express";
 
 import { config } from "../config.js";
 import { authenticatedUser } from "../lib/auth.js";
+import { mergeHermesFleetHealth, readHermesFleetHealth, requestHermesFleetProbe } from "../lib/hermes-fleet-health.js";
 import { hermesKanbanRawRequest, hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 
 const r = Router();
@@ -39,7 +40,11 @@ function handle(handler) {
 }
 
 r.get("/board", handle(() => hermesKanbanRequest(kanbanPath("/board", BOARD))));
-r.get("/profiles", handle(() => hermesKanbanRequest(kanbanPath("/profiles", BOARD))));
+r.get("/profiles", handle(async () => {
+  const profiles = await hermesKanbanRequest(kanbanPath("/profiles", BOARD));
+  return mergeHermesFleetHealth(profiles, readHermesFleetHealth());
+}));
+r.post("/profiles/probe", handle(() => requestHermesFleetProbe()));
 r.get("/orchestration", handle(() => hermesKanbanRequest(kanbanPath("/orchestration", BOARD))));
 
 r.put("/orchestration", handle((req) => {

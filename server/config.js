@@ -24,6 +24,8 @@ export const config = {
   operationsStateFile: env.OPS_STATE_FILE || "/run/agentic-os/operations.json",
   operationsBackupRequestFile: env.OPS_BACKUP_REQUEST_FILE || "/run/agentic-os/backup.request",
   operationsRestoreRequestFile: env.OPS_RESTORE_REQUEST_FILE || "/run/agentic-os/restore.request",
+  hermesFleetHealthFile: env.HERMES_FLEET_HEALTH_FILE || "/run/agentic-os/hermes-fleet-health.json",
+  hermesFleetHealthRequestFile: env.HERMES_FLEET_HEALTH_REQUEST_FILE || "/run/agentic-os/hermes-fleet-health.request",
   hermesKanbanBoard: env.HERMES_KANBAN_BOARD || "agentic-os",
   claudeCode: {
     bin: env.CLAUDE_CODE_BIN || "claude",

@@ -14,7 +14,10 @@ function healthySnapshot() {
     hermes: { ready: true },
     claude: { ready: true, version: "2.1.214", auth: { loggedIn: true } },
     mila: { ok: true, voiceConfigured: true, liveModel: "gemini-live" },
-    profiles: { profiles: ["default", "scout", "scribe", "reach", "dev"] },
+    profiles: {
+      profiles: ["default", "scout", "scribe", "reach", "dev"].map((name) => ({ name, health: { ok: true } })),
+      fleetHealth: { stale: false },
+    },
     board: { columns: [{ name: "done", tasks: [{ id: "1" }] }, { name: "scheduled", tasks: [{ id: "2" }] }] },
     operations: {
       available: true,

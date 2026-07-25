@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { db } from "../store.js";
 import * as mcp from "../mcp/manager.js";
 import { claudeCode } from "./claude-code.js";
+import { mergeHermesFleetHealth, readHermesFleetHealth } from "./hermes-fleet-health.js";
 import { hermesCronRequest, hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { knowledge } from "./knowledge.js";
@@ -51,6 +52,8 @@ export function buildFourCReadiness(snapshot) {
   } = snapshot;
   const goals = onboardingState.workspace?.goals || [];
   const profileCount = Array.isArray(profiles.profiles) ? profiles.profiles.length : 0;
+  const healthyProfileCount = Array.isArray(profiles.profiles) ? profiles.profiles.filter((profile) => profile?.health?.ok).length : 0;
+  const fleetReady = profileCount >= 5 && healthyProfileCount >= 5 && profiles.fleetHealth?.stale === false;
   const totalTasks = countTasks(board);
   const scheduledTasks = countTasks(board, "scheduled");
   const activeRoutines = (Array.isArray(cronJobs) ? cronJobs : []).filter((job) => job.enabled !== false && job.paused !== true && job.status !== "paused");
@@ -69,7 +72,7 @@ export function buildFourCReadiness(snapshot) {
       checked("integrations", "Configured integrations", connectedIntegrations.length > 0, connectedIntegrations.length ? `${connectedIntegrations.length} integrations are connected.` : "No external integration has a successful connection.", "Manage integrations", "#/integrations"),
     ]),
     section("capabilities", "Capabilities", "Agents and tools that can complete real work", [
-      checked("agent-fleet", "Specialist agent fleet", profileCount >= 5, profileCount ? `${profileCount} persistent Hermes profiles are available.` : "Hermes profiles could not be read.", "Open Agents", "#/agents"),
+      checked("agent-fleet", "Specialist agent fleet", fleetReady, fleetReady ? `${healthyProfileCount} persistent Hermes profiles passed a live model check.` : profileCount ? `${healthyProfileCount} of ${profileCount} profiles passed the latest live model check.` : "Hermes profiles could not be read.", "Open Agents", "#/agents"),
       checked("claude", "Claude Workspace", claude.ready && claude.auth?.loggedIn, claude.ready ? `Claude Code ${claude.version || "is installed"} and authenticated.` : (claude.error || "Claude Workspace is not ready."), "Open Claude Workspace", "#/claude-code"),
       checked("mila-voice", "MILA voice", mila.ok && mila.voiceConfigured, mila.voiceConfigured ? `Gemini Live is configured with ${mila.liveModel || "a live model"}.` : "Secure voice is not configured.", "Open MILA Live", "#/speech"),
       checked("kanban-proof", "Executed work", totalTasks > 0, totalTasks ? `${totalTasks} Kanban tasks provide an execution trail.` : "No task has been executed through the board yet.", "Open Kanban", "#/kanban"),
@@ -113,13 +116,14 @@ export async function readFourCReadiness(user) {
     hermesCronRequest("/api/cron/jobs?profile=all", { timeoutMs: 5000 }),
   ]);
   const value = (index) => results[index].status === "fulfilled" ? results[index].value : fallback(results[index].reason);
+  const profiles = mergeHermesFleetHealth(value(4), readHermesFleetHealth());
   return buildFourCReadiness({
     onboardingState: onboarding.get(user),
     vault: value(0),
     hermes: value(1),
     claude: value(2),
     mila: value(3),
-    profiles: value(4),
+    profiles,
     board: value(5),
     cronJobs: value(6),
     operations,
