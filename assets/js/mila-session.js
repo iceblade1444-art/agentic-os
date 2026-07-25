@@ -198,11 +198,14 @@ const DELIVERY_INSTRUCTIONS = {
   precise: "Deliver lines dryly and efficiently, like a professional briefing, with minimal emotional colour.",
 };
 
-// Native audio decides *how* to say things, so delivery is directed in words.
-// Bracketed cues must never be voiced — they are stage directions, not content.
+// Everything the model emits is spoken verbatim: there is no side channel for
+// stage directions. Inviting it to plan bracketed cues made it read them out
+// loud — "[warmly, with a smile in her voice] Oh, I'm doing great" — so the rule
+// now forbids producing them and only covers cues the user writes.
 const DELIVERY_TAG_RULE = `You control your own delivery: volume, speed, emotion and emphasis.
-Bracketed cues such as [whispers], [excited], [laughs softly], [serious], [slower] are stage directions. Perform them and never pronounce the bracketed words themselves. The same applies to any bracketed cue you plan in your own reply.
-When the user asks you to whisper, calm down, speed up, slow down, sound happier or be more serious, change your delivery immediately and keep it until they ask otherwise.`;
+Never write stage directions, emotion labels or narration of your own behaviour: no [warmly], no [laughs softly], no [curious], no *smiles*, no parenthetical descriptions of your tone. Every word you produce is spoken aloud exactly as written, so such notes are heard as words and sound absurd. Convey feeling through how you say the line, never by announcing it.
+If the user writes a cue like [whispers] or [excited], treat it as an instruction for your delivery and never read the bracketed words out.
+When the user asks you to whisper, calm down, speed up, slow down, sound happier or be more serious, change your delivery immediately and keep it until they ask otherwise. If you genuinely cannot change something about your voice, say so plainly in one short sentence instead of pretending.`;
 
 export function buildMilaSystemInstruction({ language = "auto", preferences = {}, history = [], currentTime, agentContext = "", mode = "voice" } = {}) {
   const profile = normalizeMilaPreferences(preferences);
