@@ -175,7 +175,30 @@ test("delivery direction reaches the prompt without leaking stage directions", (
   assert.match(prompt, /Deliver lines softly and closely/);
   assert.match(prompt, /calm night-radio host/);
   assert.match(prompt, /\[whispers\]/);
-  assert.match(prompt, /never pronounce the bracketed words/);
+  assert.match(prompt, /never read the bracketed words out/);
+});
+
+test("Mila is told not to narrate her own tone, in every language", () => {
+  // She was speaking her own stage directions aloud in English —
+  // "[warmly, with a smile in her voice] Oh, I'm doing great" — because the
+  // rule used to invite her to plan bracketed cues. Live audio has no side
+  // channel: whatever she emits is spoken verbatim.
+  for (const language of ["ru-RU", "en-US", "uz-UZ", "auto"]) {
+    const prompt = buildMilaSystemInstruction({ language, currentTime: "2026-07-25T10:00:00.000Z" });
+    assert.match(prompt, /Never write stage directions/, `${language} needs the ban`);
+    assert.match(prompt, /spoken aloud exactly as written/, `${language} needs the reason`);
+    assert.match(prompt, /\[laughs softly\]/, `${language} should name the actual failure`);
+    assert.doesNotMatch(prompt, /bracketed cue you plan in your own reply/, `${language} must not invite cues`);
+  }
+  // The user's own cues are still honoured, and never voiced.
+  const prompt = buildMilaSystemInstruction({ currentTime: "2026-07-25T10:00:00.000Z" });
+  assert.match(prompt, /If the user writes a cue like \[whispers\]/);
+  assert.match(prompt, /never read the bracketed words out/);
+  // And she admits a limit instead of playing along.
+  assert.match(prompt, /cannot change something about your voice, say so plainly/);
+  // Writing has no delivery coaching at all, so no cue talk leaks there.
+  const written = buildMilaSystemInstruction({ mode: "text", currentTime: "2026-07-25T10:00:00.000Z" });
+  assert.doesNotMatch(written, /Never write stage directions/);
 });
 
 test("the live socket stays audio-only — live models cannot answer in text", () => {
