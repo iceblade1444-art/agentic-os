@@ -73,16 +73,22 @@ export function isAffectiveDialogRejection(reason = "") {
   return /unknown|unsupported|not supported|invalid|unexpected/i.test(text) || /affective/i.test(text);
 }
 
+// Scripts this workspace never speaks: Devanagari, Bengali, Tamil and friends,
+// Arabic, Hebrew, Thai, CJK and Hangul. Gemini's recogniser sometimes renders
+// Russian speech as one of these, which then derails the whole answer.
+const FOREIGN_SCRIPTS = /[\u0590-\u05ff\u0600-\u06ff\u0900-\u0dff\u0e00-\u0e7f\u1100-\u11ff\u3040-\u30ff\u3130-\u318f\u4e00-\u9fff\uac00-\ud7af]/gu;
+const CYRILLIC = /[\u0400-\u052f]/gu;
+
 export function isTranscriptPlausible(text, language = "auto") {
   const value = String(text || "");
-  if (!value || language === "auto") return true;
+  if (!value) return true;
   const letters = value.match(/\p{L}/gu) || [];
   if (letters.length < 2) return true;
-  const unexpected = language === "ru-RU"
-    ? value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
-    : language === "en-US"
-      ? value.match(/[\u0400-\u052f\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || []
-      : value.match(/[\u0900-\u0dff\u0600-\u06ff\u4e00-\u9fff]/gu) || [];
+  // Auto still means Russian, Uzbek or English \u2014 only those scripts are expected,
+  // so the guard stays on instead of waving every alphabet through.
+  const unexpected = language === "en-US"
+    ? [...(value.match(FOREIGN_SCRIPTS) || []), ...(value.match(CYRILLIC) || [])]
+    : value.match(FOREIGN_SCRIPTS) || [];
   return unexpected.length / letters.length < 0.35;
 }
 

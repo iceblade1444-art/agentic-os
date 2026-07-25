@@ -17,6 +17,25 @@ test("Mila transcript filter rejects the wrong script for selected Russian", () 
   assert.equal(isTranscriptPlausible("Agentic OS ishlayapti", "uz-UZ"), true);
 });
 
+test("Auto language still blocks scripts this workspace never speaks", () => {
+  // Regression: auto used to wave every alphabet through, so Gemini rendering
+  // Russian speech as Hindi reached the transcript and derailed the answer.
+  assert.equal(isTranscriptPlausible("ऐसे बच्चे क्या करें? कई नालायक पेरेंट्स", "auto"), false);
+  assert.equal(isTranscriptPlausible("مرحبا كيف حالك", "auto"), false);
+  assert.equal(isTranscriptPlausible("你好我很好谢谢", "auto"), false);
+  // The three languages the workspace actually speaks stay untouched.
+  assert.equal(isTranscriptPlausible("Привет милая, как дела?", "auto"), true);
+  assert.equal(isTranscriptPlausible("Salom, ishlar qalay?", "auto"), true);
+  assert.equal(isTranscriptPlausible("Hey Mila, what is running right now?", "auto"), true);
+  assert.equal(isTranscriptPlausible("Открой Kanban и покажи tasks", "auto"), true);
+  // Cyrillic is wrong only when English was pinned explicitly.
+  assert.equal(isTranscriptPlausible("Привет, как дела?", "en-US"), false);
+  assert.equal(isTranscriptPlausible("Привет, как дела?", "ru-RU"), true);
+  // Short or empty fragments are never judged.
+  assert.equal(isTranscriptPlausible("", "auto"), true);
+  assert.equal(isTranscriptPlausible("да", "auto"), true);
+});
+
 test("Mila Live setup uses a warm voice and explicit activity detection", () => {
   const setup = buildLiveSetup({ model: "gemini-live", systemInstruction: "Be helpful", listeningProfile: "noisy" });
   assert.equal(setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Sulafat");
