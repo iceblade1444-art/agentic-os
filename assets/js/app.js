@@ -1,4 +1,5 @@
 import { store } from "./store.js";
+import { brandMark } from "./brand.js";
 import { icon } from "./icons.js";
 import { api } from "./api.js";
 import { el, qs, qsa, agentIcon, initials, esc, closeOverlay, toast } from "./ui.js";
@@ -83,8 +84,7 @@ function sidebarHTML() {
     </div>`).join("");
   return `<aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark">${icon("rocket")}</div>
-      <div class="brand-name">Agentic OS</div>
+      <a class="brand-lockup" href="#/" aria-label="Mila · Agentic OS"></a>
       <span class="brand-badge">v1.0</span>
     </div>
     ${groups}
@@ -300,8 +300,9 @@ function renderLogin() {
   app.removeAttribute("aria-busy");
   const canRegister = api.auth.registration;
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
-    <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 14px">${icon("rocket")}</div>
-    <h1 style="text-align:center;font-size:22px;font-weight:800;letter-spacing:-.02em">Agentic OS</h1>
+    <div class="brand-mark brand-mark-lg">${brandMark()}</div>
+    <h1 style="text-align:center;font-size:22px;font-weight:800;letter-spacing:-.02em">Mila</h1>
+    <p class="brand-sub">Agentic OS</p>
     <p class="muted" id="loginLead" style="text-align:center;margin:6px 0 18px">Sign in to your workspace.</p>
     ${canRegister ? `<div class="login-tabs" role="tablist"><button type="button" class="active" data-auth-mode="login">Sign in</button><button type="button" data-auth-mode="register">Create account</button></div>` : ""}
     <div class="field auth-register-only"><label class="label" for="loginName">Name</label><input class="input" id="loginName" autocomplete="name"/></div>

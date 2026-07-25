@@ -40,8 +40,14 @@ button { font-family: inherit; cursor: pointer; }
   font-size: var(--text-sm);
 }
 .boot-logo {
-  width: 46px; height: 46px; border-radius: 12px; background: var(--accent-grad);
+  width: 52px; height: 52px; border-radius: 14px; background: var(--accent-grad);
   box-shadow: var(--shadow-md); animation: pulse 1.4s var(--ease) infinite;
+  display: grid; place-content: center;
+}
+.boot-logo::after {
+  content: ""; width: 29px; height: 24px; background-color: #fff;
+  -webkit-mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+  mask: url("../brand/mila-mark.svg") no-repeat center / contain;
 }
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.55;transform:scale(.92)} }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -68,14 +74,30 @@ button { font-family: inherit; cursor: pointer; }
   gap: 6px;
   overflow-y: auto;
 }
-.brand { display: flex; align-items: center; gap: 11px; padding: 6px 8px 14px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 16px; }
+/* The lockup ships as one SVG file and is tinted through a mask, so it stays
+   crisp, cacheable, and follows the theme's ink like the brand sheet specifies. */
+.brand-lockup {
+  flex: 1; min-width: 0; height: 42px;
+  background-color: var(--text);
+  -webkit-mask: url("../brand/mila-lockup.svg") no-repeat left center / contain;
+  mask: url("../brand/mila-lockup.svg") no-repeat left center / contain;
+  transition: opacity var(--dur) var(--ease);
+}
+.brand-lockup:hover { opacity: 0.75; }
+.brand-lockup:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
 .brand-mark {
   width: 34px; height: 34px; border-radius: 9px; background: var(--accent-grad);
   display: grid; place-content: center; color: #fff; box-shadow: var(--shadow-sm);
   flex: none;
 }
-.brand-mark svg { width: 20px; height: 20px; }
-.brand-name { font-weight: 800; font-size: 16px; letter-spacing: -0.02em; background: var(--grad-text); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.brand-mark svg { width: 19px; height: 19px; }
+.brand-mark-lg { width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 14px; }
+.brand-mark-lg svg { width: 29px; height: 29px; }
+.brand-sub {
+  text-align: center; margin: 2px 0 0; font-size: 11px; font-weight: 650;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-3);
+}
 .nav-item.active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent); }
 .brand-badge {
   font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
@@ -907,7 +929,7 @@ body.compact .card.pad-lg { padding: 16px; }
 .onboarding-rail { display: flex; flex-direction: column; padding: 30px 24px; border-right: 1px solid var(--border); background: var(--surface); }
 .onboarding-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .onboarding-brand > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: var(--primary); color: white; }
-.onboarding-brand svg { width: 17px; height: 17px; }
+.onboarding-brand svg { width: 19px; height: 16px; }
 .onboarding-rail ol { display: grid; gap: 8px; margin: 54px 0 0; padding: 0; list-style: none; }
 .onboarding-rail li { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 10px; min-height: 42px; color: var(--text-3); }
 .onboarding-rail li > span { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; font-size: 11px; }
@@ -1141,7 +1163,7 @@ body.compact .card.pad-lg { padding: 16px; }
   width: 34px; height: 34px; flex: none; display: grid; place-items: center;
   border-radius: 8px; background: var(--primary-soft); color: var(--violet-300);
 }
-.mila-dock-avatar svg { width: 16px; height: 16px; }
+.mila-dock-avatar svg { width: 18px; height: 15px; }
 .mila-dock-head > div { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .mila-dock-head strong { font-size: 13px; }
 .mila-dock-head > div span { color: var(--success); font-size: 10px; text-transform: capitalize; }

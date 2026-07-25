@@ -32,3 +32,7 @@ agentos-runtime/config/voice.local.json
 vault/.obsidian/
 vault/MILA/
 vault/Agentic OS/
+
+# Brand source files (Illustrator/PDF/PNG exports). The vectors the app ships
+# live in assets/brand/*.svg; the heavy sources stay out of Git.
+Logo/
