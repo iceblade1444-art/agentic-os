@@ -71,6 +71,10 @@ export function buildLiveSetup(options = {}) {
   if (options.affectiveDialog !== false && supportsAffectiveDialog(options.model)) {
     setup.generationConfig.enableAffectiveDialog = true;
   }
+  // Proactive audio lets the model stay quiet when speech was not aimed at it.
+  // Unlike affective dialog this one is accepted by every live model here,
+  // verified against the production path with a real ephemeral token.
+  if (options.proactiveAudio !== false) setup.proactivity = { proactiveAudio: true };
   setup.realtimeInputConfig = {
     automaticActivityDetection: buildAutomaticActivityDetection(options.listeningProfile),
     activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
@@ -81,12 +85,13 @@ export function buildLiveSetup(options = {}) {
   return setup;
 }
 
-// A model that does not support affective dialog closes the socket complaining
-// about that field; anything else is a real connection failure.
-export function isAffectiveDialogRejection(reason = "") {
+// Affective dialog and proactive audio are the two optional extras in the setup.
+// A model that refuses one closes the socket naming it; anything else is a real
+// connection failure and must surface instead of being retried away.
+export function isOptionalFeatureRejection(reason = "") {
   const text = String(reason || "");
-  if (!/affective|enable_affective_dialog|enableAffectiveDialog/i.test(text)) return false;
-  return /unknown|unsupported|not supported|invalid|unexpected/i.test(text) || /affective/i.test(text);
+  if (!/affective|proactiv/i.test(text)) return false;
+  return /unknown|unsupported|not supported|invalid|unexpected|internal/i.test(text) || /affective|proactiv/i.test(text);
 }
 
 // Scripts this workspace never speaks: Devanagari, Bengali, Tamil and friends,
@@ -528,21 +533,22 @@ export class MilaLiveSession {
     socket.onerror = () => this.readyReject?.(new Error("Gemini Live WebSocket failed"));
     socket.onclose = (event) => {
       this.ready = false;
-      rejectedSetupField = isAffectiveDialogRejection(event.reason);
+      rejectedSetupField = isOptionalFeatureRejection(event.reason);
       if (rejectedSetupField) this.readyReject?.(new Error(event.reason || "Setup rejected"));
       else if (!this.intentionalClose) this._state("error", event.reason || "Mila Live disconnected");
     };
     try {
       await ready;
     } catch (error) {
-      // Older or non-native-audio models reject enableAffectiveDialog. Retry once
-      // plainly so the call still connects instead of surfacing a dead session.
-      if (rejectedSetupField && setupOverrides.affectiveDialog !== false) {
+      // Should a model refuse one of the optional extras, drop both and retry
+      // once so the call still connects instead of surfacing a dead session.
+      const stripped = setupOverrides.affectiveDialog === false && setupOverrides.proactiveAudio === false;
+      if (rejectedSetupField && !stripped) {
         clearTimeout(timeout);
         this.readyResolve = null;
         this.readyReject = null;
-        this.affectiveDialogUnavailable = true;
-        return this._connect(token, { affectiveDialog: false });
+        this.optionalFeaturesUnavailable = true;
+        return this._connect(token, { affectiveDialog: false, proactiveAudio: false });
       }
       throw error;
     } finally {
