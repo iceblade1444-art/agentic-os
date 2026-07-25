@@ -70,23 +70,29 @@ export const milaRevokeDevice = (cfg, id, options) => {
   return milaRequest(cfg, `/admin/devices/${id}`, { ...options, method: "DELETE" });
 };
 
+// One cached device session backs every MILA call the dashboard makes, so the
+// admin token and the provider keys never reach the browser.
+async function dashboardSession(cfg, label, options = {}) {
+  const cacheKey = cleanBaseUrl(cfg.baseUrl);
+  const cached = dashboardSessions.get(cacheKey);
+  if (cached) return cached;
+  const connection = await milaConnectionCode(cfg, label, options);
+  if (!connection.code) throw new Error("MILA did not create a connection code");
+  const session = await milaSessionRequest(cfg, "/v1/auth/device", {
+    ...options,
+    method: "POST",
+    body: { code: connection.code },
+  });
+  if (!session.token) throw new Error("MILA did not create a dashboard session");
+  dashboardSessions.set(cacheKey, session.token);
+  return session.token;
+}
+
 // Mint a constrained Gemini Live token without exposing MILA's admin token,
 // account session, or long-lived provider key to the browser.
 export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", options = {}) {
   const cacheKey = cleanBaseUrl(cfg.baseUrl);
-  let sessionToken = dashboardSessions.get(cacheKey);
-  if (!sessionToken) {
-    const connection = await milaConnectionCode(cfg, label, options);
-    if (!connection.code) throw new Error("MILA did not create a connection code");
-    const session = await milaSessionRequest(cfg, "/v1/auth/device", {
-      ...options,
-      method: "POST",
-      body: { code: connection.code },
-    });
-    if (!session.token) throw new Error("MILA did not create a dashboard session");
-    sessionToken = session.token;
-    dashboardSessions.set(cacheKey, sessionToken);
-  }
+  const sessionToken = await dashboardSession(cfg, label, options);
 
   let voice;
   try {
@@ -110,21 +116,31 @@ export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", option
   };
 }
 
+// Written conversation goes through MILA's Gemini chat endpoint rather than the
+// Live API: live models answer in audio only, and generateContent handles text
+// plus inline images in one request.
+export async function milaGeminiChat(cfg, label = "Agentic OS dashboard", options = {}) {
+  const sessionToken = await dashboardSession(cfg, label, options);
+  const body = {
+    messages: Array.isArray(options.messages) ? options.messages.slice(-24) : [],
+    ...(options.systemPrompt ? { systemPrompt: String(options.systemPrompt).slice(0, 30000) } : {}),
+    ...(options.model ? { model: options.model } : {}),
+  };
+  if (!body.messages.length) throw Object.assign(new Error("A chat message is required"), { status: 400 });
+  try {
+    return await milaSessionRequest(cfg, "/v1/gemini/chat", {
+      ...options, method: "POST", bearer: sessionToken, body, timeoutMs: options.timeoutMs || 60000,
+    });
+  } catch (error) {
+    if (!/session|unauthorized|401/i.test(error.message || "")) throw error;
+    dashboardSessions.delete(cleanBaseUrl(cfg.baseUrl));
+    return milaGeminiChat(cfg, label, { ...options, retried: true });
+  }
+}
+
 export async function milaLiveKitToken(cfg, label = "Agentic OS dashboard", options = {}) {
   const cacheKey = cleanBaseUrl(cfg.baseUrl);
-  let sessionToken = dashboardSessions.get(cacheKey);
-  if (!sessionToken) {
-    const connection = await milaConnectionCode(cfg, label, options);
-    if (!connection.code) throw new Error("MILA did not create a connection code");
-    const session = await milaSessionRequest(cfg, "/v1/auth/device", {
-      ...options,
-      method: "POST",
-      body: { code: connection.code },
-    });
-    if (!session.token) throw new Error("MILA did not create a dashboard session");
-    sessionToken = session.token;
-    dashboardSessions.set(cacheKey, sessionToken);
-  }
+  const sessionToken = await dashboardSession(cfg, label, options);
 
   try {
     const voice = await milaSessionRequest(cfg, "/v1/voice/livekit-token", {

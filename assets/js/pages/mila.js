@@ -220,6 +220,9 @@ export default {
           <label class="mila-toggle-row"><input type="checkbox" id="milaAffectiveDialog"${prefs.affectiveDialog ? " checked" : ""}/>
             <span><strong>Affective dialog</strong><small>Mila hears your tone and answers in kind. Needs a native-audio model; switched off automatically if unsupported.</small></span>
           </label>
+          <label class="mila-toggle-row"><input type="checkbox" id="milaDirectConnection"${prefs.directConnection ? " checked" : ""}/>
+            <span><strong>Direct connection — enables camera and screen</strong><small>Calls go straight to Gemini instead of through the LiveKit room, which cannot carry video. Turn off for LiveKit's echo handling on noisy setups.</small></span>
+          </label>
           <div class="field mila-name-field"><label class="label" for="milaUserName">Your name</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
           <div class="mila-settings-note">Changes apply when the next live call starts.</div>
         </div>`,
@@ -270,6 +273,7 @@ export default {
               delivery: selected("milaDelivery"),
               voiceDirection: modal.querySelector("#milaVoiceDirection").value,
               affectiveDialog: modal.querySelector("#milaAffectiveDialog").checked,
+              directConnection: modal.querySelector("#milaDirectConnection").checked,
               responseLength: selected("milaResponseLength"),
               userName: modal.querySelector("#milaUserName").value,
               inputDeviceId: microphone.value,
