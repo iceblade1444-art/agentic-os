@@ -217,6 +217,15 @@ export const api = {
     backup: () => j("/api/operations/backup", { method: "POST" }),
     restoreDrill: () => j("/api/operations/restore-drill", { method: "POST" }),
   },
+  governance: {
+    guardrails: () => j("/api/governance/guardrails"),
+    secrets: () => j("/api/governance/secrets"),
+    setSecret: (body) => j("/api/governance/secrets", { method: "POST", body }),
+    deleteSecret: (id) => j(`/api/governance/secrets/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    evaluations: () => j("/api/governance/evaluations"),
+    runEvaluation: () => j("/api/governance/evaluations/run", { method: "POST" }),
+    audit: (limit = 100) => j(`/api/governance/audit?limit=${encodeURIComponent(limit)}`),
+  },
   skills: {
     list: (profile = "") => j(`/api/skills${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
     content: (name, profile = "") => j(`/api/skills/content?name=${encodeURIComponent(name)}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`),

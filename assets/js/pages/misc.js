@@ -635,84 +635,163 @@ function opsAge(value) { const stamp = value ? new Date(value).getTime() : NaN; 
 function opsBytes(value) { if (!Number.isFinite(Number(value)) || Number(value) <= 0) return "Unknown"; const units = ["B", "KB", "MB", "GB", "TB"]; let amount = Number(value), index = 0; while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; } return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`; }
 
 /* ============================ GUARDRAILS ============================ */
+let guardrailsState = null;
+let guardrailsError = "";
+let guardrailsLoading = false;
+
 export const guardrails = {
   title: "Guardrails",
   render() {
-    const rules = ensure("guards", () => [
-      { id: "g1", name: "PII redaction", desc: "Mask emails, phone numbers and SSNs in I/O", on: true },
-      { id: "g2", name: "Toxicity filter", desc: "Block toxic or unsafe generations", on: true },
-      { id: "g3", name: "Prompt-injection shield", desc: "Ignore instructions found in tool output", on: true },
-      { id: "g4", name: "Rate limiting", desc: "Cap requests per agent per minute", on: false },
-      { id: "g5", name: "Allowed tools only", desc: "Restrict agents to an approved tool list", on: true },
-      { id: "g6", name: "Human approval", desc: "Require approval for irreversible actions", on: false },
-    ]);
-    return head("Guardrails", `${rules.filter((r) => r.on).length} of ${rules.length} active`) + `
+    if (!api.on) return head("Guardrails", "Server-enforced safety controls") + demoNote("Start the Node backend to inspect enforced protections.");
+    if (guardrailsError) return head("Guardrails", "Server-enforced safety controls", `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Retry</button>`) + errCard(guardrailsError);
+    if (!guardrailsState) return head("Guardrails", "Server-enforced safety controls") + loadingCard("Reading active enforcement policies…");
+    const rules = guardrailsState.rules || [];
+    return head("Guardrails", `${guardrailsState.active} of ${guardrailsState.total} enforced`, `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Refresh</button>`) + `
+      <div class="alert success mb-4"><span class="a-ico">${icon("shield")}</span><div class="a-body"><div class="a-title">Live server policy</div><div class="a-desc">These protections are derived from the running backend and Hermes configuration. They are not browser toggles.</div></div></div>
       <div class="grid cols-2">
-        ${rules.map((r) => `<div class="card"><div class="row between"><div class="row gap-3"><div class="aico" style="background:${store.colors.green}">${icon("shield")}</div><div class="stack"><span class="fw-700">${r.name}</span><span class="hint">${r.desc}</span></div></div><label class="switch"><input type="checkbox" data-guard="${r.id}" ${r.on ? "checked" : ""}/><span class="track"></span><span class="thumb"></span></label></div></div>`).join("")}
+        ${rules.map((rule) => `<div class="card"><div class="row between gap-3"><div class="row gap-3"><div class="aico" style="background:${store.colors.green}">${icon("shield")}</div><div class="stack"><span class="fw-700">${esc(rule.name)}</span><span class="hint">${esc(rule.description)}</span></div></div><div class="stack" style="align-items:flex-end"><span class="badge success"><span class="dot"></span>Enforced</span><span class="hint">${esc(rule.enforcement)}</span></div></div></div>`).join("")}
       </div>`;
   },
   mount(root) {
-    root.querySelectorAll("[data-guard]").forEach((c) => (c.onchange = () => {
-      store.set((s) => (s.guards.find((r) => r.id === c.dataset.guard).on = c.checked));
-      toast(c.checked ? "success" : "info", "Guardrail " + (c.checked ? "enabled" : "disabled"));
-    }));
+    if (!api.on) return;
+    root.querySelector("#guardsRefresh")?.addEventListener("click", () => loadGuardrails(true));
+    if (!guardrailsState && !guardrailsLoading) loadGuardrails();
   },
 };
 
+async function loadGuardrails(force = false) {
+  if (guardrailsLoading && !force) return;
+  guardrailsLoading = true;
+  try { guardrailsState = await api.governance.guardrails(); guardrailsError = ""; }
+  catch (error) { guardrailsError = error.message || "Guardrails unavailable"; }
+  guardrailsLoading = false;
+  rerender();
+}
+
 /* ============================ SECRETS ============================ */
+let secretsState = null;
+let secretsError = "";
+let secretsLoading = false;
+
 export const secrets = {
   title: "Secrets",
   render() {
-    const list = ensure("secrets_", () => [
-      { id: "s1", name: "OPENAI_API_KEY", updated: Date.now() - 8e6 },
-      { id: "s2", name: "SLACK_WEBHOOK_URL", updated: Date.now() - 26e6 },
-      { id: "s3", name: "POSTGRES_URL", updated: Date.now() - 5e6 },
-    ]);
-    return head("Secrets", "Encrypted credentials available to your agents", `<button class="btn btn-primary" id="addSecret">${icon("plus")}Add secret</button>`) + `
-      <div class="alert info mb-4"><span class="a-ico">${icon("lock")}</span><div class="a-body"><div class="a-title">Values are write-only</div><div class="a-desc">For your safety this demo never displays secret values. In production, store them in an encrypted vault.</div></div></div>
+    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="secretsRefresh">${icon("refresh")}Refresh</button><button class="btn btn-primary" id="addSecret">${icon("plus")}Add secret</button></div>`;
+    if (!api.on) return head("Secrets", "Encrypted server credentials") + demoNote("Start the Node backend to use the encrypted vault.");
+    if (secretsError) return head("Secrets", "Encrypted server credentials", actions) + errCard(secretsError);
+    if (!secretsState) return head("Secrets", "Encrypted server credentials", actions) + loadingCard("Reading secret metadata…");
+    return head("Secrets", `${secretsState.length} encrypted credentials`, actions) + `
+      <div class="alert info mb-4"><span class="a-ico">${icon("lock")}</span><div class="a-body"><div class="a-title">Values are write-only</div><div class="a-desc">Values are encrypted with AES-256-GCM on the server. The API and this page return metadata only.</div></div></div>
       <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Name</th><th>Value</th><th>Updated</th><th></th></tr></thead>
-        <tbody>${list.map((s) => `<tr><td class="mono fw-600">${esc(s.name)}</td><td class="mono muted">•••••••••••••</td><td class="muted nowrap">${timeAgo(s.updated)}</td><td><button class="btn sm btn-ghost" data-del-secret="${s.id}" style="color:var(--error)">${icon("trash")}</button></td></tr>`).join("")}</tbody>
+        <thead><tr><th>Name</th><th>Description</th><th>Value</th><th>Updated</th><th></th></tr></thead>
+        <tbody>${secretsState.length ? secretsState.map((secret) => `<tr><td class="mono fw-600">${esc(secret.name)}</td><td class="muted">${esc(secret.description || "No description")}</td><td><span class="badge success">${icon("lock")}Encrypted</span></td><td class="muted nowrap">${timeAgo(new Date(secret.updatedAt).getTime())}</td><td><button class="btn sm btn-ghost" data-del-secret="${secret.id}" style="color:var(--error)" title="Delete">${icon("trash")}</button></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("lock")}</div><h4>No secrets stored</h4><p>Add a credential only when a server-side integration needs it.</p></div></td></tr>`}</tbody>
       </table></div></div>`;
   },
   mount(root) {
-    root.querySelectorAll("[data-del-secret]").forEach((b) => (b.onclick = () => confirmDialog({ title: "Delete secret", message: "Remove this secret? Agents relying on it will fail.", confirmText: "Delete", onConfirm: () => { store.set((s) => (s.secrets_ = s.secrets_.filter((x) => x.id !== b.dataset.delSecret))); toast("success", "Secret deleted"); rerender(); } })));
+    if (!api.on) return;
+    root.querySelector("#secretsRefresh")?.addEventListener("click", () => loadSecrets(true));
+    root.querySelectorAll("[data-del-secret]").forEach((button) => (button.onclick = () => confirmDialog({
+      title: "Delete secret",
+      message: "Remove this encrypted credential? Integrations relying on it may fail.",
+      confirmText: "Delete",
+      onConfirm: async () => {
+        try {
+          await api.governance.deleteSecret(button.dataset.delSecret);
+          toast("success", "Secret deleted");
+          await loadSecrets(true);
+        } catch (error) { toast("error", "Delete failed", error.message); }
+      },
+    })));
     const add = root.querySelector("#addSecret");
     if (add) add.onclick = () => openModal({
       title: "Add secret", width: 460,
-      body: `<div class="field"><label class="label">Name</label><input class="input mono" id="sn" placeholder="MY_API_KEY"/></div><div class="field"><label class="label">Value</label><input class="input mono" id="sv" type="password" placeholder="••••••••"/><span class="hint">Stored write-only in this demo.</span></div>`,
+      body: `<div class="field"><label class="label">Name</label><input class="input mono" id="sn" placeholder="MY_API_KEY" autocomplete="off"/></div><div class="field"><label class="label">Description</label><input class="input" id="sd" placeholder="What uses this credential?"/></div><div class="field"><label class="label">Value</label><input class="input mono" id="sv" type="password" placeholder="••••••••" autocomplete="new-password"/><span class="hint">Sent once over HTTPS, encrypted on the server and never shown again.</span></div><div id="secretError"></div>`,
       footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="sok">${icon("lock")}Save secret</button>`,
-      onMount: (m) => (m.querySelector("#sok").onclick = () => { const n = m.querySelector("#sn").value.trim(); if (!n) return toast("error", "Name required"); store.set((s) => s.secrets_.push({ id: store.uid(), name: n, updated: Date.now() })); closeOverlay(); toast("success", "Secret saved", n); rerender(); }),
+      onMount: (modal) => (modal.querySelector("#sok").onclick = async (event) => {
+        const button = event.currentTarget;
+        const name = modal.querySelector("#sn").value.trim();
+        const value = modal.querySelector("#sv").value;
+        button.classList.add("loading");
+        try {
+          await api.governance.setSecret({ name, value, description: modal.querySelector("#sd").value.trim() });
+          closeOverlay();
+          toast("success", "Secret encrypted", name.toUpperCase());
+          await loadSecrets(true);
+        } catch (error) {
+          modal.querySelector("#secretError").innerHTML = `<div class="field-error">${esc(error.message)}</div>`;
+          button.classList.remove("loading");
+        }
+      }),
     });
+    if (!secretsState && !secretsLoading) loadSecrets();
   },
 };
 
+async function loadSecrets(force = false) {
+  if (secretsLoading && !force) return;
+  secretsLoading = true;
+  try { secretsState = await api.governance.secrets(); secretsError = ""; }
+  catch (error) { secretsError = error.message || "Secret vault unavailable"; }
+  secretsLoading = false;
+  rerender();
+}
+
 /* ============================ EVALUATIONS ============================ */
+let evaluationsState = null;
+let evaluationsError = "";
+let evaluationsLoading = false;
+
 export const evaluations = {
   title: "Evaluations",
   render() {
-    const runs = [
-      { id: "e1", name: "Research quality", agent: "Research Agent", score: 96, pass: true, cases: 120, at: Date.now() - 3e6 },
-      { id: "e2", name: "Answer faithfulness", agent: "Support Agent", score: 92, pass: true, cases: 200, at: Date.now() - 8e6 },
-      { id: "e3", name: "Code correctness", agent: "Code Reviewer", score: 78, pass: false, cases: 64, at: Date.now() - 12e6 },
-      { id: "e4", name: "Tone & style", agent: "Content Writer", score: 88, pass: true, cases: 90, at: Date.now() - 20e6 },
-    ];
-    return head("Evaluations", "Automated quality scoring for your agents", `<button class="btn btn-primary">${icon("play")}Run eval</button>`) + `
+    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="evalRefresh">${icon("refresh")}Refresh</button><button class="btn btn-primary" id="runEval">${icon("play")}Run live evaluation</button></div>`;
+    if (!api.on) return head("Evaluations", "Measured production readiness") + demoNote("Start the Node backend to run real checks.");
+    if (evaluationsError) return head("Evaluations", "Measured production readiness", actions) + errCard(evaluationsError);
+    if (!evaluationsState) return head("Evaluations", "Measured production readiness", actions) + loadingCard("Reading evaluation history…");
+    const runs = evaluationsState.runs || [];
+    const summary = evaluationsState.summary || {};
+    return head("Evaluations", "Live Four C checks across the production stack", actions) + `
       <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Avg score", "88.5", "evaluations")}
-        ${statMini("Pass rate", "75%", "check")}
-        ${statMini("Eval cases", "474", "layers")}
-        ${statMini("Regressions", "1", "down")}
+        ${statMini("Avg score", summary.average == null ? "—" : summary.average, "evaluations")}
+        ${statMini("Pass rate", summary.passRate == null ? "—" : `${summary.passRate}%`, "check")}
+        ${statMini("Checks executed", summary.totalCases || 0, "layers")}
+        ${statMini("Needs attention", summary.regressions || 0, "down")}
       </div>
-      <div class="grid" style="grid-template-columns:1fr 2fr">
-        <div class="card pad-lg"><div class="card-head"><h3>Score trend</h3></div><div style="display:grid;place-items:center;padding:8px">${ring(88, 120, 12)}</div><div class="row between text-sm muted mt-4"><span>Last 30 runs</span><span class="badge success">▲ 3.2</span></div></div>
+      ${runs.length ? `<div class="grid" style="grid-template-columns:1fr 2fr">
+        <div class="card pad-lg"><div class="card-head"><h3>Latest score</h3><span class="badge ${runs[0].pass ? "success" : "warning"}">${esc(runs[0].framework)}</span></div><div style="display:grid;place-items:center;padding:8px">${ring(runs[0].score, 120, 12)}</div><div class="row between text-sm muted mt-4"><span>${runs[0].passedCases} of ${runs[0].cases} checks passed</span><span>${timeAgo(new Date(runs[0].at).getTime())}</span></div></div>
         <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Recent runs</h3></div><div class="table-wrap"><table class="tbl">
           <thead><tr><th>Eval</th><th>Agent</th><th>Cases</th><th>Score</th><th>Result</th><th>When</th></tr></thead>
-          <tbody>${runs.map((r) => `<tr><td class="fw-600">${esc(r.name)}</td><td class="muted">${esc(r.agent)}</td><td class="mono">${r.cases}</td><td><div class="row gap-2">${r.score}<span class="meter"><span style="width:${r.score}%;background:${r.pass ? "var(--success)" : "var(--error)"}"></span></span></div></td><td>${r.pass ? statusBadge("completed") : `<span class="badge error"><span class="dot"></span>Failed</span>`}</td><td class="muted nowrap">${timeAgo(r.at)}</td></tr>`).join("")}</tbody>
+          <tbody>${runs.map((run) => `<tr><td class="fw-600">${esc(run.name)}</td><td class="muted">${esc(run.agent)}</td><td class="mono">${run.passedCases}/${run.cases}</td><td><div class="row gap-2">${run.score}<span class="meter"><span style="width:${run.score}%;background:${run.pass ? "var(--success)" : "var(--warning)"}"></span></span></div></td><td>${run.pass ? statusBadge("completed") : `<span class="badge warning"><span class="dot"></span>Attention</span>`}</td><td class="muted nowrap">${timeAgo(new Date(run.at).getTime())}</td></tr>`).join("")}</tbody>
         </table></div></div>
-      </div>`;
+      </div>` : `<div class="empty card" style="min-height:280px"><div class="empty-ico">${icon("evaluations")}</div><h4>No evaluation history yet</h4><p>Run the live evaluation to measure the current production stack.</p></div>`}`;
+  },
+  mount(root) {
+    if (!api.on) return;
+    root.querySelector("#evalRefresh")?.addEventListener("click", () => loadEvaluations(true));
+    root.querySelector("#runEval")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.classList.add("loading");
+      try {
+        const run = await api.governance.runEvaluation();
+        toast(run.pass ? "success" : "info", `Evaluation completed: ${run.score}%`, `${run.passedCases} of ${run.cases} checks passed.`);
+        await loadEvaluations(true);
+      } catch (error) {
+        toast("error", "Evaluation failed", error.message);
+        button.classList.remove("loading");
+      }
+    });
+    if (!evaluationsState && !evaluationsLoading) loadEvaluations();
   },
 };
+
+async function loadEvaluations(force = false) {
+  if (evaluationsLoading && !force) return;
+  evaluationsLoading = true;
+  try { evaluationsState = await api.governance.evaluations(); evaluationsError = ""; }
+  catch (error) { evaluationsError = error.message || "Evaluations unavailable"; }
+  evaluationsLoading = false;
+  rerender();
+}
 
 /* ---------- shared mini stat ---------- */
 function statMini(label, value, ic) {

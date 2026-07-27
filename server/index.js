@@ -22,6 +22,7 @@ import member from "./routes/member.js";
 import personal from "./routes/personal.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
+import governance from "./routes/governance.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
@@ -115,6 +116,7 @@ app.use("/api/operations", requireOperator, operations);
 app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
+app.use("/api/governance", requireOperator, governance);
 app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
