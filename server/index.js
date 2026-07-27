@@ -23,6 +23,7 @@ import personal from "./routes/personal.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import governance from "./routes/governance.js";
+import memory from "./routes/memory.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
@@ -104,6 +105,7 @@ app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);
 app.use("/api/personal", personal);
+app.use("/api/memory", memory);
 app.use("/api/speech", requireOperator, speech);
 app.use("/api/mcp", requireOperator, mcp);
 app.use("/api/integrations", requireOperator, integrations);

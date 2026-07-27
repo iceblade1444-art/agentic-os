@@ -4,6 +4,7 @@
 // disabled (local dev) — the server logs a warning at startup.
 import crypto from "node:crypto";
 import { config } from "../config.js";
+import { governance } from "./governance.js";
 import { users } from "./users.js";
 
 const COOKIE = "aos_session";
@@ -225,8 +226,13 @@ export function listUsersHandler(req, res) {
 export function updateUserHandler(req, res) {
   if (req.params.id === "creator") return res.status(400).json({ error: "The Creator account is managed through server configuration" });
   try {
+    const previous = users.get(req.params.id);
     const user = users.update(req.params.id, req.body || {});
     if (!user) return res.status(404).json({ error: "User not found" });
+    const changes = [];
+    if (previous?.role !== user.role) changes.push(`role ${previous.role} -> ${user.role}`);
+    if (previous?.disabled !== user.disabled) changes.push(user.disabled ? "account disabled" : "account enabled");
+    if (changes.length) governance.recordAudit("account.update", req.user?.name, user.id, changes.join("; "));
     res.json(user);
   } catch (error) {
     res.status(400).json({ error: error.message, code: error.code });

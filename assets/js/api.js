@@ -86,6 +86,9 @@ export const api = {
   personal: {
     dashboard: () => j("/api/personal"),
   },
+  memory: {
+    snapshot: () => j("/api/memory"),
+  },
   mcp: {
     list: () => j("/api/mcp/servers"),
     connect: (id) => j(`/api/mcp/servers/${id}/connect`, { method: "POST" }),

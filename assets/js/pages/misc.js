@@ -445,28 +445,47 @@ function knowledgeMount(root) {
 }
 
 /* ============================ MEMORY ============================ */
+let memoryState = null;
+let memoryError = "";
+let memoryLoading = false;
+
 export const memory = {
   title: "Memory",
   render() {
-    const mems = ensure("mems", () => [
-      { id: "m1", key: "user.timezone", scope: "user", value: "America/Los_Angeles", updated: Date.now() - 12e5 },
-      { id: "m2", key: "project.stack", scope: "project", value: "Vanilla JS + static hosting", updated: Date.now() - 36e5 },
-      { id: "m3", key: "pref.tone", scope: "user", value: "concise, technical", updated: Date.now() - 72e5 },
-      { id: "m4", key: "agent.research.last_topic", scope: "agent", value: "multi-agent orchestration", updated: Date.now() - 6e5 },
-    ]);
-    return head("Memory", "Long-term memory shared across agents & sessions") + `
+    const action = `<button class="btn btn-secondary" id="memoryRefresh">${icon("refresh")}Refresh</button>`;
+    if (!api.on) return head("Memory", "Server-backed long-term context") + demoNote("Start the Node backend to read real memory sources.");
+    if (memoryError) return head("Memory", "Server-backed long-term context", action) + errCard(memoryError);
+    if (!memoryState) return head("Memory", "Server-backed long-term context", action) + loadingCard("Reading SOUL, personal notes and Obsidian activity…");
+    const mems = memoryState.entries || [];
+    const stats = memoryState.stats || {};
+    return head("Memory", "SOUL, personal notes and audited agent recall", action) + `
       <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Entries", mems.length, "memory")}
-        ${statMini("Vectors", "18.4K", "network")}
-        ${statMini("Recall hits", "94%", "activity")}
-        ${statMini("Store", "SQLite", "database")}
+        ${statMini("Visible entries", stats.entries || 0, "memory")}
+        ${statMini("Personal notes", stats.personalNotes || 0, "file")}
+        ${statMini("Obsidian notes", stats.vaultNotes || 0, "knowledge")}
+        ${statMini("Agent events", stats.agentEvents || 0, "activity")}
       </div>
+      <div class="alert info mb-4"><span class="a-ico">${icon("database")}</span><div class="a-body"><div class="a-title">Server-authoritative memory</div><div class="a-desc">This page no longer reads demo localStorage records. Profile preferences come from SOUL, personal notes from your account, and agent recall from the Obsidian audit.</div></div></div>
       <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Key</th><th>Scope</th><th>Value</th><th>Updated</th></tr></thead>
-        <tbody>${mems.map((m) => `<tr><td class="mono">${esc(m.key)}</td><td><span class="badge ${m.scope === "user" ? "info" : m.scope === "project" ? "primary" : "warning"}">${m.scope}</span></td><td class="muted">${esc(m.value)}</td><td class="muted nowrap">${timeAgo(m.updated)}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Key</th><th>Scope</th><th>Value</th><th>Source</th><th>Updated</th></tr></thead>
+        <tbody>${mems.length ? mems.map((item) => `<tr><td class="mono">${esc(item.key)}</td><td><span class="badge ${item.scope === "user" ? "info" : item.scope === "workspace" ? "primary" : "warning"}">${esc(item.scope)}</span></td><td class="muted">${esc(item.value)}</td><td><span class="badge neutral">${esc(item.source)}</span></td><td class="muted nowrap">${item.updatedAt ? timeAgo(new Date(item.updatedAt).getTime()) : "—"}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("memory")}</div><h4>No durable memory yet</h4><p>Complete your profile or create a personal note.</p></div></td></tr>`}</tbody>
       </table></div></div>`;
   },
+  mount(root) {
+    if (!api.on) return;
+    root.querySelector("#memoryRefresh")?.addEventListener("click", () => loadMemory(true));
+    if (!memoryState && !memoryLoading) loadMemory();
+  },
 };
+
+async function loadMemory(force = false) {
+  if (memoryLoading && !force) return;
+  memoryLoading = true;
+  try { memoryState = await api.memory.snapshot(); memoryError = ""; }
+  catch (error) { memoryError = error.message || "Memory unavailable"; }
+  memoryLoading = false;
+  rerender();
+}
 
 /* ============================ MCP SERVERS ============================ */
 export const mcp = {
@@ -646,11 +665,13 @@ export const guardrails = {
     if (guardrailsError) return head("Guardrails", "Server-enforced safety controls", `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Retry</button>`) + errCard(guardrailsError);
     if (!guardrailsState) return head("Guardrails", "Server-enforced safety controls") + loadingCard("Reading active enforcement policies…");
     const rules = guardrailsState.rules || [];
+    const audit = guardrailsState.audit || [];
     return head("Guardrails", `${guardrailsState.active} of ${guardrailsState.total} enforced`, `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Refresh</button>`) + `
       <div class="alert success mb-4"><span class="a-ico">${icon("shield")}</span><div class="a-body"><div class="a-title">Live server policy</div><div class="a-desc">These protections are derived from the running backend and Hermes configuration. They are not browser toggles.</div></div></div>
       <div class="grid cols-2">
         ${rules.map((rule) => `<div class="card"><div class="row between gap-3"><div class="row gap-3"><div class="aico" style="background:${store.colors.green}">${icon("shield")}</div><div class="stack"><span class="fw-700">${esc(rule.name)}</span><span class="hint">${esc(rule.description)}</span></div></div><div class="stack" style="align-items:flex-end"><span class="badge success"><span class="dot"></span>Enforced</span><span class="hint">${esc(rule.enforcement)}</span></div></div></div>`).join("")}
-      </div>`;
+      </div>
+      <div class="card mt-4" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><div><h3>Governance audit</h3><p class="hint mt-1">Role, account, secret, evaluation and Kanban mutations</p></div><span class="badge neutral">${audit.length} recent</span></div><div class="table-wrap"><table class="tbl"><thead><tr><th>Action</th><th>Actor</th><th>Target</th><th>Detail</th><th>When</th></tr></thead><tbody>${audit.length ? audit.map((item) => `<tr><td class="mono fw-600">${esc(item.action)}</td><td>${esc(item.actor)}</td><td class="mono muted">${esc(item.target)}</td><td class="muted">${esc(item.detail || "—")}</td><td class="muted nowrap">${timeAgo(new Date(item.at).getTime())}</td></tr>`).join("") : `<tr><td colspan="5" class="muted">No governance mutations recorded yet.</td></tr>`}</tbody></table></div></div>`;
   },
   mount(root) {
     if (!api.on) return;
@@ -662,7 +683,11 @@ export const guardrails = {
 async function loadGuardrails(force = false) {
   if (guardrailsLoading && !force) return;
   guardrailsLoading = true;
-  try { guardrailsState = await api.governance.guardrails(); guardrailsError = ""; }
+  try {
+    const [state, audit] = await Promise.all([api.governance.guardrails(), api.governance.audit(40)]);
+    guardrailsState = { ...state, audit };
+    guardrailsError = "";
+  }
   catch (error) { guardrailsError = error.message || "Guardrails unavailable"; }
   guardrailsLoading = false;
   rerender();

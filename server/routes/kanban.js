@@ -3,6 +3,7 @@ import { Router, raw } from "express";
 
 import { config } from "../config.js";
 import { authenticatedUser } from "../lib/auth.js";
+import { governance } from "../lib/governance.js";
 import { mergeHermesFleetHealth, readHermesFleetHealth, requestHermesFleetProbe } from "../lib/hermes-fleet-health.js";
 import { hermesKanbanRawRequest, hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 
@@ -14,6 +15,8 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 const taskPath = (id, suffix = "") => kanbanPath(`/tasks/${encodeURIComponent(id)}${suffix}`, BOARD);
 const bounded = (value, max) => String(value || "").trim().slice(0, max);
+const audit = (req, action, target, detail = "") =>
+  governance.recordAudit(action, authenticatedUser(req)?.name, target, detail);
 
 function attachmentName(req) {
   let value;
@@ -47,7 +50,7 @@ r.get("/profiles", handle(async () => {
 r.post("/profiles/probe", handle(() => requestHermesFleetProbe()));
 r.get("/orchestration", handle(() => hermesKanbanRequest(kanbanPath("/orchestration", BOARD))));
 
-r.put("/orchestration", handle((req) => {
+r.put("/orchestration", handle(async (req) => {
   const body = {};
   if (typeof req.body?.auto_decompose === "boolean") body.auto_decompose = req.body.auto_decompose;
   if (typeof req.body?.auto_promote_children === "boolean") body.auto_promote_children = req.body.auto_promote_children;
@@ -57,7 +60,9 @@ r.put("/orchestration", handle((req) => {
     if (value && !PROFILE_NAME.test(value)) throw Object.assign(new Error(`Invalid ${key}`), { status: 400 });
     body[key] = value;
   }
-  return hermesKanbanRequest(kanbanPath("/orchestration", BOARD), { method: "PUT", body });
+  const result = await hermesKanbanRequest(kanbanPath("/orchestration", BOARD), { method: "PUT", body });
+  audit(req, "kanban.orchestration", BOARD, Object.keys(body).join(", "));
+  return result;
 }));
 
 r.post("/tasks", handle(async (req) => {
@@ -85,8 +90,11 @@ r.post("/tasks", handle(async (req) => {
   const id = created.task?.id;
   if (id && initialStatus === "ready") {
     await hermesKanbanRequest(taskPath(id), { method: "PATCH", body: { status: "ready" } });
-    return hermesKanbanRequest(taskPath(id));
+    const result = await hermesKanbanRequest(taskPath(id));
+    audit(req, "kanban.task.create", id, `status ready; assignee ${assignee}`);
+    return result;
   }
+  audit(req, "kanban.task.create", id || title, `status ${initialStatus}; assignee ${assignee}`);
   return created;
 }));
 
@@ -108,6 +116,7 @@ r.post("/tasks/:id/attachments", raw({ type: () => true, limit: MAX_ATTACHMENT_B
       body: upload.body,
       timeoutMs: 30000,
     });
+    audit(req, "kanban.attachment.add", req.params.id, filename);
     res.json(JSON.parse(response.text || "{}"));
   } catch (error) {
     res.status(error.type === "entity.too.large" ? 413 : error.status >= 400 && error.status < 600 ? error.status : 502).json({ error: error.message });
@@ -128,12 +137,14 @@ r.get("/attachments/:id", async (req, res) => {
   }
 });
 
-r.delete("/attachments/:id", handle((req) => {
+r.delete("/attachments/:id", handle(async (req) => {
   if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error("Invalid attachment id"), { status: 400 });
-  return hermesKanbanRequest(kanbanPath(`/attachments/${req.params.id}`, BOARD), { method: "DELETE" });
+  const result = await hermesKanbanRequest(kanbanPath(`/attachments/${req.params.id}`, BOARD), { method: "DELETE" });
+  audit(req, "kanban.attachment.delete", req.params.id);
+  return result;
 }));
 
-r.patch("/tasks/:id", handle((req) => {
+r.patch("/tasks/:id", handle(async (req) => {
   const body = {};
   if (req.body?.status !== undefined) {
     if (!STATUSES.has(req.body.status)) throw Object.assign(new Error("Invalid task status"), { status: 400 });
@@ -150,18 +161,36 @@ r.patch("/tasks/:id", handle((req) => {
   if (req.body?.block_reason !== undefined) body.block_reason = bounded(req.body.block_reason, 2000);
   if (req.body?.result !== undefined) body.result = bounded(req.body.result, 10000);
   if (req.body?.summary !== undefined) body.summary = bounded(req.body.summary, 10000);
-  return hermesKanbanRequest(taskPath(req.params.id), { method: "PATCH", body });
+  const result = await hermesKanbanRequest(taskPath(req.params.id), { method: "PATCH", body });
+  const detail = [
+    body.status ? `status ${body.status}` : "",
+    body.assignee !== undefined ? `assignee ${body.assignee || "unassigned"}` : "",
+    body.priority !== undefined ? `priority ${body.priority}` : "",
+    ...Object.keys(body).filter((key) => !["status", "assignee", "priority", "result", "body", "summary"].includes(key)),
+  ].filter(Boolean).join("; ");
+  audit(req, "kanban.task.update", req.params.id, detail || "content updated");
+  return result;
 }));
 
-r.post("/tasks/:id/comments", handle((req) => {
+r.post("/tasks/:id/comments", handle(async (req) => {
   const body = bounded(req.body?.body, 5000);
   if (!body) throw Object.assign(new Error("Comment is required"), { status: 400 });
-  return hermesKanbanRequest(taskPath(req.params.id, "/comments"), {
+  const result = await hermesKanbanRequest(taskPath(req.params.id, "/comments"), {
     method: "POST", body: { body, author: bounded(req.body?.author, 80) || "Agentic OS" },
   });
+  audit(req, "kanban.comment.add", req.params.id);
+  return result;
 }));
 
-r.post("/tasks/:id/decompose", handle((req) => hermesKanbanRequest(taskPath(req.params.id, "/decompose"), { method: "POST", body: {} })));
-r.post("/dispatch", handle(() => hermesKanbanRequest(kanbanPath("/dispatch?max=4", BOARD), { method: "POST", body: {} })));
+r.post("/tasks/:id/decompose", handle(async (req) => {
+  const result = await hermesKanbanRequest(taskPath(req.params.id, "/decompose"), { method: "POST", body: {} });
+  audit(req, "kanban.task.decompose", req.params.id);
+  return result;
+}));
+r.post("/dispatch", handle(async (req) => {
+  const result = await hermesKanbanRequest(kanbanPath("/dispatch?max=4", BOARD), { method: "POST", body: {} });
+  audit(req, "kanban.dispatch", BOARD, `dispatched ${result.dispatched || result.count || 0}`);
+  return result;
+}));
 
 export default r;

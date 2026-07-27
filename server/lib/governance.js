@@ -240,6 +240,12 @@ export class GovernanceStore {
     return run;
   }
 
+  recordAudit(action, actor, target, detail = "") {
+    this.#audit(action, actor, target, detail);
+    this.#save();
+    return this.data.audit[0];
+  }
+
   audit(limit = 100) {
     return this.data.audit.slice(0, Math.max(1, Math.min(200, Number(limit) || 100)));
   }

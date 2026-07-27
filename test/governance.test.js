@@ -76,3 +76,23 @@ test("guardrail catalog describes enforced server protections", () => {
   assert.equal(rules.some((rule) => rule.id === "member-data-isolation"), true);
   assert.equal(rules.some((rule) => rule.id === "write-only-secrets"), true);
 });
+
+test("governance audit accepts bounded account and task events", (t) => {
+  const { store: vault } = store(t);
+  const event = vault.recordAudit("kanban.task.update", "Creator", "task_1", "status done");
+
+  assert.equal(event.action, "kanban.task.update");
+  assert.equal(vault.audit()[0].target, "task_1");
+});
+
+test("role, account and Kanban mutations are wired to the governance audit", () => {
+  const auth = fs.readFileSync(new URL("../server/lib/auth.js", import.meta.url), "utf8");
+  const lifecycle = fs.readFileSync(new URL("../server/lib/account-lifecycle.js", import.meta.url), "utf8");
+  const kanban = fs.readFileSync(new URL("../server/routes/kanban.js", import.meta.url), "utf8");
+
+  assert.match(auth, /recordAudit\("account\.update"/);
+  assert.match(lifecycle, /recordAudit\("account\.delete"/);
+  assert.match(kanban, /"kanban\.task\.create"/);
+  assert.match(kanban, /"kanban\.task\.update"/);
+  assert.match(kanban, /"kanban\.dispatch"/);
+});

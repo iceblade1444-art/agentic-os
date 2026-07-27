@@ -1,4 +1,5 @@
 import { knowledge } from "./knowledge.js";
+import { governance } from "./governance.js";
 import { memberWorkspaces } from "./member-workspace.js";
 import { onboarding, safeUserSlug } from "./onboarding.js";
 import { users } from "./users.js";
@@ -38,6 +39,7 @@ export async function deleteUserHandler(req, res) {
   try {
     const removed = await deleteUserAccount(req.params.id);
     if (!removed) return res.status(404).json({ error: "User not found" });
+    governance.recordAudit("account.delete", req.user?.name, removed.id, `role ${removed.role}`);
     res.json({ ok: true, user: removed });
   } catch (error) {
     res.status(500).json({ error: `Could not delete account: ${error.message}` });
