@@ -5,12 +5,13 @@ import test from "node:test";
 import { getLocale, localizedDate, setLocale, t } from "../assets/js/i18n.js";
 
 const sourceKeys = (source, fn) => [
-  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav)\\.[^"]+)"`, "g")),
+  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations)\\.[^"]+)"`, "g")),
 ].map((match) => match[1]);
 
-test("interface dictionary provides RU, EN and UZ copy for the visible shell and Personal", () => {
+test("interface dictionary provides RU, EN and UZ copy for localized product surfaces", () => {
   const personal = fs.readFileSync(new URL("../assets/js/pages/personal.js", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const misc = fs.readFileSync(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8");
   const dynamicKeys = [
     "personal.tab.today", "personal.tab.soul", "personal.tab.memory", "personal.tab.approvals",
     "personal.tab.account", "personal.greeting.night", "personal.greeting.morning",
@@ -21,7 +22,7 @@ test("interface dictionary provides RU, EN and UZ copy for the visible shell and
     "personal.noAgentRequests", "personal.operatorOnly", "personal.noDecisions", "personal.memberSafe",
     "shell.newKanbanTask", "shell.newPersonalTask",
   ];
-  const keys = new Set([...sourceKeys(personal, "t"), ...sourceKeys(app, "tr"), ...dynamicKeys]);
+  const keys = new Set([...sourceKeys(personal, "t"), ...sourceKeys(app, "tr"), ...sourceKeys(misc, "t"), ...dynamicKeys]);
 
   for (const locale of ["ru-RU", "en-US", "uz-UZ"]) {
     setLocale(locale, false);

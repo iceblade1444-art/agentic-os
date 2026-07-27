@@ -2,6 +2,7 @@ import { store, timeAgo } from "../store.js";
 import { icon } from "../icons.js";
 import { esc, toast, statusBadge, lineChart, donut, bars, ring, randomSeries, agentIcon, confirmDialog, openModal, closeOverlay } from "../ui.js";
 import { api } from "../api.js";
+import { t } from "../i18n.js";
 
 const rerender = () => window.dispatchEvent(new HashChangeEvent("hashchange"));
 
@@ -452,23 +453,23 @@ let memoryLoading = false;
 export const memory = {
   title: "Memory",
   render() {
-    const action = `<button class="btn btn-secondary" id="memoryRefresh">${icon("refresh")}Refresh</button>`;
-    if (!api.on) return head("Memory", "Server-backed long-term context") + demoNote("Start the Node backend to read real memory sources.");
-    if (memoryError) return head("Memory", "Server-backed long-term context", action) + errCard(memoryError);
-    if (!memoryState) return head("Memory", "Server-backed long-term context", action) + loadingCard("Reading SOUL, personal notes and Obsidian activity…");
+    const action = `<button class="btn btn-secondary" id="memoryRefresh">${icon("refresh")}${t("system.refresh")}</button>`;
+    if (!api.on) return head(t("memory.title"), t("memory.serverContext")) + demoNote(t("memory.backendRequired"));
+    if (memoryError) return head(t("memory.title"), t("memory.serverContext"), action) + errCard(memoryError);
+    if (!memoryState) return head(t("memory.title"), t("memory.serverContext"), action) + loadingCard(t("memory.loading"));
     const mems = memoryState.entries || [];
     const stats = memoryState.stats || {};
-    return head("Memory", "SOUL, personal notes and audited agent recall", action) + `
+    return head(t("memory.title"), t("memory.subtitle"), action) + `
       <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Visible entries", stats.entries || 0, "memory")}
-        ${statMini("Personal notes", stats.personalNotes || 0, "file")}
-        ${statMini("Obsidian notes", stats.vaultNotes || 0, "knowledge")}
-        ${statMini("Agent events", stats.agentEvents || 0, "activity")}
+        ${statMini(t("memory.visibleEntries"), stats.entries || 0, "memory")}
+        ${statMini(t("memory.personalNotes"), stats.personalNotes || 0, "file")}
+        ${statMini(t("memory.obsidianNotes"), stats.vaultNotes || 0, "knowledge")}
+        ${statMini(t("memory.agentEvents"), stats.agentEvents || 0, "activity")}
       </div>
-      <div class="alert info mb-4"><span class="a-ico">${icon("database")}</span><div class="a-body"><div class="a-title">Server-authoritative memory</div><div class="a-desc">This page no longer reads demo localStorage records. Profile preferences come from SOUL, personal notes from your account, and agent recall from the Obsidian audit.</div></div></div>
+      <div class="alert info mb-4"><span class="a-ico">${icon("database")}</span><div class="a-body"><div class="a-title">${t("memory.authoritative")}</div><div class="a-desc">${t("memory.authoritativeText")}</div></div></div>
       <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Key</th><th>Scope</th><th>Value</th><th>Source</th><th>Updated</th></tr></thead>
-        <tbody>${mems.length ? mems.map((item) => `<tr><td class="mono">${esc(item.key)}</td><td><span class="badge ${item.scope === "user" ? "info" : item.scope === "workspace" ? "primary" : "warning"}">${esc(item.scope)}</span></td><td class="muted">${esc(item.value)}</td><td><span class="badge neutral">${esc(item.source)}</span></td><td class="muted nowrap">${item.updatedAt ? timeAgo(new Date(item.updatedAt).getTime()) : "—"}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("memory")}</div><h4>No durable memory yet</h4><p>Complete your profile or create a personal note.</p></div></td></tr>`}</tbody>
+        <thead><tr><th>${t("memory.key")}</th><th>${t("memory.scope")}</th><th>${t("memory.value")}</th><th>${t("memory.source")}</th><th>${t("system.updated")}</th></tr></thead>
+        <tbody>${mems.length ? mems.map((item) => `<tr><td class="mono">${esc(item.key)}</td><td><span class="badge ${item.scope === "user" ? "info" : item.scope === "workspace" ? "primary" : "warning"}">${esc(item.scope)}</span></td><td class="muted">${esc(item.value)}</td><td><span class="badge neutral">${esc(item.source)}</span></td><td class="muted nowrap">${item.updatedAt ? timeAgo(new Date(item.updatedAt).getTime()) : "—"}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("memory")}</div><h4>${t("memory.empty")}</h4><p>${t("memory.emptyText")}</p></div></td></tr>`}</tbody>
       </table></div></div>`;
   },
   mount(root) {
@@ -661,17 +662,17 @@ let guardrailsLoading = false;
 export const guardrails = {
   title: "Guardrails",
   render() {
-    if (!api.on) return head("Guardrails", "Server-enforced safety controls") + demoNote("Start the Node backend to inspect enforced protections.");
-    if (guardrailsError) return head("Guardrails", "Server-enforced safety controls", `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Retry</button>`) + errCard(guardrailsError);
-    if (!guardrailsState) return head("Guardrails", "Server-enforced safety controls") + loadingCard("Reading active enforcement policies…");
+    if (!api.on) return head(t("guardrails.title"), t("guardrails.subtitle")) + demoNote(t("guardrails.backendRequired"));
+    if (guardrailsError) return head(t("guardrails.title"), t("guardrails.subtitle"), `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}${t("system.retry")}</button>`) + errCard(guardrailsError);
+    if (!guardrailsState) return head(t("guardrails.title"), t("guardrails.subtitle")) + loadingCard(t("guardrails.loading"));
     const rules = guardrailsState.rules || [];
     const audit = guardrailsState.audit || [];
-    return head("Guardrails", `${guardrailsState.active} of ${guardrailsState.total} enforced`, `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}Refresh</button>`) + `
-      <div class="alert success mb-4"><span class="a-ico">${icon("shield")}</span><div class="a-body"><div class="a-title">Live server policy</div><div class="a-desc">These protections are derived from the running backend and Hermes configuration. They are not browser toggles.</div></div></div>
+    return head(t("guardrails.title"), t("guardrails.enforcedCount", { active: guardrailsState.active, total: guardrailsState.total }), `<button class="btn btn-secondary" id="guardsRefresh">${icon("refresh")}${t("system.refresh")}</button>`) + `
+      <div class="alert success mb-4"><span class="a-ico">${icon("shield")}</span><div class="a-body"><div class="a-title">${t("guardrails.livePolicy")}</div><div class="a-desc">${t("guardrails.livePolicyText")}</div></div></div>
       <div class="grid cols-2">
-        ${rules.map((rule) => `<div class="card"><div class="row between gap-3"><div class="row gap-3"><div class="aico" style="background:${store.colors.green}">${icon("shield")}</div><div class="stack"><span class="fw-700">${esc(rule.name)}</span><span class="hint">${esc(rule.description)}</span></div></div><div class="stack" style="align-items:flex-end"><span class="badge success"><span class="dot"></span>Enforced</span><span class="hint">${esc(rule.enforcement)}</span></div></div></div>`).join("")}
+        ${rules.map((rule) => `<div class="card"><div class="row between gap-3"><div class="row gap-3"><div class="aico" style="background:${store.colors.green}">${icon("shield")}</div><div class="stack"><span class="fw-700">${esc(rule.name)}</span><span class="hint">${esc(rule.description)}</span></div></div><div class="stack" style="align-items:flex-end"><span class="badge success"><span class="dot"></span>${t("guardrails.enforced")}</span><span class="hint">${esc(rule.enforcement)}</span></div></div></div>`).join("")}
       </div>
-      <div class="card mt-4" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><div><h3>Governance audit</h3><p class="hint mt-1">Role, account, secret, evaluation and Kanban mutations</p></div><span class="badge neutral">${audit.length} recent</span></div><div class="table-wrap"><table class="tbl"><thead><tr><th>Action</th><th>Actor</th><th>Target</th><th>Detail</th><th>When</th></tr></thead><tbody>${audit.length ? audit.map((item) => `<tr><td class="mono fw-600">${esc(item.action)}</td><td>${esc(item.actor)}</td><td class="mono muted">${esc(item.target)}</td><td class="muted">${esc(item.detail || "—")}</td><td class="muted nowrap">${timeAgo(new Date(item.at).getTime())}</td></tr>`).join("") : `<tr><td colspan="5" class="muted">No governance mutations recorded yet.</td></tr>`}</tbody></table></div></div>`;
+      <div class="card mt-4" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><div><h3>${t("guardrails.audit")}</h3><p class="hint mt-1">${t("guardrails.auditText")}</p></div><span class="badge neutral">${t("guardrails.recentCount", { count: audit.length })}</span></div><div class="table-wrap"><table class="tbl"><thead><tr><th>${t("guardrails.action")}</th><th>${t("guardrails.actor")}</th><th>${t("guardrails.target")}</th><th>${t("guardrails.detail")}</th><th>${t("system.when")}</th></tr></thead><tbody>${audit.length ? audit.map((item) => `<tr><td class="mono fw-600">${esc(item.action)}</td><td>${esc(item.actor)}</td><td class="mono muted">${esc(item.target)}</td><td class="muted">${esc(item.detail || "—")}</td><td class="muted nowrap">${timeAgo(new Date(item.at).getTime())}</td></tr>`).join("") : `<tr><td colspan="5" class="muted">${t("guardrails.noAudit")}</td></tr>`}</tbody></table></div></div>`;
   },
   mount(root) {
     if (!api.on) return;
@@ -701,37 +702,37 @@ let secretsLoading = false;
 export const secrets = {
   title: "Secrets",
   render() {
-    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="secretsRefresh">${icon("refresh")}Refresh</button><button class="btn btn-primary" id="addSecret">${icon("plus")}Add secret</button></div>`;
-    if (!api.on) return head("Secrets", "Encrypted server credentials") + demoNote("Start the Node backend to use the encrypted vault.");
-    if (secretsError) return head("Secrets", "Encrypted server credentials", actions) + errCard(secretsError);
-    if (!secretsState) return head("Secrets", "Encrypted server credentials", actions) + loadingCard("Reading secret metadata…");
-    return head("Secrets", `${secretsState.length} encrypted credentials`, actions) + `
-      <div class="alert info mb-4"><span class="a-ico">${icon("lock")}</span><div class="a-body"><div class="a-title">Values are write-only</div><div class="a-desc">Values are encrypted with AES-256-GCM on the server. The API and this page return metadata only.</div></div></div>
+    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="secretsRefresh">${icon("refresh")}${t("system.refresh")}</button><button class="btn btn-primary" id="addSecret">${icon("plus")}${t("secrets.add")}</button></div>`;
+    if (!api.on) return head(t("secrets.title"), t("secrets.subtitle")) + demoNote(t("secrets.backendRequired"));
+    if (secretsError) return head(t("secrets.title"), t("secrets.subtitle"), actions) + errCard(secretsError);
+    if (!secretsState) return head(t("secrets.title"), t("secrets.subtitle"), actions) + loadingCard(t("secrets.loading"));
+    return head(t("secrets.title"), t("secrets.count", { count: secretsState.length }), actions) + `
+      <div class="alert info mb-4"><span class="a-ico">${icon("lock")}</span><div class="a-body"><div class="a-title">${t("secrets.writeOnly")}</div><div class="a-desc">${t("secrets.writeOnlyText")}</div></div></div>
       <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Name</th><th>Description</th><th>Value</th><th>Updated</th><th></th></tr></thead>
-        <tbody>${secretsState.length ? secretsState.map((secret) => `<tr><td class="mono fw-600">${esc(secret.name)}</td><td class="muted">${esc(secret.description || "No description")}</td><td><span class="badge success">${icon("lock")}Encrypted</span></td><td class="muted nowrap">${timeAgo(new Date(secret.updatedAt).getTime())}</td><td><button class="btn sm btn-ghost" data-del-secret="${secret.id}" style="color:var(--error)" title="Delete">${icon("trash")}</button></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("lock")}</div><h4>No secrets stored</h4><p>Add a credential only when a server-side integration needs it.</p></div></td></tr>`}</tbody>
+        <thead><tr><th>${t("secrets.name")}</th><th>${t("secrets.description")}</th><th>${t("secrets.value")}</th><th>${t("system.updated")}</th><th></th></tr></thead>
+        <tbody>${secretsState.length ? secretsState.map((secret) => `<tr><td class="mono fw-600">${esc(secret.name)}</td><td class="muted">${esc(secret.description || t("secrets.noDescription"))}</td><td><span class="badge success">${icon("lock")}${t("secrets.encrypted")}</span></td><td class="muted nowrap">${timeAgo(new Date(secret.updatedAt).getTime())}</td><td><button class="btn sm btn-ghost" data-del-secret="${secret.id}" style="color:var(--error)" title="${t("system.delete")}">${icon("trash")}</button></td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("lock")}</div><h4>${t("secrets.empty")}</h4><p>${t("secrets.emptyText")}</p></div></td></tr>`}</tbody>
       </table></div></div>`;
   },
   mount(root) {
     if (!api.on) return;
     root.querySelector("#secretsRefresh")?.addEventListener("click", () => loadSecrets(true));
     root.querySelectorAll("[data-del-secret]").forEach((button) => (button.onclick = () => confirmDialog({
-      title: "Delete secret",
-      message: "Remove this encrypted credential? Integrations relying on it may fail.",
-      confirmText: "Delete",
+      title: t("secrets.deleteTitle"),
+      message: t("secrets.deleteText"),
+      confirmText: t("system.delete"),
       onConfirm: async () => {
         try {
           await api.governance.deleteSecret(button.dataset.delSecret);
-          toast("success", "Secret deleted");
+          toast("success", t("secrets.deleted"));
           await loadSecrets(true);
-        } catch (error) { toast("error", "Delete failed", error.message); }
+        } catch (error) { toast("error", t("secrets.deleteFailed"), error.message); }
       },
     })));
     const add = root.querySelector("#addSecret");
     if (add) add.onclick = () => openModal({
-      title: "Add secret", width: 460,
-      body: `<div class="field"><label class="label">Name</label><input class="input mono" id="sn" placeholder="MY_API_KEY" autocomplete="off"/></div><div class="field"><label class="label">Description</label><input class="input" id="sd" placeholder="What uses this credential?"/></div><div class="field"><label class="label">Value</label><input class="input mono" id="sv" type="password" placeholder="••••••••" autocomplete="new-password"/><span class="hint">Sent once over HTTPS, encrypted on the server and never shown again.</span></div><div id="secretError"></div>`,
-      footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="sok">${icon("lock")}Save secret</button>`,
+      title: t("secrets.add"), width: 460,
+      body: `<div class="field"><label class="label">${t("secrets.name")}</label><input class="input mono" id="sn" placeholder="MY_API_KEY" autocomplete="off"/></div><div class="field"><label class="label">${t("secrets.description")}</label><input class="input" id="sd" placeholder="${t("secrets.descriptionPlaceholder")}"/></div><div class="field"><label class="label">${t("secrets.value")}</label><input class="input mono" id="sv" type="password" placeholder="••••••••" autocomplete="new-password"/><span class="hint">${t("secrets.valueHint")}</span></div><div id="secretError"></div>`,
+      footer: `<button class="btn btn-secondary" data-close>${t("system.cancel")}</button><button class="btn btn-primary" id="sok">${icon("lock")}${t("secrets.save")}</button>`,
       onMount: (modal) => (modal.querySelector("#sok").onclick = async (event) => {
         const button = event.currentTarget;
         const name = modal.querySelector("#sn").value.trim();
@@ -740,7 +741,7 @@ export const secrets = {
         try {
           await api.governance.setSecret({ name, value, description: modal.querySelector("#sd").value.trim() });
           closeOverlay();
-          toast("success", "Secret encrypted", name.toUpperCase());
+          toast("success", t("secrets.saved"), name.toUpperCase());
           await loadSecrets(true);
         } catch (error) {
           modal.querySelector("#secretError").innerHTML = `<div class="field-error">${esc(error.message)}</div>`;
@@ -769,26 +770,26 @@ let evaluationsLoading = false;
 export const evaluations = {
   title: "Evaluations",
   render() {
-    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="evalRefresh">${icon("refresh")}Refresh</button><button class="btn btn-primary" id="runEval">${icon("play")}Run live evaluation</button></div>`;
-    if (!api.on) return head("Evaluations", "Measured production readiness") + demoNote("Start the Node backend to run real checks.");
-    if (evaluationsError) return head("Evaluations", "Measured production readiness", actions) + errCard(evaluationsError);
-    if (!evaluationsState) return head("Evaluations", "Measured production readiness", actions) + loadingCard("Reading evaluation history…");
+    const actions = `<div class="row gap-2"><button class="btn btn-secondary" id="evalRefresh">${icon("refresh")}${t("system.refresh")}</button><button class="btn btn-primary" id="runEval">${icon("play")}${t("evaluations.run")}</button></div>`;
+    if (!api.on) return head(t("evaluations.title"), t("evaluations.readiness")) + demoNote(t("evaluations.backendRequired"));
+    if (evaluationsError) return head(t("evaluations.title"), t("evaluations.readiness"), actions) + errCard(evaluationsError);
+    if (!evaluationsState) return head(t("evaluations.title"), t("evaluations.readiness"), actions) + loadingCard(t("evaluations.loading"));
     const runs = evaluationsState.runs || [];
     const summary = evaluationsState.summary || {};
-    return head("Evaluations", "Live Four C checks across the production stack", actions) + `
+    return head(t("evaluations.title"), t("evaluations.subtitle"), actions) + `
       <div class="grid cols-4" style="margin-bottom:16px">
-        ${statMini("Avg score", summary.average == null ? "—" : summary.average, "evaluations")}
-        ${statMini("Pass rate", summary.passRate == null ? "—" : `${summary.passRate}%`, "check")}
-        ${statMini("Checks executed", summary.totalCases || 0, "layers")}
-        ${statMini("Needs attention", summary.regressions || 0, "down")}
+        ${statMini(t("evaluations.average"), summary.average == null ? "—" : summary.average, "evaluations")}
+        ${statMini(t("evaluations.passRate"), summary.passRate == null ? "—" : `${summary.passRate}%`, "check")}
+        ${statMini(t("evaluations.checks"), summary.totalCases || 0, "layers")}
+        ${statMini(t("evaluations.attention"), summary.regressions || 0, "down")}
       </div>
       ${runs.length ? `<div class="grid" style="grid-template-columns:1fr 2fr">
-        <div class="card pad-lg"><div class="card-head"><h3>Latest score</h3><span class="badge ${runs[0].pass ? "success" : "warning"}">${esc(runs[0].framework)}</span></div><div style="display:grid;place-items:center;padding:8px">${ring(runs[0].score, 120, 12)}</div><div class="row between text-sm muted mt-4"><span>${runs[0].passedCases} of ${runs[0].cases} checks passed</span><span>${timeAgo(new Date(runs[0].at).getTime())}</span></div></div>
-        <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Recent runs</h3></div><div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Eval</th><th>Agent</th><th>Cases</th><th>Score</th><th>Result</th><th>When</th></tr></thead>
-          <tbody>${runs.map((run) => `<tr><td class="fw-600">${esc(run.name)}</td><td class="muted">${esc(run.agent)}</td><td class="mono">${run.passedCases}/${run.cases}</td><td><div class="row gap-2">${run.score}<span class="meter"><span style="width:${run.score}%;background:${run.pass ? "var(--success)" : "var(--warning)"}"></span></span></div></td><td>${run.pass ? statusBadge("completed") : `<span class="badge warning"><span class="dot"></span>Attention</span>`}</td><td class="muted nowrap">${timeAgo(new Date(run.at).getTime())}</td></tr>`).join("")}</tbody>
+        <div class="card pad-lg"><div class="card-head"><h3>${t("evaluations.latest")}</h3><span class="badge ${runs[0].pass ? "success" : "warning"}">${esc(runs[0].framework)}</span></div><div style="display:grid;place-items:center;padding:8px">${ring(runs[0].score, 120, 12)}</div><div class="row between text-sm muted mt-4"><span>${t("evaluations.passed", { passed: runs[0].passedCases, total: runs[0].cases })}</span><span>${timeAgo(new Date(runs[0].at).getTime())}</span></div></div>
+        <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>${t("evaluations.recent")}</h3></div><div class="table-wrap"><table class="tbl">
+          <thead><tr><th>${t("evaluations.eval")}</th><th>${t("evaluations.agent")}</th><th>${t("evaluations.cases")}</th><th>${t("evaluations.score")}</th><th>${t("evaluations.result")}</th><th>${t("system.when")}</th></tr></thead>
+          <tbody>${runs.map((run) => `<tr><td class="fw-600">${esc(run.name)}</td><td class="muted">${esc(run.agent)}</td><td class="mono">${run.passedCases}/${run.cases}</td><td><div class="row gap-2">${run.score}<span class="meter"><span style="width:${run.score}%;background:${run.pass ? "var(--success)" : "var(--warning)"}"></span></span></div></td><td>${run.pass ? statusBadge("completed") : `<span class="badge warning"><span class="dot"></span>${t("evaluations.attention")}</span>`}</td><td class="muted nowrap">${timeAgo(new Date(run.at).getTime())}</td></tr>`).join("")}</tbody>
         </table></div></div>
-      </div>` : `<div class="empty card" style="min-height:280px"><div class="empty-ico">${icon("evaluations")}</div><h4>No evaluation history yet</h4><p>Run the live evaluation to measure the current production stack.</p></div>`}`;
+      </div>` : `<div class="empty card" style="min-height:280px"><div class="empty-ico">${icon("evaluations")}</div><h4>${t("evaluations.empty")}</h4><p>${t("evaluations.emptyText")}</p></div>`}`;
   },
   mount(root) {
     if (!api.on) return;
@@ -798,10 +799,10 @@ export const evaluations = {
       button.classList.add("loading");
       try {
         const run = await api.governance.runEvaluation();
-        toast(run.pass ? "success" : "info", `Evaluation completed: ${run.score}%`, `${run.passedCases} of ${run.cases} checks passed.`);
+        toast(run.pass ? "success" : "info", t("evaluations.completed", { score: run.score }), t("evaluations.passed", { passed: run.passedCases, total: run.cases }));
         await loadEvaluations(true);
       } catch (error) {
-        toast("error", "Evaluation failed", error.message);
+        toast("error", t("evaluations.failed"), error.message);
         button.classList.remove("loading");
       }
     });
