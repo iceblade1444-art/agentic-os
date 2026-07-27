@@ -27,6 +27,7 @@ import {
   mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
   requireWriteAccess, updateUserHandler,
 } from "./lib/auth.js";
+import { deleteUserHandler } from "./lib/account-lifecycle.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -97,6 +98,7 @@ app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin");
 app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);
 app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHandler);
+app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin"), deleteUserHandler);
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);

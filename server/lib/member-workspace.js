@@ -93,6 +93,13 @@ export class MemberWorkspaceStore {
     return payload;
   }
 
+  remove(userId) {
+    const file = this.fileFor(userId);
+    if (!fs.existsSync(file)) return false;
+    fs.rmSync(file, { force: true });
+    return true;
+  }
+
   listTasks(userId) {
     return this.read(userId).tasks.sort((a, b) => {
       if (a.status !== b.status) return ["doing", "todo", "done"].indexOf(a.status) - ["doing", "todo", "done"].indexOf(b.status);

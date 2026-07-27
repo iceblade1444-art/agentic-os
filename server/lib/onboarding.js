@@ -106,6 +106,13 @@ export class OnboardingStore {
     this.#save();
     return this.get(user);
   }
+
+  remove(userId) {
+    if (!Object.hasOwn(this.data.users, userId)) return false;
+    delete this.data.users[userId];
+    this.#save();
+    return true;
+  }
 }
 
 const bulletList = (items, fallback = "Not specified") =>

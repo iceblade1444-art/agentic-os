@@ -128,6 +128,14 @@ export class UserStore {
     this.#save();
     return publicUser(user);
   }
+
+  remove(id) {
+    const index = this.users.findIndex((item) => item.id === id);
+    if (index === -1) return null;
+    const [removed] = this.users.splice(index, 1);
+    this.#save();
+    return publicUser(removed);
+  }
 }
 
 export const users = new UserStore();

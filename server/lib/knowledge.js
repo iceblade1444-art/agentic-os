@@ -154,6 +154,19 @@ export class KnowledgeLibrary {
     return { ...(await this.noteMeta(file)), content };
   }
 
+  async remove(relativePath, { actor = "", source = "dashboard" } = {}) {
+    let target;
+    try {
+      target = await this.resolveRead(relativePath);
+    } catch (error) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+    await fs.unlink(target.file);
+    await this.record({ actor, action: "delete", path: target.normalized, source });
+    return true;
+  }
+
   async search(query, { limit = 20, actor = "", source = "agent" } = {}) {
     const q = cleanText(query, 300);
     if (!q) throw new Error("Search query is required");

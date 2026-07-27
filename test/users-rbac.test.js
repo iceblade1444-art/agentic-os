@@ -43,6 +43,20 @@ test("authentication, role changes and account disabling revoke sessions", (t) =
   assert.equal(store.authenticate("operator@example.com", "long-safe-password"), null);
 });
 
+test("removing an account revokes authentication and deletes the persisted user", (t) => {
+  const { store, file } = temporaryStore(t);
+  const created = store.register({
+    name: "Temporary Member",
+    email: "temporary@example.com",
+    password: "long-safe-password",
+  });
+  assert.equal(store.remove(created.id).email, "temporary@example.com");
+  assert.equal(store.authenticate("temporary@example.com", "long-safe-password"), null);
+  assert.equal(store.get(created.id), null);
+  assert.doesNotMatch(fs.readFileSync(file, "utf8"), /temporary@example\.com/);
+  assert.equal(store.remove(created.id), null);
+});
+
 test("role capabilities enforce the documented access levels", () => {
   assert.deepEqual(capabilities({ role: "Creator" }), { canWrite: true, canAdmin: true, canManageUsers: true });
   assert.deepEqual(capabilities({ role: "Admin" }), { canWrite: true, canAdmin: true, canManageUsers: true });
