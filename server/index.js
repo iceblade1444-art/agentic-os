@@ -24,7 +24,7 @@ import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import {
   authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
-  mobileLoginHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
+  mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
   requireWriteAccess, updateUserHandler,
 } from "./lib/auth.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
@@ -87,6 +87,7 @@ app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandle
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
 app.post("/api/auth/mobile/login", rateLimit({ windowMs: 60000, max: 10 }), mobileLoginHandler);
 app.post("/api/auth/mobile/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), mobileRegisterHandler);
+app.post("/api/auth/mobile/exchange", rateLimit({ windowMs: 60000, max: 10 }), mobilePairExchangeHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
 

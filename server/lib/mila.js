@@ -62,7 +62,13 @@ async function milaSessionRequest(cfg = {}, pathname, options = {}) {
 
 export const milaStatus = (cfg, options) => milaRequest(cfg, "/admin/status", options);
 export const milaConnectionCode = (cfg, label, options = {}) => milaRequest(cfg, "/admin/connection-code", {
-  ...options, method: "POST", body: { label, ...(options.owner ? { owner: options.owner } : {}) },
+  ...options,
+  method: "POST",
+  body: {
+    label,
+    ...(options.owner ? { owner: options.owner } : {}),
+    ...(options.accountGrant ? { accountGrant: options.accountGrant } : {}),
+  },
 });
 export const milaDevices = (cfg, options) => milaRequest(cfg, "/admin/devices", options);
 export const milaRevokeDevice = (cfg, id, options) => {
@@ -76,6 +82,13 @@ async function dashboardSession(cfg, label, options = {}) {
   const cacheKey = cleanBaseUrl(cfg.baseUrl);
   const cached = dashboardSessions.get(cacheKey);
   if (cached) return cached;
+  if (/^Agentic OS dashboard$/i.test(label)) {
+    const listed = await milaDevices(cfg, options).catch(() => ({ devices: [] }));
+    const stale = (listed.devices || []).filter((device) =>
+      device.active && device.label === label && /^[a-f0-9]{32}$/.test(device.id));
+    await Promise.all(stale.map((device) =>
+      milaRevokeDevice(cfg, device.id, options).catch(() => null)));
+  }
   const connection = await milaConnectionCode(cfg, label, options);
   if (!connection.code) throw new Error("MILA did not create a connection code");
   const session = await milaSessionRequest(cfg, "/v1/auth/device", {

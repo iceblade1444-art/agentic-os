@@ -8,6 +8,7 @@ import { users } from "./users.js";
 
 const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
+const usedPairingGrants = new Map();
 
 export function authEnabled() { return !!config.authToken; }
 
@@ -118,6 +119,45 @@ export function mobileSessionToken(user) {
     kind: "mobile",
     user: userFromSession({ user }),
     sessionVersion: Number(user.sessionVersion) || 1,
+  });
+}
+
+export function mobilePairingGrant(user) {
+  return sign({
+    exp: Date.now() + 10 * 60 * 1000,
+    kind: "mobile_pair",
+    jti: crypto.randomUUID(),
+    user: userFromSession({ user }),
+    sessionVersion: Number(user?.sessionVersion) || 1,
+  });
+}
+
+function pairingUser(payload) {
+  if (payload?.kind !== "mobile_pair" || !payload.jti || !payload.user?.id) return null;
+  if (payload.user.id === "creator") return creatorUser();
+  const user = users.sessionUser(String(payload.user.id));
+  if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
+  return user;
+}
+
+export function mobilePairExchangeHandler(req, res) {
+  const now = Date.now();
+  for (const [id, expiresAt] of usedPairingGrants) {
+    if (expiresAt <= now) usedPairingGrants.delete(id);
+  }
+
+  const payload = verify(String(req.body?.grant || ""));
+  const user = pairingUser(payload);
+  if (!user || usedPairingGrants.has(payload.jti)) {
+    return res.status(401).json({ error: "Invalid, expired, or already used connection grant" });
+  }
+  usedPairingGrants.set(payload.jti, Number(payload.exp) || now + 10 * 60 * 1000);
+  res.json({
+    ok: true,
+    accessToken: mobileSessionToken(user),
+    expiresInSeconds: 30 * 86400,
+    user: userFromSession({ user }),
+    capabilities: capabilities(user),
   });
 }
 

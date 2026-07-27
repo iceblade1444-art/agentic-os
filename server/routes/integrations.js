@@ -3,7 +3,7 @@ import { Router } from "express";
 import { db } from "../store.js";
 import { PROVIDERS, testConnection, slackSend } from "../lib/connectors.js";
 import { milaConnectionCode, milaDevices, milaGeminiChat, milaLiveKitToken, milaRevokeDevice, milaSetAppUpdate, milaSetSubscription, milaStatus, milaVoiceToken } from "../lib/mila.js";
-import { authenticatedUser, requireRoles } from "../lib/auth.js";
+import { authenticatedUser, mobilePairingGrant, requireRoles } from "../lib/auth.js";
 
 const r = Router();
 const requireAdmin = requireRoles("Creator", "Admin");
@@ -88,6 +88,7 @@ r.post("/mila/chat", milaAction((cfg, body) => milaGeminiChat(cfg, "Agentic OS d
 r.post("/mila/connection-code", requireAdmin, milaAction((cfg, body, req) => {
   const user = authenticatedUser(req);
   return milaConnectionCode(cfg, body.label || user.email || user.name, {
+    accountGrant: mobilePairingGrant(user),
     owner: {
       id: user.id,
       email: user.email || "",

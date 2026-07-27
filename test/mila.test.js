@@ -43,6 +43,22 @@ test("MILA connection code forwards the requested account label and owner", asyn
   assert.equal(result.code, "AB12CD34");
 });
 
+test("MILA connection code forwards a short-lived account grant", async () => {
+  const fetchImpl = async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), {
+      label: "Mobile user",
+      accountGrant: "signed-pairing-grant",
+    });
+    return Response.json({ ok: true, code: "AB12CD34" });
+  };
+  const result = await milaConnectionCode(
+    { baseUrl: "https://mila.example", adminToken: "server-secret" },
+    "Mobile user",
+    { fetchImpl, accountGrant: "signed-pairing-grant" },
+  );
+  assert.equal(result.code, "AB12CD34");
+});
+
 test("MILA device management stays behind the server-held admin token", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
