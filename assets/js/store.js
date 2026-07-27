@@ -1,4 +1,6 @@
 // Tiny reactive store with localStorage persistence.
+import { getLocale } from "./i18n.js";
+
 const BASE_KEY = "agentic-os:v1";
 let storageKey = BASE_KEY;
 
@@ -136,8 +138,9 @@ export const store = {
 // utilities
 export function timeAgo(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  if (s < 60) return s + "s ago";
-  const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
-  const h = Math.floor(m / 60); if (h < 24) return h + "h ago";
-  return Math.floor(h / 24) + "d ago";
+  const formatter = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto", style: "narrow" });
+  if (s < 60) return formatter.format(-s, "second");
+  const m = Math.floor(s / 60); if (m < 60) return formatter.format(-m, "minute");
+  const h = Math.floor(m / 60); if (h < 24) return formatter.format(-h, "hour");
+  return formatter.format(-Math.floor(h / 24), "day");
 }

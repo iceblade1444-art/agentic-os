@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { getLocale, localizedDate, setLocale, t } from "../assets/js/i18n.js";
+import { timeAgo } from "../assets/js/store.js";
 
 const sourceKeys = (source, fn) => [
   ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations)\\.[^"]+)"`, "g")),
@@ -38,8 +39,11 @@ test("locale changes text interpolation and date formatting without browser glob
 
   setLocale("uz-UZ", false);
   assert.equal(t("personal.title"), "Shaxsiy");
+  assert.equal(t("memory.scope.workspace"), "ish maydoni");
+  assert.doesNotMatch(timeAgo(Date.now() - 4 * 86400000), /ago/);
 
   setLocale("ru-RU", false);
+  assert.match(timeAgo(Date.now() - 4 * 86400000), /дн/);
 });
 
 test("language selectors persist through the authenticated onboarding profile", () => {
