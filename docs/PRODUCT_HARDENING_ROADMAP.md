@@ -131,6 +131,9 @@ Observability, Integrations и MCP используют общий словар�
    и только после его health меняет production; post-deploy E2E обязателен.
 5. Пассивная voice telemetry считает response latency, STT warnings, ошибки и
    completion rate без записи аудио или текста разговора.
+6. Four C readiness достиг 100%: ежедневная read-only routine Hermes формирует
+   проверенный операционный обзор, а backup сохраняет расписания, результаты,
+   Kanban/project SQLite и память профилей без OAuth и provider credentials.
 
 ## Обязательная проверка каждого релиза
 

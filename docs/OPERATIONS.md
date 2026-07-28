@@ -39,7 +39,14 @@ Each backup directory contains:
 - `data.tgz` with users and server state;
 - `vault.tgz` with the Obsidian library;
 - `agentos-runtime.tgz` with agent memory, logs, projects and workspaces;
+- `hermes-control.tgz` with routine definitions and verified outputs, Kanban
+  and project databases, plus the `SOUL.md` and Markdown memory of each profile;
 - `manifest.json` with timestamp, size and archive names.
+
+The Hermes archive is deliberately selective. It excludes provider credentials,
+OAuth files, auth state, pairing data, sessions, caches and `config.yaml`.
+SQLite databases are copied through the online backup API instead of copying
+live WAL files.
 
 Backups are stored in `$HOME/backups/agentic-os`. `node_modules`, `.git` and
 Python cache directories are excluded. Defaults keep 14 days and at most 14

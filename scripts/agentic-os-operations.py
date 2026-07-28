@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import subprocess
 import tarfile
 import tempfile
@@ -139,6 +140,10 @@ class Operations:
                         bundle.add(source, arcname=name, recursive=True, filter=self._tar_filter)
                     archives.append(archive.name)
 
+                hermes_archive = self.hermes_control_backup(destination)
+                if hermes_archive:
+                    archives.append(hermes_archive.name)
+
                 database_dumps = []
                 postgres_dump = self.postgres_dump(destination)
                 if postgres_dump:
@@ -194,6 +199,71 @@ class Operations:
             raise RuntimeError(f"PostgreSQL backup failed: {result.stderr.decode('utf-8', 'replace')[:300]}")
         os.chmod(target, 0o600)
         return target
+
+    def hermes_control_backup(self, destination: Path) -> Path | None:
+        """Archive recoverable Hermes state without copying provider credentials."""
+        hermes_home = Path(os.environ.get("OPS_HERMES_HOME", Path.home() / ".hermes")).expanduser().resolve()
+        if not hermes_home.is_dir():
+            return None
+
+        with tempfile.TemporaryDirectory(prefix="hermes-backup-", dir=self.state_dir) as temp_dir:
+            stage = Path(temp_dir) / "hermes"
+            stage.mkdir(mode=0o700)
+
+            self._copy_regular_file(hermes_home / "SOUL.md", stage / "SOUL.md")
+            self._copy_markdown_tree(hermes_home / "memories", stage / "memories")
+            self._copy_regular_file(hermes_home / "cron" / "jobs.json", stage / "cron" / "jobs.json")
+            self._copy_markdown_tree(hermes_home / "cron" / "output", stage / "cron" / "output")
+
+            profiles_root = hermes_home / "profiles"
+            if profiles_root.is_dir() and not profiles_root.is_symlink():
+                for profile in profiles_root.iterdir():
+                    if not profile.is_dir() or profile.is_symlink():
+                        continue
+                    profile_stage = stage / "profiles" / profile.name
+                    self._copy_regular_file(profile / "SOUL.md", profile_stage / "SOUL.md")
+                    self._copy_regular_file(profile / "profile.yaml", profile_stage / "profile.yaml")
+                    self._copy_markdown_tree(profile / "memories", profile_stage / "memories")
+
+            for relative in ("cron/executions.db", "kanban.db", "projects.db"):
+                source = hermes_home / relative
+                if source.is_file() and not source.is_symlink():
+                    self._sqlite_online_backup(source, stage / relative)
+
+            if not any(item.is_file() for item in stage.rglob("*")):
+                return None
+            archive = destination / "hermes-control.tgz"
+            with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:
+                bundle.add(stage, arcname="hermes", recursive=True, filter=self._tar_filter)
+            os.chmod(archive, 0o600)
+            return archive
+
+    @staticmethod
+    def _copy_regular_file(source: Path, target: Path) -> None:
+        if not source.is_file() or source.is_symlink():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        shutil.copy2(source, target)
+        os.chmod(target, 0o600)
+
+    def _copy_markdown_tree(self, source: Path, target: Path) -> None:
+        if not source.is_dir() or source.is_symlink():
+            return
+        for item in source.rglob("*.md"):
+            if not item.is_file() or item.is_symlink():
+                continue
+            relative = item.relative_to(source)
+            if ".." in relative.parts:
+                continue
+            self._copy_regular_file(item, target / relative)
+
+    @staticmethod
+    def _sqlite_online_backup(source: Path, target: Path) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_db:
+            with sqlite3.connect(target) as target_db:
+                source_db.backup(target_db)
+        os.chmod(target, 0o600)
 
     @staticmethod
     def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:

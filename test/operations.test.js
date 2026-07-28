@@ -92,6 +92,10 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(operator, /OPS_TELEGRAM_BOT_TOKEN/);
   assert.match(operator, /restore_drill/);
   assert.match(operator, /assert_safe_tar_member/);
+  assert.match(operator, /hermes_control_backup/);
+  assert.match(operator, /hermes-control\.tgz/);
+  assert.match(operator, /_sqlite_online_backup/);
+  assert.doesNotMatch(operator, /google_token\.json|google_client_secret\.json/);
   assert.match(operator, /load_project_env/);
   assert.match(operator, /key in os\.environ/);
   assert.match(operator, /MILA voice backend/);
@@ -130,10 +134,17 @@ test("host backup can be restore-drilled without touching source data", { skip: 
   fs.writeFileSync(path.join(dir, "data", "db.json"), "{}\n");
   fs.writeFileSync(path.join(dir, "vault", "Welcome.md"), "# Welcome\n");
   fs.writeFileSync(path.join(dir, "agentos-runtime", "memory", "index.json"), "{}\n");
+  const hermes = path.join(dir, "hermes");
+  fs.mkdirSync(path.join(hermes, "cron", "output", "routine"), { recursive: true });
+  fs.mkdirSync(path.join(hermes, "memories"), { recursive: true });
+  fs.writeFileSync(path.join(hermes, "SOUL.md"), "# Hermes\n");
+  fs.writeFileSync(path.join(hermes, "memories", "MEMORY.md"), "# Memory\n");
+  fs.writeFileSync(path.join(hermes, "cron", "jobs.json"), "[]\n");
+  fs.writeFileSync(path.join(hermes, "cron", "output", "routine", "latest.md"), "# Verified\n");
 
   const stateDir = path.join(dir, "state");
   const backupDir = path.join(dir, "backups");
-  const env = { ...process.env, OPS_STATE_DIR: stateDir, OPS_BACKUP_DIR: backupDir };
+  const env = { ...process.env, OPS_STATE_DIR: stateDir, OPS_BACKUP_DIR: backupDir, OPS_HERMES_HOME: hermes };
   const backup = spawnSync("python3", ["scripts/agentic-os-operations.py", "backup", "--root", dir], { cwd: repoRoot, env, encoding: "utf8" });
   assert.equal(backup.status, 0, backup.stderr || backup.stdout);
   const drill = spawnSync("python3", ["scripts/agentic-os-operations.py", "restore-drill", "--root", dir], { cwd: repoRoot, env, encoding: "utf8" });
@@ -142,5 +153,6 @@ test("host backup can be restore-drilled without touching source data", { skip: 
   assert.equal(state.backup.status, "success");
   assert.equal(state.restoreDrill.status, "success");
   assert.ok(state.restoreDrill.filesChecked >= 3);
+  assert.ok(state.restoreDrill.archives.includes("hermes-control.tgz"));
   assert.equal(fs.existsSync(path.join(dir, "data", "db.json")), true);
 });

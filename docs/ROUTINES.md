@@ -41,3 +41,9 @@ every 30m       Every 30 minutes
 
 Four C readiness counts active Hermes routines as recurring agent work. Host
 monitoring and backups remain separate server-level operations.
+
+Production currently runs `Daily Agentic OS operations brief` on the default
+orchestrator profile at `0 9 * * *`. It is read-only, stores its verified result
+locally, and reports health, incidents, blocked work, approvals, fleet status,
+MILA, Obsidian, backups and restore drills without including credentials or
+transcript contents.

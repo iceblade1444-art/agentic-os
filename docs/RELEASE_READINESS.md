@@ -74,6 +74,12 @@ to the same commit before a release is considered complete.
   - account deletion revokes the mobile session and removes test data.
 - PostgreSQL primary reads/writes, outage rollback, parity, backup, and restore drill:
   successful.
+- Four C production readiness: 100% across Context, Connections, Capabilities,
+  and Cadence.
+- The daily Hermes operations brief completed a manual verified run and remains
+  scheduled on the server.
+- Backups include selective Hermes control-plane state and profile memory
+  without provider credentials or OAuth files.
 
 ## Release commands
 
