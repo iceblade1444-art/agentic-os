@@ -33,6 +33,9 @@ import { deleteUserHandler } from "./lib/account-lifecycle.js";
 import {
   forgotPasswordHandler, recoveryStatus, resendVerificationHandler, resetPasswordHandler, verifyEmailHandler,
 } from "./lib/account-recovery.js";
+import {
+  changeOwnPasswordHandler, deleteOwnAccountHandler, exportOwnDataHandler,
+} from "./lib/account-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -107,6 +110,9 @@ app.use("/api", requireAuth);
 app.get("/api/auth/sessions", listSessionsHandler);
 app.delete("/api/auth/sessions/:id", revokeSessionHandler);
 app.post("/api/auth/sessions/revoke-others", revokeOtherSessionsHandler);
+app.post("/api/auth/account/password", rateLimit({ windowMs: 10 * 60000, max: 5 }), changeOwnPasswordHandler);
+app.get("/api/auth/account/export", exportOwnDataHandler);
+app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
 app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin");
 app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);

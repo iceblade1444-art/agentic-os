@@ -78,6 +78,19 @@ export const api = {
     resetPassword: (token, password) => j("/api/auth/password/reset", { method: "POST", body: { token, password } }),
     verifyEmail: (token) => j("/api/auth/email/verify", { method: "POST", body: { token } }),
     resendVerification: (email) => j("/api/auth/email/resend", { method: "POST", body: { email } }),
+    changePassword: (body) => j("/api/auth/account/password", { method: "POST", body }),
+    deleteAccount: (body) => j("/api/auth/account", { method: "DELETE", body }),
+    async exportPersonalData() {
+      const res = await fetch("/api/auth/account/export");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "HTTP " + res.status);
+      }
+      return {
+        blob: await res.blob(),
+        disposition: res.headers.get("Content-Disposition") || "",
+      };
+    },
     users: () => j("/api/auth/users"),
     updateUser: (id, body) => j(`/api/auth/users/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },

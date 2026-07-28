@@ -105,6 +105,7 @@ function securitySection() {
   if (securityError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.sessionsFailed")}</div><div class="a-desc">${esc(securityError)}</div></div></div>`;
   if (!securityState) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>${t("settings.sessionsLoading")}</span></div></div>`;
   const deviceSessions = securityState.sessions || [];
+  const selfManaged = api.auth.user?.id !== "creator";
   return `<div class="card pad-lg">
     <div class="row between mb-4">
       <div><div class="section-title">${t("settings.securityTitle")}</div><div class="hint">${t("settings.securityText")}</div></div>
@@ -118,7 +119,26 @@ function securitySection() {
         <td><button class="btn btn-outline sm revoke-session" data-session-id="${esc(session.id)}" data-current="${session.current ? "true" : "false"}">${icon("x")}${t("settings.revoke")}</button></td>
       </tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state"><div class="empty-title">${t("settings.noSessions")}</div></div>`}
-  </div>`;
+  </div>
+  ${selfManaged ? `<div class="card pad-lg mt-4">
+    <div class="section-title">${t("settings.changePassword")}</div>
+    <p class="hint mb-4">${t("settings.changePasswordText")}</p>
+    <div class="field"><label class="label" for="currentPassword">${t("settings.currentPassword")}</label><input class="input" id="currentPassword" type="password" autocomplete="current-password"/></div>
+    <div class="field"><label class="label" for="newPassword">${t("settings.newPassword")}</label><input class="input" id="newPassword" type="password" minlength="10" autocomplete="new-password"/></div>
+    <button class="btn btn-primary" id="changePassword">${icon("lock")}${t("settings.savePassword")}</button>
+  </div>` : ""}
+  <div class="card pad-lg mt-4">
+    <div class="section-title">${t("settings.personalData")}</div>
+    <p class="hint mb-4">${t("settings.personalDataText")}</p>
+    <button class="btn btn-secondary" id="exportPersonalData">${icon("upload")}${t("settings.exportPersonalData")}</button>
+  </div>
+  ${selfManaged ? `<div class="card pad-lg mt-4" style="border-color:color-mix(in srgb, var(--error) 45%, var(--border))">
+    <div class="section-title" style="color:var(--error)">${t("settings.deleteAccount")}</div>
+    <p class="hint mb-4">${t("settings.deleteAccountText")}</p>
+    <div class="field"><label class="label" for="deleteEmail">${t("settings.confirmEmail")}</label><input class="input" id="deleteEmail" type="email" autocomplete="off" placeholder="${esc(api.auth.user?.email || "")}"/></div>
+    <div class="field"><label class="label" for="deletePassword">${t("settings.currentPassword")}</label><input class="input" id="deletePassword" type="password" autocomplete="current-password"/></div>
+    <button class="btn btn-outline" id="deleteAccount" style="color:var(--error);border-color:var(--error)">${icon("x")}${t("settings.deleteAccount")}</button>
+  </div>` : ""}`;
 }
 
 function teamSection() {
@@ -217,6 +237,54 @@ function wire(root) {
       } catch (error) { toast("error", t("settings.revokeFailed"), error.message); }
     },
   });
+
+  const changePassword = root.querySelector("#changePassword");
+  if (changePassword) changePassword.onclick = async () => {
+    const currentPassword = root.querySelector("#currentPassword").value;
+    const newPassword = root.querySelector("#newPassword").value;
+    if (newPassword.length < 10) return toast("warning", t("settings.passwordTooShort"));
+    changePassword.classList.add("loading");
+    try {
+      await api.auth.changePassword({ currentPassword, newPassword });
+      toast("success", t("settings.passwordChanged"), t("settings.signInAgain"));
+      setTimeout(() => location.reload(), 700);
+    } catch (error) {
+      toast("error", t("settings.passwordFailed"), error.message);
+      changePassword.classList.remove("loading");
+    }
+  };
+  const exportPersonalData = root.querySelector("#exportPersonalData");
+  if (exportPersonalData) exportPersonalData.onclick = async () => {
+    exportPersonalData.classList.add("loading");
+    try {
+      const result = await api.auth.exportPersonalData();
+      const match = result.disposition.match(/filename="?([^"]+)"?/i);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(result.blob);
+      a.download = match?.[1] || "agentic-os-personal-data.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("success", t("settings.personalDataExported"));
+    } catch (error) { toast("error", t("settings.personalDataFailed"), error.message); }
+    exportPersonalData.classList.remove("loading");
+  };
+  const deleteAccount = root.querySelector("#deleteAccount");
+  if (deleteAccount) deleteAccount.onclick = () => {
+    const confirmEmail = root.querySelector("#deleteEmail").value.trim();
+    const password = root.querySelector("#deletePassword").value;
+    if (!confirmEmail || !password) return toast("warning", t("settings.deleteAccountFields"));
+    confirmDialog({
+      title: t("settings.deleteAccountTitle"),
+      message: t("settings.deleteAccountConfirm"),
+      confirmText: t("settings.deleteAccount"),
+      onConfirm: async () => {
+        try {
+          await api.auth.deleteAccount({ confirmEmail, password });
+          location.reload();
+        } catch (error) { toast("error", t("settings.deleteAccountFailed"), error.message); }
+      },
+    });
+  };
 
   const ex = root.querySelector("#exportData");
   if (ex) ex.onclick = () => {

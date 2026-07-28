@@ -519,6 +519,8 @@ server/                    Node/Express backend (optional — enables the real f
   lib/connectors.js        Real provider checks (OpenAI / Anthropic / GitHub / Notion / Slack)
   lib/orchestrator.js      Bridge from public Missions to Hermes AgentOS runtime
   lib/claude-code.js       Confined Claude CLI runtime + persistent desktop sessions
+  lib/account-self-service.js
+                           Password change, personal export and safe self-deletion
 Dockerfile · .env.example · package.json
 ```
 
