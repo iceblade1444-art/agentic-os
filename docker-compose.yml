@@ -12,6 +12,8 @@ services:
       - PORT=8787
       - DATA_DIR=/app/data
       - DATABASE_URL=postgresql://${POSTGRES_USER:-agentic_os}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agentic_os}
+      - POSTGRES_SHADOW_SYNC_ENABLED=${POSTGRES_SHADOW_SYNC_ENABLED:-true}
+      - POSTGRES_SHADOW_SYNC_INTERVAL_MS=${POSTGRES_SHADOW_SYNC_INTERVAL_MS:-30000}
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
       - SPEECH_URL=http://speech:4400

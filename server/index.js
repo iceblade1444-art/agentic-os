@@ -41,12 +41,19 @@ import {
 } from "./lib/mfa-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
+import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
 const server = createServer(app);
+const postgresShadow = new PostgresShadowSync({
+  enabled: config.postgres.shadowSyncEnabled,
+  dataDir: config.dataDir,
+  databaseUrl: config.postgres.databaseUrl,
+  intervalMs: config.postgres.shadowSyncIntervalMs,
+});
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 
@@ -94,6 +101,7 @@ app.get("/api/health", (req, res) =>
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
     auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
+    database: postgresShadow.status(),
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
@@ -165,6 +173,8 @@ server.listen(config.port, async () => {
   console.log(`    Data store  : ${path.resolve(config.dataDir)}/db.json`);
   if (authEnabled()) console.log(`    Auth        : enabled ✓${config.allowCustomMcp ? "   Custom MCP: allowed" : ""}`);
   else console.log(`    \x1b[33mAuth        : DISABLED — set AUTH_TOKEN before exposing this beyond localhost\x1b[0m`);
+  postgresShadow.start();
+  console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {
     const obsidian = db.mcp.get("mcp_obsidian");
@@ -183,6 +193,11 @@ server.listen(config.port, async () => {
   }
 });
 
-async function bye() { await mcpManager.shutdownAll(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000); }
+async function bye() {
+  await postgresShadow.stop();
+  await mcpManager.shutdownAll();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 12000);
+}
 process.on("SIGINT", bye);
 process.on("SIGTERM", bye);

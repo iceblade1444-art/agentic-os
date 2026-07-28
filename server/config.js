@@ -7,6 +7,11 @@ const strip = (u, d) => (u || d).replace(/\/$/, "");
 export const config = {
   port: Number(env.PORT) || 8787,
   dataDir: env.DATA_DIR || "./data",
+  postgres: {
+    databaseUrl: env.DATABASE_URL || "",
+    shadowSyncEnabled: env.POSTGRES_SHADOW_SYNC_ENABLED === "true",
+    shadowSyncIntervalMs: Math.max(5000, Number(env.POSTGRES_SHADOW_SYNC_INTERVAL_MS) || 30000),
+  },
   allowOrigin: env.ALLOW_ORIGIN || "",
   openai: { key: env.OPENAI_API_KEY || "", baseUrl: strip(env.OPENAI_BASE_URL, "https://api.openai.com/v1") },
   anthropic: { key: env.ANTHROPIC_API_KEY || "", baseUrl: strip(env.ANTHROPIC_BASE_URL, "https://api.anthropic.com/v1") },
