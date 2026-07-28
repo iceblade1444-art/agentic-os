@@ -4,8 +4,13 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "· running release test suite…"
-npm test
+if command -v npm >/dev/null 2>&1; then
+  echo "· running release test suite…"
+  npm test
+else
+  TEST_IN_IMAGE=1
+  echo "· host npm is unavailable; release tests will run in the built application image"
+fi
 
 # 1) ensure .env exists
 if [ ! -f .env ]; then
@@ -68,6 +73,9 @@ else
 fi
 echo "· building Agentic OS application images…"
 docker compose build agentic-os agentos-runtime
+if [ "${TEST_IN_IMAGE:-0}" = 1 ]; then
+  docker run --rm agentic-os:latest npm test
+fi
 
 # Validate the just-built image in an isolated candidate container. It uses
 # temporary JSON state and no PostgreSQL adapter, so the production datastore is
