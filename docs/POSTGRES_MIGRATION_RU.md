@@ -38,7 +38,7 @@ POSTGRES_PASSWORD=<случайная hex-строка не короче 32 ба
 POSTGRES_SHADOW_SYNC_ENABLED=true
 POSTGRES_SHADOW_SYNC_INTERVAL_MS=30000
 POSTGRES_SHADOW_SYNC_DEBOUNCE_MS=500
-POSTGRES_READ_MODE=member-canary
+POSTGRES_READ_MODE=member
 ```
 
 Пароль нельзя добавлять в Git. PostgreSQL доступен только контейнерам
@@ -111,3 +111,19 @@ dashboard, задач и заметок:
 shadow-sync выполняется, PostgreSQL недоступен или canary обнаружил mismatch,
 адаптер автоматически возвращает JSON. Счётчики `database.reads` в `/api/health`
 показывают SQL-чтения и причины fallback без пользовательских данных.
+
+После успешного production-canary режим по умолчанию установлен в `member`.
+Consistency gate и автоматический JSON fallback остаются активными. Для
+мгновенного ручного отката добавьте или измените в `.env`:
+
+```dotenv
+POSTGRES_READ_MODE=json
+```
+
+Затем пересоздайте только контейнер приложения:
+
+```bash
+docker compose up -d --force-recreate agentic-os
+```
+
+Возврат к PostgreSQL выполняется тем же способом со значением `member`.

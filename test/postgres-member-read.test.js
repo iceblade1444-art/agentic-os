@@ -106,6 +106,30 @@ test("canary mismatch returns JSON and records parity fallback", async () => {
   assert.equal(adapter.status().lastFallbackReason, "canary_mismatch");
 });
 
+test("member mode serves PostgreSQL without a parity read from JSON", async () => {
+  const postgresTask = { ...task, title: "PostgreSQL task" };
+  let fallbackReads = 0;
+  const store = fallbackStore();
+  const adapter = new PostgresMemberReadAdapter({
+    mode: "member",
+    databaseUrl: "postgresql://private",
+    shadowStatus: readyStatus,
+    fallbackStore: {
+      ...store,
+      listTasks: () => {
+        fallbackReads += 1;
+        return store.listTasks();
+      },
+    },
+    pool: fakePool({ tasks: [postgresTask] }),
+  });
+
+  assert.deepEqual(await adapter.listTasks("usr_alpha"), [postgresTask]);
+  assert.equal(fallbackReads, 0);
+  assert.equal(adapter.status().postgresReads, 1);
+  assert.equal(adapter.status().jsonFallbacks, 0);
+});
+
 test("SQL errors fall back without exposing the database URL", async () => {
   const secret = "postgresql://reader:secret@postgres/private";
   const adapter = new PostgresMemberReadAdapter({
@@ -133,4 +157,3 @@ test("json mode never opens the PostgreSQL read path", async () => {
   assert.equal(pool.calls.length, 0);
   assert.equal(adapter.status().enabled, false);
 });
-
