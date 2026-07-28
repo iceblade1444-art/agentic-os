@@ -40,6 +40,7 @@ POSTGRES_SHADOW_SYNC_INTERVAL_MS=30000
 POSTGRES_SHADOW_SYNC_DEBOUNCE_MS=500
 POSTGRES_READ_MODE=member
 POSTGRES_WRITE_MODE=member-shadow
+POSTGRES_AUTH_WRITE_MODE=shadow
 ```
 
 Пароль нельзя добавлять в Git. PostgreSQL доступен только контейнерам
@@ -155,3 +156,31 @@ POSTGRES_WRITE_MODE=json
 
 После изменения пересоздайте контейнер `agentic-os`. Чтение можно независимо
 оставить в `member` или вернуть в `json`.
+
+## Shadow persistence авторизации
+
+`POSTGRES_AUTH_WRITE_MODE=shadow` транзакционно зеркалирует четыре атомарных
+источника после каждого изменения:
+
+- пользователей, включая хеши паролей и версию сессии;
+- web/mobile-сессии и их отзыв;
+- зашифрованные MFA-записи;
+- одноразовые хешированные токены подтверждения и восстановления.
+
+Login, проверка пароля, MFA и валидация активной сессии на этом этапе продолжают
+читать JSON. Поэтому недоступность PostgreSQL не блокирует web или мобильный
+вход. Каждая мутация также попадает в durable outbox и будет восстановлена полной
+синхронизацией.
+
+Метрики доступны как `database.authWrites` в `/api/health`. Они содержат только
+название группы и счётчики; соли, хеши, токены и строка подключения не выводятся.
+
+Независимый rollback:
+
+```dotenv
+POSTGRES_AUTH_WRITE_MODE=json
+```
+
+Финальное переключение auth reads на PostgreSQL выполняется только после
+production-canary web/mobile login, logout, смены пароля и восстановления после
+контролируемого отказа базы.

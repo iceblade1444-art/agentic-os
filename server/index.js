@@ -44,6 +44,7 @@ import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
 import { PostgresMemberReadAdapter } from "./lib/postgres-member-read.js";
 import { PostgresMemberWriteAdapter } from "./lib/postgres-member-write.js";
+import { PostgresAuthWriteAdapter } from "./lib/postgres-auth-write.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
 import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -62,7 +63,14 @@ const postgresShadow = new PostgresShadowSync({
   debounceMs: config.postgres.shadowSyncDebounceMs,
   outbox: postgresOutbox,
 });
+const postgresAuthWrites = new PostgresAuthWriteAdapter({
+  mode: config.postgres.authWriteMode,
+  dataDir: config.dataDir,
+  databaseUrl: config.postgres.databaseUrl,
+  shadowStatus: () => postgresShadow.status(),
+});
 const stopPostgresMutationListener = onRuntimeFileMutation((file) => {
+  postgresAuthWrites.request(file);
   if (postgresShadow.enabled && postgresOutbox.record(file)) postgresShadow.request();
 });
 const postgresMemberReads = new PostgresMemberReadAdapter({
@@ -131,6 +139,7 @@ app.get("/api/health", (req, res) =>
       ...postgresShadow.status(),
       reads: postgresMemberReads.status(),
       writes: postgresMemberWrites.status(),
+      authWrites: postgresAuthWrites.status(),
     },
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
@@ -225,6 +234,7 @@ server.listen(config.port, async () => {
 
 async function bye() {
   stopPostgresMutationListener();
+  await postgresAuthWrites.stop();
   await postgresMemberWrites.stop();
   await postgresMemberReads.stop();
   await postgresShadow.stop();
