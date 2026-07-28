@@ -401,7 +401,7 @@ function renderLogin() {
     qs("#authEmailField").hidden = !(login || register || forgot);
     qs("#authPasswordField").hidden = !(login || register || reset);
     qs(".login-tabs")?.toggleAttribute("hidden", !(login || register));
-    qs("#forgotPassword").hidden = !login;
+    qs("#forgotPassword").hidden = !login || !api.auth.accountRecovery.deliveryReady;
     qs("#authBack").hidden = login || register || mode === "verify";
     qs("#authSubmit").hidden = terminal;
     qs("#creatorHint").hidden = !login;
