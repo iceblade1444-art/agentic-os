@@ -18,7 +18,7 @@ import operations from "./routes/operations.js";
 import pulse from "./routes/pulse.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
-import member from "./routes/member.js";
+import member, { configureMemberReadAdapter } from "./routes/member.js";
 import personal from "./routes/personal.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
@@ -42,10 +42,12 @@ import {
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
+import { PostgresMemberReadAdapter } from "./lib/postgres-member-read.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
 import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
+import { memberWorkspaces } from "./lib/member-workspace.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -62,6 +64,13 @@ const postgresShadow = new PostgresShadowSync({
 const stopPostgresMutationListener = onRuntimeFileMutation((file) => {
   if (postgresShadow.enabled && postgresOutbox.record(file)) postgresShadow.request();
 });
+const postgresMemberReads = new PostgresMemberReadAdapter({
+  mode: config.postgres.readMode,
+  databaseUrl: config.postgres.databaseUrl,
+  shadowStatus: () => postgresShadow.status(),
+  fallbackStore: memberWorkspaces,
+});
+configureMemberReadAdapter(postgresMemberReads);
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 
@@ -109,7 +118,7 @@ app.get("/api/health", (req, res) =>
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
     auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
-    database: postgresShadow.status(),
+    database: { ...postgresShadow.status(), reads: postgresMemberReads.status() },
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
@@ -203,6 +212,7 @@ server.listen(config.port, async () => {
 
 async function bye() {
   stopPostgresMutationListener();
+  await postgresMemberReads.stop();
   await postgresShadow.stop();
   await mcpManager.shutdownAll();
   server.close(() => process.exit(0));

@@ -4,26 +4,34 @@ import { authenticatedUser } from "../lib/auth.js";
 import { memberWorkspaces } from "../lib/member-workspace.js";
 
 const r = Router();
+let readAdapter = null;
 
 const currentUser = (req) => req.user || authenticatedUser(req);
+
+export function configureMemberReadAdapter(adapter) {
+  readAdapter = adapter;
+}
 
 function sendError(res, error) {
   const status = error.code === "invalid_title" ? 400 : 500;
   res.status(status).json({ error: error.message, code: error.code });
 }
 
-r.get("/dashboard", (req, res) => {
+r.get("/dashboard", async (req, res) => {
   try {
     const user = currentUser(req);
     res.json({
-      ...memberWorkspaces.dashboard(user.id),
+      ...(readAdapter ? await readAdapter.dashboard(user.id) : memberWorkspaces.dashboard(user.id)),
       account: user,
     });
   } catch (error) { sendError(res, error); }
 });
 
-r.get("/tasks", (req, res) => {
-  try { res.json(memberWorkspaces.listTasks(currentUser(req).id)); }
+r.get("/tasks", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    res.json(readAdapter ? await readAdapter.listTasks(userId) : memberWorkspaces.listTasks(userId));
+  }
   catch (error) { sendError(res, error); }
 });
 
@@ -47,8 +55,11 @@ r.delete("/tasks/:id", (req, res) => {
   } catch (error) { sendError(res, error); }
 });
 
-r.get("/notes", (req, res) => {
-  try { res.json(memberWorkspaces.listNotes(currentUser(req).id)); }
+r.get("/notes", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    res.json(readAdapter ? await readAdapter.listNotes(userId) : memberWorkspaces.listNotes(userId));
+  }
   catch (error) { sendError(res, error); }
 });
 

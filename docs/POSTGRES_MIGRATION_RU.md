@@ -38,6 +38,7 @@ POSTGRES_PASSWORD=<случайная hex-строка не короче 32 ба
 POSTGRES_SHADOW_SYNC_ENABLED=true
 POSTGRES_SHADOW_SYNC_INTERVAL_MS=30000
 POSTGRES_SHADOW_SYNC_DEBOUNCE_MS=500
+POSTGRES_READ_MODE=member-canary
 ```
 
 Пароль нельзя добавлять в Git. PostgreSQL доступен только контейнерам
@@ -95,3 +96,18 @@ JSON можно перестать считать основной базой т
 события, а периодический цикл повторяет доставку. Для отката достаточно задать
 `POSTGRES_SHADOW_SYNC_ENABLED=false` и перезапустить приложение; JSON не требует
 обратной миграции.
+
+## Canary-чтение
+
+`POSTGRES_READ_MODE` управляет только безопасными GET-запросами личного
+dashboard, задач и заметок:
+
+- `json` — читать только JSON, мгновенный rollback;
+- `member-canary` — прочитать PostgreSQL, сравнить ответ с JSON и использовать
+  SQL только при полном совпадении;
+- `member` — читать PostgreSQL без двойной проверки.
+
+Авторизация, пароли, MFA и все записи пока остаются на JSON. Если outbox не пуст,
+shadow-sync выполняется, PostgreSQL недоступен или canary обнаружил mismatch,
+адаптер автоматически возвращает JSON. Счётчики `database.reads` в `/api/health`
+показывают SQL-чтения и причины fallback без пользовательских данных.

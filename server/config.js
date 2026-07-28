@@ -12,6 +12,7 @@ export const config = {
     shadowSyncEnabled: env.POSTGRES_SHADOW_SYNC_ENABLED === "true",
     shadowSyncIntervalMs: Math.max(5000, Number(env.POSTGRES_SHADOW_SYNC_INTERVAL_MS) || 30000),
     shadowSyncDebounceMs: Math.max(100, Number(env.POSTGRES_SHADOW_SYNC_DEBOUNCE_MS) || 500),
+    readMode: env.POSTGRES_READ_MODE || "json",
   },
   allowOrigin: env.ALLOW_ORIGIN || "",
   openai: { key: env.OPENAI_API_KEY || "", baseUrl: strip(env.OPENAI_BASE_URL, "https://api.openai.com/v1") },
