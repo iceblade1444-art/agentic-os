@@ -137,7 +137,11 @@ done
   exit 1
 }
 echo
-AGENTIC_OS_INTERNAL_URL="http://${HEALTH_HOST}:${HOST_PORT}" npm run prod:e2e
+if command -v npm >/dev/null 2>&1; then
+  AGENTIC_OS_INTERNAL_URL="http://${HEALTH_HOST}:${HOST_PORT}" npm run prod:e2e
+else
+  docker compose exec -T -e AGENTIC_OS_INTERNAL_URL="http://127.0.0.1:8787" agentic-os npm run prod:e2e
+fi
 echo "· mandatory post-deploy smoke passed"
 if systemctl --user is-enabled agentic-os-monitor.timer >/dev/null 2>&1; then
   systemctl --user start --no-block agentic-os-monitor.service
