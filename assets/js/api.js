@@ -57,6 +57,14 @@ export const api = {
     login: async (body) => {
       const credentials = typeof body === "string" ? { password: body } : body;
       const result = await j("/api/auth/login", { method: "POST", body: credentials });
+      if (result.mfaRequired) return result;
+      state.authed = true;
+      state.user = result.user || null;
+      state.capabilities = result.capabilities || {};
+      return result;
+    },
+    verifyMfa: async (challenge, code) => {
+      const result = await j("/api/auth/mfa/verify", { method: "POST", body: { challenge, code } });
       state.authed = true;
       state.user = result.user || null;
       state.capabilities = result.capabilities || {};
@@ -74,6 +82,11 @@ export const api = {
     sessions: () => j("/api/auth/sessions"),
     revokeSession: (id) => j(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
     revokeOtherSessions: () => j("/api/auth/sessions/revoke-others", { method: "POST" }),
+    mfaStatus: () => j("/api/auth/mfa"),
+    mfaSetup: (password) => j("/api/auth/mfa/setup", { method: "POST", body: { password } }),
+    mfaEnable: (code) => j("/api/auth/mfa/enable", { method: "POST", body: { code } }),
+    mfaRecovery: (code) => j("/api/auth/mfa/recovery", { method: "POST", body: { code } }),
+    mfaDisable: (code) => j("/api/auth/mfa", { method: "DELETE", body: { code } }),
     forgotPassword: (email) => j("/api/auth/password/forgot", { method: "POST", body: { email } }),
     resetPassword: (token, password) => j("/api/auth/password/reset", { method: "POST", body: { token, password } }),
     verifyEmail: (token) => j("/api/auth/email/verify", { method: "POST", body: { token } }),

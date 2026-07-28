@@ -1,7 +1,7 @@
 import { store } from "../store.js";
 import { icon } from "../icons.js";
 import { api } from "../api.js";
-import { toast, esc, confirmDialog } from "../ui.js";
+import { toast, esc, confirmDialog, openModal, closeOverlay } from "../ui.js";
 import { applyTheme } from "../app.js";
 import { localizedDate, t } from "../i18n.js";
 
@@ -105,6 +105,7 @@ function securitySection() {
   if (securityError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.sessionsFailed")}</div><div class="a-desc">${esc(securityError)}</div></div></div>`;
   if (!securityState) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>${t("settings.sessionsLoading")}</span></div></div>`;
   const deviceSessions = securityState.sessions || [];
+  const mfaState = securityState.mfa || { eligible: false, enabled: false };
   const selfManaged = api.auth.user?.id !== "creator";
   return `<div class="card pad-lg">
     <div class="row between mb-4">
@@ -120,6 +121,20 @@ function securitySection() {
       </tr>`).join("")}
     </tbody></table></div>` : `<div class="empty-state"><div class="empty-title">${t("settings.noSessions")}</div></div>`}
   </div>
+  ${mfaState.eligible ? `<div class="card pad-lg mt-4">
+    <div class="row between gap-3 mb-4">
+      <div><div class="section-title">${t("settings.mfaTitle")}</div><div class="hint">${t("settings.mfaText")}</div></div>
+      <span class="badge ${mfaState.enabled ? "success" : "warning"}">${t(mfaState.enabled ? "settings.mfaEnabled" : "settings.mfaDisabled")}</span>
+    </div>
+    ${mfaState.enabled ? `
+      <p class="hint mb-4">${t("settings.mfaRecoveryRemaining", { count: mfaState.recoveryCodesRemaining || 0 })}</p>
+      <div class="field"><label class="label" for="mfaManageCode">${t("settings.mfaCode")}</label><input class="input mono" id="mfaManageCode" autocomplete="one-time-code" maxlength="16" placeholder="123456"/></div>
+      <div class="row gap-2 wrap"><button class="btn btn-secondary" id="mfaRegenerate">${icon("refresh")}${t("settings.mfaNewRecovery")}</button><button class="btn btn-outline" id="mfaDisable" style="color:var(--error);border-color:var(--error)">${icon("x")}${t("settings.mfaDisable")}</button></div>
+    ` : `
+      <div class="field"><label class="label" for="mfaPassword">${t("settings.currentPassword")}</label><input class="input" id="mfaPassword" type="password" autocomplete="current-password"/></div>
+      <button class="btn btn-primary" id="mfaSetup">${icon("shield")}${t("settings.mfaSetup")}</button>
+    `}
+  </div>` : ""}
   ${selfManaged ? `<div class="card pad-lg mt-4">
     <div class="section-title">${t("settings.changePassword")}</div>
     <p class="hint mb-4">${t("settings.changePasswordText")}</p>
@@ -157,9 +172,60 @@ function teamSection() {
 }
 
 async function loadSecurity() {
-  try { securityState = await api.auth.sessions(); securityError = ""; }
+  try {
+    const [sessionState, mfaState] = await Promise.all([api.auth.sessions(), api.auth.mfaStatus()]);
+    securityState = { ...sessionState, mfa: mfaState };
+    securityError = "";
+  }
   catch (error) { securityState = { sessions: [] }; securityError = error.message || "Unknown error"; }
   window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
+
+function showRecoveryCodes(codes) {
+  const values = Array.isArray(codes) ? codes : [];
+  openModal({
+    title: t("settings.mfaRecoveryTitle"),
+    width: 520,
+    body: `<div class="alert warning mb-4"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.mfaRecoverySave")}</div><div class="a-desc">${t("settings.mfaRecoveryOnce")}</div></div></div>
+      <div class="grid cols-2" id="mfaRecoveryCodes">${values.map((code) => `<code class="card pad-sm mono" style="text-align:center">${esc(code)}</code>`).join("")}</div>`,
+    footer: `<button class="btn btn-secondary" id="mfaCopyCodes">${icon("copy")}${t("settings.copy")}</button><button class="btn btn-primary" data-close>${t("settings.done")}</button>`,
+    onMount: (modal) => {
+      modal.querySelector("#mfaCopyCodes").onclick = async () => {
+        await navigator.clipboard.writeText(values.join("\n"));
+        toast("success", t("settings.copied"));
+      };
+    },
+  });
+}
+
+function showMfaSetup(setup) {
+  openModal({
+    title: t("settings.mfaSetupTitle"),
+    width: 520,
+    body: `<p class="hint mb-4">${t("settings.mfaSetupInstructions")}</p>
+      <div style="display:flex;justify-content:center;margin-bottom:16px"><img src="${esc(setup.qrDataUrl)}" width="240" height="240" alt="${esc(t("settings.mfaQrAlt"))}" style="background:#fff;border-radius:6px;padding:8px"/></div>
+      <div class="field"><label class="label">${t("settings.mfaManualKey")}</label><input class="input mono" value="${esc(setup.secret)}" readonly/></div>
+      <div class="field"><label class="label" for="mfaConfirmCode">${t("settings.mfaCode")}</label><input class="input mono" id="mfaConfirmCode" autocomplete="one-time-code" maxlength="6" placeholder="123456"/></div>
+      <div id="mfaSetupError"></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("settings.cancel")}</button><button class="btn btn-primary" id="mfaConfirm">${icon("check")}${t("settings.mfaConfirm")}</button>`,
+    onMount: (modal) => {
+      modal.querySelector("#mfaConfirm").onclick = async () => {
+        const button = modal.querySelector("#mfaConfirm");
+        button.classList.add("loading");
+        try {
+          const result = await api.auth.mfaEnable(modal.querySelector("#mfaConfirmCode").value.trim());
+          securityState.mfa = result;
+          closeOverlay();
+          window.dispatchEvent(new HashChangeEvent("hashchange"));
+          showRecoveryCodes(result.recoveryCodes);
+        } catch (error) {
+          modal.querySelector("#mfaSetupError").innerHTML = `<div class="field-error">${esc(error.message)}</div>`;
+          button.classList.remove("loading");
+        }
+      };
+      modal.querySelector("#mfaConfirmCode").focus();
+    },
+  });
 }
 
 async function loadTeam() {
@@ -237,6 +303,51 @@ function wire(root) {
       } catch (error) { toast("error", t("settings.revokeFailed"), error.message); }
     },
   });
+
+  const mfaSetup = root.querySelector("#mfaSetup");
+  if (mfaSetup) mfaSetup.onclick = async () => {
+    const password = root.querySelector("#mfaPassword").value;
+    if (!password) return toast("warning", t("settings.enterCurrentPassword"));
+    mfaSetup.classList.add("loading");
+    try {
+      showMfaSetup(await api.auth.mfaSetup(password));
+    } catch (error) {
+      toast("error", t("settings.mfaSetupFailed"), error.message);
+    }
+    mfaSetup.classList.remove("loading");
+  };
+  const mfaRegenerate = root.querySelector("#mfaRegenerate");
+  if (mfaRegenerate) mfaRegenerate.onclick = async () => {
+    const code = root.querySelector("#mfaManageCode").value.trim();
+    if (!code) return toast("warning", t("settings.mfaEnterCode"));
+    mfaRegenerate.classList.add("loading");
+    try {
+      const result = await api.auth.mfaRecovery(code);
+      securityState.mfa = result;
+      showRecoveryCodes(result.recoveryCodes);
+    } catch (error) {
+      toast("error", t("settings.mfaRecoveryFailed"), error.message);
+    }
+    mfaRegenerate.classList.remove("loading");
+  };
+  const mfaDisable = root.querySelector("#mfaDisable");
+  if (mfaDisable) mfaDisable.onclick = () => {
+    const code = root.querySelector("#mfaManageCode").value.trim();
+    if (!code) return toast("warning", t("settings.mfaEnterCode"));
+    confirmDialog({
+      title: t("settings.mfaDisableTitle"),
+      message: t("settings.mfaDisableText"),
+      confirmText: t("settings.mfaDisable"),
+      onConfirm: async () => {
+        try {
+          await api.auth.mfaDisable(code);
+          location.reload();
+        } catch (error) {
+          toast("error", t("settings.mfaDisableFailed"), error.message);
+        }
+      },
+    });
+  };
 
   const changePassword = root.querySelector("#changePassword");
   if (changePassword) changePassword.onclick = async () => {

@@ -20,6 +20,7 @@ test("account deletion removes private workspace, onboarding and knowledge", asy
     onboarding: { remove: (id) => calls.push(["onboarding", id]) },
     sessions: { removeUser: (id) => calls.push(["sessions", id]) },
     accountTokens: { removeUser: (id) => calls.push(["tokens", id]) },
+    mfa: { removeUser: (id) => calls.push(["mfa", id]) },
     knowledge: {
       remove: async (note, options) => calls.push(["knowledge", note, options.source]),
     },
@@ -32,9 +33,10 @@ test("account deletion removes private workspace, onboarding and knowledge", asy
     ["sessions", account.id],
     ["tokens", account.id],
   ]);
-  assert.deepEqual(calls.slice(4).map((call) => call[1]), [
+  assert.deepEqual(calls.slice(4, 7).map((call) => call[1]), [
     "Agentic OS/People/usr_test.md",
     "Agentic OS/People/usr_test/SOUL.md",
     "Agentic OS/People/usr_test/MILA Mobile Memory.md",
   ]);
+  assert.deepEqual(calls[7], ["mfa", account.id]);
 });

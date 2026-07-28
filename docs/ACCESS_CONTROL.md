@@ -15,6 +15,12 @@ System configuration includes MCP server management, integration credentials and
 Secrets. Creator is the server owner configured through `CREATOR_NAME`,
 `CREATOR_EMAIL` and `AUTH_TOKEN`. Creator cannot be disabled from the web panel.
 
+Creator and Admin accounts can enable TOTP MFA in **Settings > Security**.
+Password validation happens before a short-lived MFA challenge, and no web or
+mobile session is created until that challenge succeeds. TOTP secrets are
+encrypted at rest; recovery codes are stored only as HMAC digests. See
+[`MFA_SETUP_RU.md`](MFA_SETUP_RU.md).
+
 Public registration is controlled by `ALLOW_REGISTRATION`. A new account always
 starts as Member. Creator or Admin can later change it to Admin, Member or Viewer
 in **Settings > Team**. Changing a role or disabling an account invalidates that

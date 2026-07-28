@@ -10,10 +10,12 @@ import { users } from "./users.js";
 import { accountMailer } from "./mailer.js";
 import { accountTokens } from "./account-tokens.js";
 import { sendVerification } from "./account-recovery.js";
+import { mfa } from "./mfa.js";
 
 const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
 const usedPairingGrants = new Map();
+const usedMfaChallenges = new Map();
 
 export function authEnabled() { return !!config.authToken; }
 
@@ -144,6 +146,42 @@ function createTrackedSession(req, user, kind) {
   });
 }
 
+function mfaChallenge(user, channel) {
+  return sign({
+    exp: Date.now() + 5 * 60 * 1000,
+    kind: "mfa_challenge",
+    channel,
+    jti: crypto.randomUUID(),
+    user: userFromSession({ user }),
+    sessionVersion: Number(user?.sessionVersion) || 1,
+  });
+}
+
+function challengeUser(payload) {
+  if (payload?.kind !== "mfa_challenge" || !payload.jti || !payload.user?.id) return null;
+  if (payload.user.id === "creator") return creatorUser();
+  const user = users.sessionUser(String(payload.user.id));
+  if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
+  return user;
+}
+
+function requireMfa(user, channel, res) {
+  try {
+    if (!mfa.enabled(user)) return false;
+  } catch (error) {
+    res.status(error.status || 503).json({ error: "MFA verification is temporarily unavailable", code: error.code || "mfa_unavailable" });
+    return true;
+  }
+  res.status(202).json({
+    ok: false,
+    mfaRequired: true,
+    challenge: mfaChallenge(user, channel),
+    expiresInSeconds: 300,
+    user: { name: user.name, role: user.role },
+  });
+  return true;
+}
+
 function signedPayload(req) {
   const auth = req.headers?.authorization || "";
   if (auth.startsWith("Bearer ") && !constEq(auth.slice(7), config.authToken)) return verify(auth.slice(7));
@@ -198,6 +236,7 @@ export function loginHandler(req, res) {
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
   }
+  if (requireMfa(user, "web", res)) return;
   const session = createTrackedSession(req, user, "web");
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
   res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
@@ -233,6 +272,7 @@ export function mobileLoginHandler(req, res) {
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
   }
+  if (requireMfa(user, "mobile", res)) return;
   const session = createTrackedSession(req, user, "mobile");
   res.json({
     ok: true,
@@ -275,6 +315,36 @@ export function logoutHandler(req, res) {
   if (payload?.sid && payload.user?.id) sessions.revoke(String(payload.user.id), payload.sid);
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });
+}
+
+export function mfaVerifyHandler(req, res) {
+  try {
+    const now = Date.now();
+    for (const [id, expiresAt] of usedMfaChallenges) {
+      if (expiresAt <= now) usedMfaChallenges.delete(id);
+    }
+    const payload = verify(String(req.body?.challenge || ""));
+    const user = challengeUser(payload);
+    if (!user || usedMfaChallenges.has(payload.jti) || !["web", "mobile"].includes(payload.channel) || !mfa.verify(user, req.body?.code)) {
+      return res.status(401).json({ error: "Invalid or expired MFA challenge", code: "invalid_mfa_challenge" });
+    }
+    usedMfaChallenges.set(payload.jti, Number(payload.exp) || now + 5 * 60 * 1000);
+    const session = createTrackedSession(req, user, payload.channel);
+    governance.recordAudit("account.mfa.login", user.name, user.id, payload.channel);
+    if (payload.channel === "mobile") {
+      return res.json({
+        ok: true,
+        accessToken: mobileSessionToken(user, session.id),
+        expiresInSeconds: 30 * 86400,
+        user: userFromSession({ user }),
+        capabilities: capabilities(user),
+      });
+    }
+    res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
+    res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
+  } catch {
+    res.status(401).json({ error: "Invalid or expired MFA challenge", code: "invalid_mfa_challenge" });
+  }
 }
 export function meHandler(req, res) {
   const user = authenticatedUser(req);

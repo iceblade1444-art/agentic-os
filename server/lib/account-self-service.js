@@ -3,6 +3,7 @@ import { deleteUserAccount } from "./account-lifecycle.js";
 import { authenticatedUser } from "./auth.js";
 import { governance } from "./governance.js";
 import { memberWorkspaces } from "./member-workspace.js";
+import { mfa } from "./mfa.js";
 import { onboarding, userSoulDocument } from "./onboarding.js";
 import { sessions } from "./sessions.js";
 import { users } from "./users.js";
@@ -31,6 +32,7 @@ export async function exportOwnData(user, dependencies = {}) {
   const workspaceStore = dependencies.memberWorkspaces || memberWorkspaces;
   const onboardingStore = dependencies.onboarding || onboarding;
   const sessionStore = dependencies.sessions || sessions;
+  const mfaStore = dependencies.mfa || mfa;
   const state = onboardingStore.get(user);
   const soul = userSoulDocument(user, state);
   return {
@@ -42,6 +44,7 @@ export async function exportOwnData(user, dependencies = {}) {
     workspace: workspaceStore.read(user.id),
     soul,
     sessions: sessionStore.list(user.id),
+    security: { mfa: mfaStore.status(user) },
   };
 }
 

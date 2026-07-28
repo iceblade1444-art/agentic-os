@@ -4,6 +4,7 @@ import { memberWorkspaces } from "./member-workspace.js";
 import { onboarding, safeUserSlug } from "./onboarding.js";
 import { sessions } from "./sessions.js";
 import { accountTokens } from "./account-tokens.js";
+import { mfa } from "./mfa.js";
 import { users } from "./users.js";
 
 export async function deleteUserAccount(id, dependencies = {}) {
@@ -13,6 +14,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const knowledgeStore = dependencies.knowledge || knowledge;
   const sessionStore = dependencies.sessions || sessions;
   const tokenStore = dependencies.accountTokens || accountTokens;
+  const mfaStore = dependencies.mfa || mfa;
   const user = userStore.get(id);
   if (!user) return null;
 
@@ -33,6 +35,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
     });
   }
 
+  mfaStore.removeUser(id);
   return userStore.remove(id);
 }
 

@@ -367,6 +367,7 @@ function renderLogin() {
   const params = new URLSearchParams(location.search);
   const verifyToken = params.get("verify") || "";
   const resetToken = params.get("reset") || "";
+  let mfaChallenge = "";
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
     <label class="login-language" aria-label="${tr("login.language")}">${icon("chat")}<select id="loginLocale">
       ${SUPPORTED_LOCALES.map(([code, label]) => `<option value="${code}" ${getLocale() === code ? "selected" : ""}>${label}</option>`).join("")}
@@ -379,6 +380,7 @@ function renderLogin() {
     <div class="field" id="authNameField"><label class="label" for="loginName">${tr("login.name")}</label><input class="input" id="loginName" autocomplete="name"/></div>
     <div class="field" id="authEmailField"><label class="label" for="loginEmail">${tr("login.email")} <span class="muted" id="creatorHint">${tr("login.creatorHint")}</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
     <div class="field" id="authPasswordField"><label class="label" for="loginPw" id="passwordLabel">${tr("login.password")}</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
+    <div class="field" id="authMfaField"><label class="label" for="loginMfa">${tr("login.mfaCode")}</label><input class="input mono" id="loginMfa" autocomplete="one-time-code" maxlength="16"/><span class="hint">${tr("login.mfaHint")}</span></div>
     <div id="loginErr"></div>
     <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>${tr("login.signIn")}</span></button>
     <button class="btn btn-ghost block" id="forgotPassword" type="button">${tr("login.forgot")}</button>
@@ -396,25 +398,27 @@ function renderLogin() {
     const register = mode === "register";
     const forgot = mode === "forgot";
     const reset = mode === "reset";
+    const mfa = mode === "mfa";
     const terminal = mode === "sent" || mode === "verify";
     qs("#authNameField").hidden = !register;
     qs("#authEmailField").hidden = !(login || register || forgot);
     qs("#authPasswordField").hidden = !(login || register || reset);
+    qs("#authMfaField").hidden = !mfa;
     qs(".login-tabs")?.toggleAttribute("hidden", !(login || register));
     qs("#forgotPassword").hidden = !login || !api.auth.accountRecovery.deliveryReady;
     qs("#authBack").hidden = login || register || mode === "verify";
     qs("#authSubmit").hidden = terminal;
     qs("#creatorHint").hidden = !login;
-    qs("#loginLead").textContent = tr(register ? "login.registerLead" : forgot ? "login.forgotLead" : reset ? "login.resetLead" : mode === "verify" ? "login.verifying" : "login.lead");
-    qs("#authSubmit span").textContent = tr(register ? "login.create" : forgot ? "login.sendReset" : reset ? "login.resetPassword" : "login.signIn");
+    qs("#loginLead").textContent = tr(register ? "login.registerLead" : forgot ? "login.forgotLead" : reset ? "login.resetLead" : mfa ? "login.mfaLead" : mode === "verify" ? "login.verifying" : "login.lead");
+    qs("#authSubmit span").textContent = tr(register ? "login.create" : forgot ? "login.sendReset" : reset ? "login.resetPassword" : mfa ? "login.verifyMfa" : "login.signIn");
     qs("#passwordLabel").textContent = tr(reset ? "login.newPassword" : "login.password");
     qs("#loginPw").autocomplete = register || reset ? "new-password" : "current-password";
     qs("#loginErr").innerHTML = "";
-    if (!terminal) (register ? qs("#loginName") : reset ? qs("#loginPw") : qs("#loginEmail")).focus();
+    if (!terminal) (register ? qs("#loginName") : reset ? qs("#loginPw") : mfa ? qs("#loginMfa") : qs("#loginEmail")).focus();
   };
   form.querySelectorAll("[data-auth-mode]").forEach((button) => button.onclick = () => setMode(button.dataset.authMode));
   qs("#forgotPassword").onclick = () => setMode("forgot");
-  qs("#authBack").onclick = () => setMode("login");
+  qs("#authBack").onclick = () => { mfaChallenge = ""; setMode("login"); };
   setMode("login");
   qs("#loginEmail").focus();
   form.onsubmit = async (e) => {
@@ -422,6 +426,11 @@ function renderLogin() {
     const btn = qs("#authSubmit"); btn.classList.add("loading");
     const body = { email: qs("#loginEmail").value.trim(), password: qs("#loginPw").value };
     try {
+      if (form.dataset.mode === "mfa") {
+        await api.auth.verifyMfa(mfaChallenge, qs("#loginMfa").value.trim());
+        location.reload();
+        return;
+      }
       if (form.dataset.mode === "forgot") {
         await api.auth.forgotPassword(body.email);
         setMode("sent");
@@ -442,14 +451,24 @@ function renderLogin() {
           qs("#loginLead").textContent = tr("login.verificationSent");
           return;
         }
-      } else await api.auth.login(body);
+      } else {
+        const result = await api.auth.login(body);
+        if (result.mfaRequired) {
+          mfaChallenge = result.challenge;
+          qs("#loginPw").value = "";
+          setMode("mfa");
+          btn.classList.remove("loading");
+          return;
+        }
+      }
       location.reload();
     } catch (err) {
       qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || tr("login.failed"))}</div>${err.code === "email_unverified" ? `<button class="btn btn-outline block" id="resendVerification" type="button">${tr("login.resend")}</button>` : ""}`;
       const resend = qs("#resendVerification");
       if (resend) resend.onclick = async () => { await api.auth.resendVerification(body.email); setMode("sent"); qs("#loginLead").textContent = tr("login.verificationSent"); };
       btn.classList.remove("loading");
-      if (!qs("#loginPw").hidden) qs("#loginPw").focus();
+      if (!qs("#loginMfa").hidden) qs("#loginMfa").focus();
+      else if (!qs("#loginPw").hidden) qs("#loginPw").focus();
     }
   };
   if (resetToken) setMode("reset");

@@ -82,6 +82,7 @@ test("personal export contains useful account data without credentials or tokens
         current: true,
       }],
     },
+    mfa: { status: () => ({ eligible: false, enabled: false, recoveryCodesRemaining: 0 }) },
   });
 
   assert.equal(data.format, "agentic-os-personal-export");
@@ -116,6 +117,7 @@ test("self deletion requires exact ownership proof and removes private data", as
     onboarding: { remove: (id) => calls.push(["onboarding", id]) },
     sessions: { removeUser: (id) => calls.push(["sessions", id]) },
     accountTokens: { removeUser: (id) => calls.push(["tokens", id]) },
+    mfa: { removeUser: (id) => calls.push(["mfa", id]) },
     knowledge: {
       remove: async (note) => calls.push(["knowledge", note]),
     },
@@ -150,6 +152,7 @@ test("self deletion requires exact ownership proof and removes private data", as
     ["tokens", user.id],
   ]);
   assert.equal(calls.filter(([kind]) => kind === "knowledge").length, 3);
+  assert.deepEqual(calls.at(-2), ["mfa", user.id]);
   assert.deepEqual(calls.at(-1), ["user", user.id]);
 });
 

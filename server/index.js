@@ -26,7 +26,7 @@ import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import {
   authEnabled, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
-  mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
+  mfaVerifyHandler, mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
   requireWriteAccess, revokeOtherSessionsHandler, revokeSessionHandler, updateUserHandler,
 } from "./lib/auth.js";
 import { deleteUserHandler } from "./lib/account-lifecycle.js";
@@ -36,6 +36,9 @@ import {
 import {
   changeOwnPasswordHandler, deleteOwnAccountHandler, exportOwnDataHandler,
 } from "./lib/account-self-service.js";
+import {
+  mfaDisableHandler, mfaEnableHandler, mfaRecoveryHandler, mfaSetupHandler, mfaStatusHandler,
+} from "./lib/mfa-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -97,6 +100,7 @@ app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), regi
 app.post("/api/auth/mobile/login", rateLimit({ windowMs: 60000, max: 10 }), mobileLoginHandler);
 app.post("/api/auth/mobile/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), mobileRegisterHandler);
 app.post("/api/auth/mobile/exchange", rateLimit({ windowMs: 60000, max: 10 }), mobilePairExchangeHandler);
+app.post("/api/auth/mfa/verify", rateLimit({ windowMs: 5 * 60000, max: 10 }), mfaVerifyHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
 app.post("/api/auth/password/forgot", rateLimit({ windowMs: 10 * 60000, max: 5 }), forgotPasswordHandler);
@@ -110,6 +114,11 @@ app.use("/api", requireAuth);
 app.get("/api/auth/sessions", listSessionsHandler);
 app.delete("/api/auth/sessions/:id", revokeSessionHandler);
 app.post("/api/auth/sessions/revoke-others", revokeOtherSessionsHandler);
+app.get("/api/auth/mfa", mfaStatusHandler);
+app.post("/api/auth/mfa/setup", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaSetupHandler);
+app.post("/api/auth/mfa/enable", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaEnableHandler);
+app.post("/api/auth/mfa/recovery", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaRecoveryHandler);
+app.delete("/api/auth/mfa", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaDisableHandler);
 app.post("/api/auth/account/password", rateLimit({ windowMs: 10 * 60000, max: 5 }), changeOwnPasswordHandler);
 app.get("/api/auth/account/export", exportOwnDataHandler);
 app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
