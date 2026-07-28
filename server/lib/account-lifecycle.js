@@ -2,6 +2,7 @@ import { knowledge } from "./knowledge.js";
 import { governance } from "./governance.js";
 import { memberWorkspaces } from "./member-workspace.js";
 import { onboarding, safeUserSlug } from "./onboarding.js";
+import { sessions } from "./sessions.js";
 import { users } from "./users.js";
 
 export async function deleteUserAccount(id, dependencies = {}) {
@@ -9,11 +10,13 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const workspaceStore = dependencies.memberWorkspaces || memberWorkspaces;
   const onboardingStore = dependencies.onboarding || onboarding;
   const knowledgeStore = dependencies.knowledge || knowledge;
+  const sessionStore = dependencies.sessions || sessions;
   const user = userStore.get(id);
   if (!user) return null;
 
   workspaceStore.remove(id);
   onboardingStore.remove(id);
+  sessionStore.removeUser(id);
 
   const slug = safeUserSlug(user);
   for (const note of [

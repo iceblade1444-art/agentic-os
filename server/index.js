@@ -25,9 +25,9 @@ import routines from "./routes/routines.js";
 import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import {
-  authEnabled, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
+  authEnabled, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
-  requireWriteAccess, updateUserHandler,
+  requireWriteAccess, revokeOtherSessionsHandler, revokeSessionHandler, updateUserHandler,
 } from "./lib/auth.js";
 import { deleteUserHandler } from "./lib/account-lifecycle.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
@@ -96,6 +96,10 @@ app.get("/api/auth/me", meHandler);
 
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
 app.use("/api", requireAuth);
+// Every signed-in role may inspect and revoke only its own sessions.
+app.get("/api/auth/sessions", listSessionsHandler);
+app.delete("/api/auth/sessions/:id", revokeSessionHandler);
+app.post("/api/auth/sessions/revoke-others", revokeOtherSessionsHandler);
 app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin");
 app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);

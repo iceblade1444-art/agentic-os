@@ -3,7 +3,7 @@ import { icon } from "../icons.js";
 import { api } from "../api.js";
 import { toast, esc, confirmDialog } from "../ui.js";
 import { applyTheme } from "../app.js";
-import { t } from "../i18n.js";
+import { localizedDate, t } from "../i18n.js";
 
 const PROVIDERS = {
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
@@ -14,6 +14,8 @@ const PROVIDERS = {
 let tab = "appearance";
 let teamUsers = null;
 let teamError = "";
+let securityState = null;
+let securityError = "";
 
 export default {
   title: "Settings",
@@ -21,8 +23,8 @@ export default {
     const s = store.state;
     const llm = s.settings.llm;
     const tabs = api.auth.canAdmin
-      ? [["appearance", t("settings.appearance")], ["model", t("settings.model")], ["profile", t("settings.profile")], ["team", t("settings.team")], ["workspace", t("settings.workspace")], ["data", t("settings.data")]]
-      : [["appearance", t("settings.appearance")], ["profile", t("settings.profile")], ["workspace", t("settings.assistant")]];
+      ? [["appearance", t("settings.appearance")], ["model", t("settings.model")], ["profile", t("settings.profile")], ["security", t("settings.security")], ["team", t("settings.team")], ["workspace", t("settings.workspace")], ["data", t("settings.data")]]
+      : [["appearance", t("settings.appearance")], ["profile", t("settings.profile")], ["security", t("settings.security")], ["workspace", t("settings.assistant")]];
     if (!tabs.some(([key]) => key === tab)) tab = "appearance";
     return `
     <div class="page-head"><div><div class="page-title">${t("settings.title")}</div><div class="page-sub">${t(api.auth.canAdmin ? "settings.adminSubtitle" : "settings.memberSubtitle")}</div></div></div>
@@ -33,6 +35,7 @@ export default {
     root.querySelectorAll("#setTabs .tab").forEach((b) => (b.onclick = () => { tab = b.dataset.t; window.dispatchEvent(new HashChangeEvent("hashchange")); }));
     wire(root);
     if (tab === "team" && teamUsers === null) loadTeam();
+    if (tab === "security" && securityState === null) loadSecurity();
   },
 };
 
@@ -76,6 +79,8 @@ function section(s, llm) {
       <div class="field"><label class="label">${t("settings.role")}</label><input class="input" value="${esc(s.profile.role)}" readonly/></div>
     </div>`;
 
+  if (tab === "security") return securitySection();
+
   if (tab === "team") return teamSection();
 
   if (tab === "workspace") return `
@@ -96,6 +101,26 @@ function section(s, llm) {
     </div>`;
 }
 
+function securitySection() {
+  if (securityError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.sessionsFailed")}</div><div class="a-desc">${esc(securityError)}</div></div></div>`;
+  if (!securityState) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>${t("settings.sessionsLoading")}</span></div></div>`;
+  const deviceSessions = securityState.sessions || [];
+  return `<div class="card pad-lg">
+    <div class="row between mb-4">
+      <div><div class="section-title">${t("settings.securityTitle")}</div><div class="hint">${t("settings.securityText")}</div></div>
+      ${deviceSessions.length > 1 && !securityState.legacyCurrent ? `<button class="btn btn-outline sm" id="revokeOthers">${icon("lock")}${t("settings.revokeOthers")}</button>` : ""}
+    </div>
+    ${securityState.legacyCurrent ? `<div class="alert warning mb-4"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.legacySession")}</div><div class="a-desc">${t("settings.legacySessionText")}</div></div></div>` : ""}
+    ${deviceSessions.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${t("settings.device")}</th><th>${t("settings.lastActive")}</th><th>${t("settings.access")}</th></tr></thead><tbody>
+      ${deviceSessions.map((session) => `<tr>
+        <td><div class="row gap-2"><span class="badge ${session.kind === "mobile" ? "primary" : "info"}">${t(session.kind === "mobile" ? "settings.mobileSession" : "settings.webSession")}</span>${session.current ? `<span class="badge success">${t("settings.currentSession")}</span>` : ""}</div><div class="cell-sub mt-1">${esc(session.label)}</div></td>
+        <td><div>${localizedDate(session.lastSeenAt, { dateStyle: "medium", timeStyle: "short" })}</div><div class="cell-sub">${t("settings.expires")} ${localizedDate(session.expiresAt, { dateStyle: "medium" })}</div></td>
+        <td><button class="btn btn-outline sm revoke-session" data-session-id="${esc(session.id)}" data-current="${session.current ? "true" : "false"}">${icon("x")}${t("settings.revoke")}</button></td>
+      </tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty-state"><div class="empty-title">${t("settings.noSessions")}</div></div>`}
+  </div>`;
+}
+
 function teamSection() {
   if (teamError) return `<div class="alert error"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.teamFailed")}</div><div class="a-desc">${esc(teamError)}</div></div></div>`;
   if (!teamUsers) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>${t("settings.teamLoading")}</span></div></div>`;
@@ -109,6 +134,12 @@ function teamSection() {
       </tr>`).join("")}
     </tbody></table></div>
   </div>`;
+}
+
+async function loadSecurity() {
+  try { securityState = await api.auth.sessions(); securityError = ""; }
+  catch (error) { securityState = { sessions: [] }; securityError = error.message || "Unknown error"; }
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
 async function loadTeam() {
@@ -152,6 +183,39 @@ function wire(root) {
     button.classList.add("loading");
     try { await api.auth.updateUser(button.dataset.userId, { disabled: button.dataset.disabled !== "true" }); toast("success", t("settings.accessUpdated")); teamUsers = null; loadTeam(); }
     catch (error) { toast("error", t("settings.accessFailed"), error.message); button.classList.remove("loading"); }
+  });
+
+  root.querySelectorAll(".revoke-session").forEach((button) => button.onclick = () => confirmDialog({
+    title: t("settings.revokeTitle"),
+    message: t("settings.revokeText"),
+    confirmText: t("settings.revoke"),
+    onConfirm: async () => {
+      try {
+        const result = await api.auth.revokeSession(button.dataset.sessionId);
+        toast("success", t("settings.revoked"));
+        if (result.currentRevoked) {
+          await api.auth.logout().catch(() => {});
+          location.reload();
+          return;
+        }
+        securityState = null;
+        loadSecurity();
+      } catch (error) { toast("error", t("settings.revokeFailed"), error.message); }
+    },
+  }));
+  const revokeOthers = root.querySelector("#revokeOthers");
+  if (revokeOthers) revokeOthers.onclick = () => confirmDialog({
+    title: t("settings.revokeOthersTitle"),
+    message: t("settings.revokeOthersText"),
+    confirmText: t("settings.revokeOthers"),
+    onConfirm: async () => {
+      try {
+        const result = await api.auth.revokeOtherSessions();
+        toast("success", t("settings.revokedOthers", { count: result.revoked }));
+        securityState = null;
+        loadSecurity();
+      } catch (error) { toast("error", t("settings.revokeFailed"), error.message); }
+    },
   });
 
   const ex = root.querySelector("#exportData");

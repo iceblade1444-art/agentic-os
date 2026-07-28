@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { config } from "../config.js";
 import { governance } from "./governance.js";
+import { sessions } from "./sessions.js";
 import { users } from "./users.js";
 
 const COOKIE = "aos_session";
@@ -61,6 +62,7 @@ export function authenticatedUser(req) {
     if (constEq(token, config.authToken)) return creatorUser();
     const payload = verify(token);
     if (payload?.kind !== "mobile" || !payload.user?.id) return null;
+    if (payload.sid && !sessions.touch(payload.sid, String(payload.user.id))) return null;
     if (payload.user.id === "creator") return creatorUser();
     const user = users.sessionUser(String(payload.user.id));
     if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
@@ -68,6 +70,7 @@ export function authenticatedUser(req) {
   }
   const payload = verify(parseCookies(req)[COOKIE]);
   if (!payload?.user) return null;
+  if (payload.sid && !sessions.touch(payload.sid, String(payload.user.id))) return null;
   if (payload.user.id === "creator") return creatorUser();
   const user = users.sessionUser(String(payload.user.id || ""));
   if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
@@ -108,19 +111,40 @@ export function capabilities(user) {
   };
 }
 
-export function sessionCookie(req, user = creatorUser()) {
-  const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }), sessionVersion: Number(user.sessionVersion) || 1 });
+export function sessionCookie(req, user = creatorUser(), sid = "") {
+  const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }), sessionVersion: Number(user.sessionVersion) || 1, ...(sid ? { sid } : {}) });
   const secure = config.secureCookie || req.secure ? "; Secure" : "";
   return `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 86400}${secure}`;
 }
 
-export function mobileSessionToken(user) {
+export function mobileSessionToken(user, sid = "") {
   return sign({
     exp: Date.now() + 30 * 864e5,
     kind: "mobile",
     user: userFromSession({ user }),
     sessionVersion: Number(user.sessionVersion) || 1,
+    ...(sid ? { sid } : {}),
   });
+}
+
+function requestLabel(req, kind) {
+  const agent = String(req.headers?.["user-agent"] || "").replace(/\s+/g, " ").trim().slice(0, 140);
+  return `${kind === "mobile" ? "MILA mobile" : "Web browser"}${agent ? ` · ${agent}` : ""}`;
+}
+
+function createTrackedSession(req, user, kind) {
+  const days = kind === "mobile" ? 30 : 7;
+  return sessions.create(user.id, {
+    kind,
+    label: requestLabel(req, kind),
+    expiresAt: Date.now() + days * 864e5,
+  });
+}
+
+function signedPayload(req) {
+  const auth = req.headers?.authorization || "";
+  if (auth.startsWith("Bearer ") && !constEq(auth.slice(7), config.authToken)) return verify(auth.slice(7));
+  return verify(parseCookies(req)[COOKIE]);
 }
 
 export function mobilePairingGrant(user) {
@@ -153,9 +177,10 @@ export function mobilePairExchangeHandler(req, res) {
     return res.status(401).json({ error: "Invalid, expired, or already used connection grant" });
   }
   usedPairingGrants.set(payload.jti, Number(payload.exp) || now + 10 * 60 * 1000);
+  const session = createTrackedSession(req, user, "mobile");
   res.json({
     ok: true,
-    accessToken: mobileSessionToken(user),
+    accessToken: mobileSessionToken(user, session.id),
     expiresInSeconds: 30 * 86400,
     user: userFromSession({ user }),
     capabilities: capabilities(user),
@@ -167,14 +192,16 @@ export function loginHandler(req, res) {
   const { email = "", password = "" } = req.body || {};
   const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
-  res.setHeader("Set-Cookie", sessionCookie(req, user));
+  const session = createTrackedSession(req, user, "web");
+  res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
   res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
 }
 export function registerHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
   try {
     const user = users.register(req.body || {});
-    res.setHeader("Set-Cookie", sessionCookie(req, user));
+    const session = createTrackedSession(req, user, "web");
+    res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
     res.status(201).json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
   } catch (error) {
     res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
@@ -186,9 +213,10 @@ export function mobileLoginHandler(req, res) {
   const { email = "", password = "" } = req.body || {};
   const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
+  const session = createTrackedSession(req, user, "mobile");
   res.json({
     ok: true,
-    accessToken: mobileSessionToken(user),
+    accessToken: mobileSessionToken(user, session.id),
     expiresInSeconds: 30 * 86400,
     user: userFromSession({ user }),
     capabilities: capabilities(user),
@@ -199,9 +227,10 @@ export function mobileRegisterHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
   try {
     const user = users.register(req.body || {});
+    const session = createTrackedSession(req, user, "mobile");
     res.status(201).json({
       ok: true,
-      accessToken: mobileSessionToken(user),
+      accessToken: mobileSessionToken(user, session.id),
       expiresInSeconds: 30 * 86400,
       user: userFromSession({ user }),
       capabilities: capabilities(user),
@@ -211,6 +240,8 @@ export function mobileRegisterHandler(req, res) {
   }
 }
 export function logoutHandler(req, res) {
+  const payload = signedPayload(req);
+  if (payload?.sid && payload.user?.id) sessions.revoke(String(payload.user.id), payload.sid);
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });
 }
@@ -223,6 +254,30 @@ export function listUsersHandler(req, res) {
   res.json([creatorUser(), ...users.list()]);
 }
 
+export function listSessionsHandler(req, res) {
+  const user = authenticatedUser(req);
+  const currentId = signedPayload(req)?.sid || "";
+  res.json({ sessions: sessions.list(user.id, currentId), legacyCurrent: !currentId });
+}
+
+export function revokeSessionHandler(req, res) {
+  const user = authenticatedUser(req);
+  const currentId = signedPayload(req)?.sid || "";
+  const revoked = sessions.revoke(user.id, String(req.params.id || ""));
+  if (!revoked) return res.status(404).json({ error: "Session not found" });
+  if (revoked.id === currentId && revoked.kind === "web") {
+    res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  }
+  res.json({ ok: true, revoked, currentRevoked: revoked.id === currentId });
+}
+
+export function revokeOtherSessionsHandler(req, res) {
+  const user = authenticatedUser(req);
+  const currentId = signedPayload(req)?.sid || "";
+  if (!currentId) return res.status(409).json({ error: "Sign in again before revoking other sessions" });
+  res.json({ ok: true, revoked: sessions.revokeOthers(user.id, currentId) });
+}
+
 export function updateUserHandler(req, res) {
   if (req.params.id === "creator") return res.status(400).json({ error: "The Creator account is managed through server configuration" });
   try {
@@ -232,6 +287,7 @@ export function updateUserHandler(req, res) {
     const changes = [];
     if (previous?.role !== user.role) changes.push(`role ${previous.role} -> ${user.role}`);
     if (previous?.disabled !== user.disabled) changes.push(user.disabled ? "account disabled" : "account enabled");
+    if (changes.length) sessions.removeUser(user.id);
     if (changes.length) governance.recordAudit("account.update", req.user?.name, user.id, changes.join("; "));
     res.json(user);
   } catch (error) {
