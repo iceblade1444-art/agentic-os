@@ -7,9 +7,11 @@ import { accountTokens } from "./account-tokens.js";
 import { mfa } from "./mfa.js";
 import { users } from "./users.js";
 
+let configuredWorkspaceStore = memberWorkspaces;
+
 export async function deleteUserAccount(id, dependencies = {}) {
   const userStore = dependencies.users || users;
-  const workspaceStore = dependencies.memberWorkspaces || memberWorkspaces;
+  const workspaceStore = dependencies.memberWorkspaces || configuredWorkspaceStore;
   const onboardingStore = dependencies.onboarding || onboarding;
   const knowledgeStore = dependencies.knowledge || knowledge;
   const sessionStore = dependencies.sessions || sessions;
@@ -18,7 +20,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const user = userStore.get(id);
   if (!user) return null;
 
-  workspaceStore.remove(id);
+  await workspaceStore.remove(id);
   onboardingStore.remove(id);
   sessionStore.removeUser(id);
   tokenStore.removeUser(id);
@@ -37,6 +39,10 @@ export async function deleteUserAccount(id, dependencies = {}) {
 
   mfaStore.removeUser(id);
   return userStore.remove(id);
+}
+
+export function configureAccountWorkspaceStore(store) {
+  configuredWorkspaceStore = store || memberWorkspaces;
 }
 
 export async function deleteUserHandler(req, res) {

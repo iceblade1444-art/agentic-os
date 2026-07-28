@@ -39,6 +39,7 @@ POSTGRES_SHADOW_SYNC_ENABLED=true
 POSTGRES_SHADOW_SYNC_INTERVAL_MS=30000
 POSTGRES_SHADOW_SYNC_DEBOUNCE_MS=500
 POSTGRES_READ_MODE=member
+POSTGRES_WRITE_MODE=member-shadow
 ```
 
 Пароль нельзя добавлять в Git. PostgreSQL доступен только контейнерам
@@ -107,7 +108,7 @@ dashboard, задач и заметок:
   SQL только при полном совпадении;
 - `member` — читать PostgreSQL без двойной проверки.
 
-Авторизация, пароли, MFA и все записи пока остаются на JSON. Если outbox не пуст,
+Авторизация, пароли и MFA пока остаются на JSON. Если outbox не пуст,
 shadow-sync выполняется, PostgreSQL недоступен или canary обнаружил mismatch,
 адаптер автоматически возвращает JSON. Счётчики `database.reads` в `/api/health`
 показывают SQL-чтения и причины fallback без пользовательских данных.
@@ -127,3 +128,30 @@ docker compose up -d --force-recreate agentic-os
 ```
 
 Возврат к PostgreSQL выполняется тем же способом со значением `member`.
+
+## Write-through задач и заметок
+
+`POSTGRES_WRITE_MODE` управляет POST/PATCH/DELETE личных задач и заметок:
+
+- `json` — писать только атомарную JSON rollback-копию;
+- `member-shadow` — сначала записать JSON, затем транзакционно скопировать
+  актуальный workspace пользователя в PostgreSQL.
+
+В режиме `member-shadow` принятая запись не теряется при недоступной базе:
+операция остаётся в JSON и durable outbox, а shadow-sync повторит доставку.
+Транзакционная запись использует тот же PostgreSQL advisory lock, что и полная
+синхронизация, поэтому два процесса не перезаписывают таблицы одновременно.
+Операции одного пользователя дополнительно выполняются последовательно.
+
+Состояние доступно в `/api/health` в объекте `database.writes`: число JSON- и
+PostgreSQL-записей, fallback, очередь пользователей и последняя ограниченная
+ошибка без строки подключения.
+
+Для мгновенного отката только записи:
+
+```dotenv
+POSTGRES_WRITE_MODE=json
+```
+
+После изменения пересоздайте контейнер `agentic-os`. Чтение можно независимо
+оставить в `member` или вернуть в `json`.

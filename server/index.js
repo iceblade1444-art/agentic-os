@@ -18,7 +18,7 @@ import operations from "./routes/operations.js";
 import pulse from "./routes/pulse.js";
 import speech from "./routes/speech.js";
 import onboarding from "./routes/onboarding.js";
-import member, { configureMemberReadAdapter } from "./routes/member.js";
+import member, { configureMemberReadAdapter, configureMemberWriteAdapter } from "./routes/member.js";
 import personal from "./routes/personal.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
@@ -29,7 +29,7 @@ import {
   mfaVerifyHandler, mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
   requireWriteAccess, revokeOtherSessionsHandler, revokeSessionHandler, updateUserHandler,
 } from "./lib/auth.js";
-import { deleteUserHandler } from "./lib/account-lifecycle.js";
+import { configureAccountWorkspaceStore, deleteUserHandler } from "./lib/account-lifecycle.js";
 import {
   forgotPasswordHandler, recoveryStatus, resendVerificationHandler, resetPasswordHandler, verifyEmailHandler,
 } from "./lib/account-recovery.js";
@@ -43,6 +43,7 @@ import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
 import { PostgresMemberReadAdapter } from "./lib/postgres-member-read.js";
+import { PostgresMemberWriteAdapter } from "./lib/postgres-member-write.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
 import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -70,7 +71,15 @@ const postgresMemberReads = new PostgresMemberReadAdapter({
   shadowStatus: () => postgresShadow.status(),
   fallbackStore: memberWorkspaces,
 });
+const postgresMemberWrites = new PostgresMemberWriteAdapter({
+  mode: config.postgres.writeMode,
+  databaseUrl: config.postgres.databaseUrl,
+  shadowStatus: () => postgresShadow.status(),
+  fallbackStore: memberWorkspaces,
+});
 configureMemberReadAdapter(postgresMemberReads);
+configureMemberWriteAdapter(postgresMemberWrites);
+configureAccountWorkspaceStore(postgresMemberWrites);
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 
@@ -118,7 +127,11 @@ app.get("/api/health", (req, res) =>
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
     auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
-    database: { ...postgresShadow.status(), reads: postgresMemberReads.status() },
+    database: {
+      ...postgresShadow.status(),
+      reads: postgresMemberReads.status(),
+      writes: postgresMemberWrites.status(),
+    },
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
@@ -212,6 +225,7 @@ server.listen(config.port, async () => {
 
 async function bye() {
   stopPostgresMutationListener();
+  await postgresMemberWrites.stop();
   await postgresMemberReads.stop();
   await postgresShadow.stop();
   await mcpManager.shutdownAll();

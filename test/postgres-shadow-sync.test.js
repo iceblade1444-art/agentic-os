@@ -128,8 +128,10 @@ test("a mutation during a successful sync schedules one debounced follow-up", as
 test("server health exposes shadow state and shuts the worker down cleanly", async () => {
   const fs = await import("node:fs");
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
-  assert.match(server, /database: \{ \.\.\.postgresShadow\.status\(\), reads: postgresMemberReads\.status\(\) \}/);
+  assert.match(server, /reads: postgresMemberReads\.status\(\)/);
+  assert.match(server, /writes: postgresMemberWrites\.status\(\)/);
   assert.match(server, /postgresShadow\.start\(\)/);
   assert.match(server, /postgresShadow\.enabled && postgresOutbox\.record\(file\)/);
   assert.match(server, /await postgresShadow\.stop\(\)/);
+  assert.match(server, /await postgresMemberWrites\.stop\(\)/);
 });
