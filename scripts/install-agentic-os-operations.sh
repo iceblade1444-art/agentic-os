@@ -110,7 +110,7 @@ After=network-online.target docker.service
 Type=oneshot
 WorkingDirectory=$ROOT
 EnvironmentFile=-$ROOT/.env
-ExecStart=/bin/sh -lc 'AGENTIC_OS_INTERNAL_URL="http://127.0.0.1:\${HOST_PORT:-8787}" exec /usr/bin/npm run prod:e2e'
+ExecStart=/usr/bin/docker compose exec -T -e AGENTIC_OS_INTERNAL_URL=http://127.0.0.1:8787 agentic-os npm run prod:e2e
 EOF
 
 cat > "$UNIT_DIR/agentic-os-deep-check.timer" <<'EOF'
