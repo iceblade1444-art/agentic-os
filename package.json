@@ -11,6 +11,9 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "prod:e2e": "node scripts/production-e2e.mjs",
+    "db:dry-run": "node scripts/postgres-migrate.mjs --dry-run",
+    "db:migrate": "node scripts/postgres-migrate.mjs",
+    "db:verify": "node scripts/postgres-migrate.mjs --verify-only",
     "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
@@ -20,6 +23,7 @@
     "http-proxy": "^1.18.1",
     "livekit-client": "^2.15.14",
     "nodemailer": "^9.0.3",
+    "pg": "8.22.0",
     "qrcode": "^1.5.4",
     "zod": "^3.23.8"
   },

@@ -134,9 +134,22 @@ class Operations:
                         bundle.add(source, arcname=name, recursive=True, filter=self._tar_filter)
                     archives.append(archive.name)
 
+                database_dumps = []
+                postgres_dump = self.postgres_dump(destination)
+                if postgres_dump:
+                    database_dumps.append(postgres_dump.name)
+
                 size = sum(item.stat().st_size for item in destination.rglob("*") if item.is_file())
                 completed = iso()
-                manifest = {"version": 1, "status": "success", "createdAt": completed, "gitHead": git.stdout.strip() or None, "archives": archives, "sizeBytes": size}
+                manifest = {
+                    "version": 2,
+                    "status": "success",
+                    "createdAt": completed,
+                    "gitHead": git.stdout.strip() or None,
+                    "archives": archives,
+                    "databaseDumps": database_dumps,
+                    "sizeBytes": size,
+                }
                 (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
                 os.chmod(destination / "manifest.json", 0o600)
                 removed = self.prune(destination)
@@ -154,6 +167,28 @@ class Operations:
                 self.save(state)
                 self.notify("critical", f"Agentic OS backup failed: {error}")
                 raise
+
+    def postgres_dump(self, destination: Path) -> Path | None:
+        inspect = self.run("docker", "inspect", "--format", "{{.State.Running}}", "agentic-os-postgres")
+        if inspect.returncode != 0 or inspect.stdout.strip() != "true":
+            return None
+        user = os.environ.get("POSTGRES_USER", "agentic_os")
+        database = os.environ.get("POSTGRES_DB", "agentic_os")
+        target = destination / "postgres.dump"
+        with target.open("wb") as output:
+            result = subprocess.run(
+                ["docker", "exec", "agentic-os-postgres", "pg_dump", "-U", user, "-d", database, "--format=custom"],
+                cwd=self.root,
+                stdout=output,
+                stderr=subprocess.PIPE,
+                timeout=120,
+                check=False,
+            )
+        if result.returncode != 0:
+            target.unlink(missing_ok=True)
+            raise RuntimeError(f"PostgreSQL backup failed: {result.stderr.decode('utf-8', 'replace')[:300]}")
+        os.chmod(target, 0o600)
+        return target
 
     @staticmethod
     def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
@@ -215,6 +250,26 @@ class Operations:
                             checked_files += sum(1 for member in members if member.isfile())
                         checked_archives.append(str(archive_name))
 
+                    checked_database_dumps = []
+                    for dump_name in manifest.get("databaseDumps", []):
+                        dump = selected / str(dump_name)
+                        if not dump.is_file() or dump.stat().st_size == 0:
+                            raise RuntimeError(f"missing PostgreSQL dump: {dump_name}")
+                        result = subprocess.run(
+                            ["docker", "exec", "-i", "agentic-os-postgres", "pg_restore", "--list"],
+                            cwd=self.root,
+                            input=dump.read_bytes(),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE,
+                            timeout=120,
+                            check=False,
+                        )
+                        if result.returncode != 0:
+                            raise RuntimeError(
+                                f"invalid PostgreSQL dump: {result.stderr.decode('utf-8', 'replace')[:300]}"
+                            )
+                        checked_database_dumps.append(str(dump_name))
+
                     if not any(target_root.iterdir()):
                         raise RuntimeError("restore drill extracted no files")
 
@@ -226,6 +281,7 @@ class Operations:
                     "backupPath": str(selected),
                     "gitHead": git_head,
                     "archives": checked_archives,
+                    "databaseDumps": checked_database_dumps,
                     "filesChecked": checked_files,
                     "error": None,
                 }
@@ -327,6 +383,7 @@ class Operations:
                 self.check_http(self.health_url, "api", "Agentic OS internal API", include_providers=True),
                 self.check_container("agentic-os", "Agentic OS container"),
                 self.check_container("agentos-runtime", "Agent runtime container"),
+                self.check_container("agentic-os-postgres", "PostgreSQL persistence"),
                 self.check_service("hermes-dashboard.service", "Hermes Dashboard"),
                 self.check_service("agentic-os-hermes-chat.service", "Hermes text bridge"),
                 self.check_disk(),

@@ -11,6 +11,7 @@ services:
     environment:
       - PORT=8787
       - DATA_DIR=/app/data
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-agentic_os}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agentic_os}
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
       - SPEECH_URL=http://speech:4400
@@ -37,6 +38,23 @@ services:
     depends_on:
       - agentos-runtime
       - speech
+      - postgres
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: agentic-os-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agentic_os}
+      POSTGRES_USER: ${POSTGRES_USER:-agentic_os}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentic_os} -d ${POSTGRES_DB:-agentic_os}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
   speech:
     build:
@@ -85,3 +103,4 @@ services:
 
 volumes:
   speech-hf-cache:
+  postgres-data:
