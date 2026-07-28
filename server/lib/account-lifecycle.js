@@ -6,6 +6,7 @@ import { sessions } from "./sessions.js";
 import { accountTokens } from "./account-tokens.js";
 import { mfa } from "./mfa.js";
 import { users } from "./users.js";
+import { commitAuthGroups } from "./auth-persistence.js";
 
 let configuredWorkspaceStore = memberWorkspaces;
 
@@ -38,7 +39,9 @@ export async function deleteUserAccount(id, dependencies = {}) {
   }
 
   mfaStore.removeUser(id);
-  return userStore.remove(id);
+  const removed = userStore.remove(id);
+  await commitAuthGroups("users", "sessions", "mfaRecords", "accountTokens");
+  return removed;
 }
 
 export function configureAccountWorkspaceStore(store) {

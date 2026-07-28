@@ -7,7 +7,7 @@ import { buildPostgresMigrationPlan } from "./postgres-migration.js";
 const { Pool } = pg;
 const SCHEMA = "agentic_os_shadow";
 const MIGRATION_LOCK = 1447145031;
-const MODES = new Set(["json", "shadow"]);
+const MODES = new Set(["json", "shadow", "primary"]);
 const GROUP_BY_FILE = new Map([
   ["users.json", "users"],
   ["sessions.json", "sessions"],
@@ -36,7 +36,8 @@ export class PostgresAuthWriteAdapter {
     this.dataDir = path.resolve(dataDir || ".");
     this.databaseUrl = databaseUrl;
     this.shadowStatus = shadowStatus;
-    this.enabled = this.mode === "shadow" && !!databaseUrl;
+    this.primary = this.mode === "primary";
+    this.enabled = this.mode !== "json" && !!databaseUrl;
     this.ownedPool = !pool && this.enabled;
     this.pool = pool || (this.enabled ? new Pool({
       connectionString: databaseUrl,
@@ -46,7 +47,8 @@ export class PostgresAuthWriteAdapter {
       statement_timeout: 4000,
       query_timeout: 5000,
     }) : null);
-    this.queues = new Map();
+    this.operations = new Map();
+    this.activeGroups = new Set();
     this.metrics = {
       jsonWrites: 0,
       postgresWrites: 0,
@@ -69,7 +71,8 @@ export class PostgresAuthWriteAdapter {
     return {
       enabled: this.enabled,
       mode: this.mode,
-      pendingGroups: this.queues.size,
+      primary: this.primary,
+      pendingGroups: this.activeGroups.size,
       ...this.metrics,
     };
   }
@@ -82,16 +85,17 @@ export class PostgresAuthWriteAdapter {
     this.metrics.lastGroup = group;
     if (!this.enabled) return true;
 
-    if (this.shadowStatus().status !== "ready") {
+    if (!this.primary && this.shadowStatus().status !== "ready") {
       this.#fallback("gate", "shadow_not_ready");
       return true;
     }
 
-    const previous = this.queues.get(group) || Promise.resolve();
+    const previous = this.operations.get(group) || Promise.resolve();
     const current = previous
       .catch(() => {})
       .then(() => this.#sync(group));
-    this.queues.set(group, current);
+    this.operations.set(group, current);
+    this.activeGroups.add(group);
     current
       .then(() => {
         this.metrics.postgresWrites += 1;
@@ -103,13 +107,30 @@ export class PostgresAuthWriteAdapter {
         this.#fallback("query", "query_error");
       })
       .finally(() => {
-        if (this.queues.get(group) === current) this.queues.delete(group);
+        if (this.operations.get(group) === current) this.activeGroups.delete(group);
       });
     return true;
   }
 
+  async commit(groups = []) {
+    if (!this.primary) return { required: false };
+    const selected = (groups.length ? groups : [...this.operations.keys()])
+      .map((group) => this.operations.get(group))
+      .filter(Boolean);
+    if (!selected.length) return { required: true, committed: 0 };
+    try {
+      await Promise.all(selected);
+      return { required: true, committed: selected.length };
+    } catch (cause) {
+      const error = new Error(`Could not commit account change: ${cleanError(cause, this.databaseUrl)}`);
+      error.code = "postgres_commit_failed";
+      error.status = 503;
+      throw error;
+    }
+  }
+
   async stop() {
-    await Promise.allSettled([...this.queues.values()]);
+    await Promise.allSettled([...this.operations.values()]);
     if (this.ownedPool && this.pool) await this.pool.end();
   }
 

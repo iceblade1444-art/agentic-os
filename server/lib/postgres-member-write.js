@@ -2,7 +2,7 @@ import pg from "pg";
 
 const { Pool } = pg;
 const SCHEMA = "agentic_os_shadow";
-const MODES = new Set(["json", "member-shadow"]);
+const MODES = new Set(["json", "member-shadow", "member-primary"]);
 const MIGRATION_LOCK = 1447145031;
 
 const cleanError = (error, databaseUrl = "") => {
@@ -23,7 +23,8 @@ export class PostgresMemberWriteAdapter {
     pool = null,
   } = {}) {
     this.mode = MODES.has(mode) ? mode : "json";
-    this.enabled = this.mode === "member-shadow" && !!databaseUrl;
+    this.primary = this.mode === "member-primary";
+    this.enabled = this.mode !== "json" && !!databaseUrl;
     this.databaseUrl = databaseUrl;
     this.shadowStatus = shadowStatus;
     this.fallbackStore = fallbackStore;
@@ -58,6 +59,7 @@ export class PostgresMemberWriteAdapter {
     return {
       enabled: this.enabled,
       mode: this.mode,
+      primary: this.primary,
       queuedUsers: this.userQueues.size,
       ...this.metrics,
     };
@@ -97,6 +99,7 @@ export class PostgresMemberWriteAdapter {
   }
 
   async #mutate(userId, mutation, { syncOnNoop = false } = {}) {
+    const before = this.primary ? this.fallbackStore.read(userId) : null;
     const result = mutation();
     if ((result === null || result === false) && !syncOnNoop) return result;
     if (result !== null && result !== false) this.metrics.jsonWrites += 1;
@@ -106,6 +109,10 @@ export class PostgresMemberWriteAdapter {
     const shadow = this.shadowStatus();
     if (shadow.status !== "ready") {
       this.#fallback("gate", "shadow_not_ready");
+      if (this.primary) {
+        this.fallbackStore.write(userId, before);
+        throw this.#primaryError("PostgreSQL is not ready");
+      }
       return result;
     }
 
@@ -117,8 +124,19 @@ export class PostgresMemberWriteAdapter {
     } catch (error) {
       this.metrics.error = cleanError(error, this.databaseUrl);
       this.#fallback("query", "query_error");
+      if (this.primary) {
+        this.fallbackStore.write(userId, before);
+        throw this.#primaryError(this.metrics.error);
+      }
     }
     return result;
+  }
+
+  #primaryError(message) {
+    const error = new Error(`Could not commit workspace change: ${message}`);
+    error.code = "postgres_commit_failed";
+    error.status = 503;
+    return error;
   }
 
   #fallback(kind, reason) {

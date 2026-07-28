@@ -138,6 +138,8 @@ docker compose up -d --force-recreate agentic-os
 - `json` — писать только атомарную JSON rollback-копию;
 - `member-shadow` — сначала записать JSON, затем транзакционно скопировать
   актуальный workspace пользователя в PostgreSQL.
+- `member-primary` — принять API-операцию только после PostgreSQL commit; при
+  ошибке SQL локальная JSON-копия автоматически возвращается к прежнему снимку.
 
 В режиме `member-shadow` принятая запись не теряется при недоступной базе:
 операция остаётся в JSON и durable outbox, а shadow-sync повторит доставку.
@@ -205,3 +207,25 @@ PostgreSQL немедленно возвращают авторизацию на
 список пользователей и список устройств. Мутации и аварийный fallback остаются
 на JSON. Метрики доступны как `database.authReads`; содержимого аккаунтов,
 паролей и токенов там нет.
+
+## PostgreSQL primary
+
+Финальный production-режим использует:
+
+```dotenv
+POSTGRES_READ_MODE=member
+POSTGRES_WRITE_MODE=member-primary
+POSTGRES_AUTH_READ_MODE=postgres
+POSTGRES_AUTH_WRITE_MODE=primary
+```
+
+JSON-файлы в primary-режиме не являются источником пользовательских чтений.
+Они сохраняются как локальный write-ahead журнал, аварийная rollback-копия и
+источник проверяемого backup. Записи задач и заметок откатываются при ошибке SQL.
+Критические auth-операции (регистрация, login/session, пароль, MFA, recovery и
+удаление аккаунта) имеют commit-barrier: успешный HTTP-ответ отправляется только
+после подтверждения PostgreSQL.
+
+Для аварийного отката без обратной миграции верните write modes в
+`member-shadow` и `shadow`, а read modes — в `member`/`postgres` либо `json`.
+Перед сменой режима обязательны `npm run db:verify`, backup и restore drill.

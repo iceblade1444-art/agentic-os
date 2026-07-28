@@ -88,6 +88,27 @@ test("a PostgreSQL outage never loses an accepted JSON mutation or exposes its U
   assert.equal(JSON.stringify(adapter.status()).includes(secret), false);
 });
 
+test("member primary requires SQL commit and rolls JSON back on failure", async (t) => {
+  const store = temporaryStore(t);
+  await store.createTask("usr_alpha", { title: "Existing task" });
+  const adapter = new PostgresMemberWriteAdapter({
+    mode: "member-primary",
+    databaseUrl: "postgresql://private",
+    shadowStatus: ready,
+    fallbackStore: store,
+    pool: fakePool({ error: new Error("database unavailable") }),
+  });
+
+  await assert.rejects(
+    adapter.createTask("usr_alpha", { title: "Must not survive" }),
+    (error) => error.code === "postgres_commit_failed" && error.status === 503,
+  );
+
+  assert.deepEqual(store.listTasks("usr_alpha").map((task) => task.title), ["Existing task"]);
+  assert.equal(adapter.status().primary, true);
+  assert.equal(adapter.status().queryFallbacks, 1);
+});
+
 test("shadow readiness gate leaves recovery to the durable outbox", async (t) => {
   const store = temporaryStore(t);
   const pool = fakePool();

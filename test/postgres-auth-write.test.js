@@ -149,6 +149,34 @@ test("auth writes fall back to durable JSON and redact the database URL", async 
   assert.equal(JSON.stringify(adapter.status()).includes(secret), false);
 });
 
+test("auth primary exposes a commit barrier and rejects failed SQL delivery", async (t) => {
+  const dataDir = temporaryData(t);
+  write(path.join(dataDir, "sessions.json"), { sessions: [] });
+  const success = new PostgresAuthWriteAdapter({
+    mode: "primary",
+    dataDir,
+    databaseUrl: "postgresql://private",
+    shadowStatus: () => ({ status: "error" }),
+    pool: fakePool(),
+  });
+  success.request(path.join(dataDir, "sessions.json"));
+  assert.deepEqual(await success.commit(["sessions"]), { required: true, committed: 1 });
+  assert.equal(success.status().primary, true);
+
+  const failed = new PostgresAuthWriteAdapter({
+    mode: "primary",
+    dataDir,
+    databaseUrl: "postgresql://private",
+    shadowStatus: () => ({ status: "error" }),
+    pool: fakePool({ error: new Error("database unavailable") }),
+  });
+  failed.request(path.join(dataDir, "sessions.json"));
+  await assert.rejects(
+    failed.commit(["sessions"]),
+    (error) => error.code === "postgres_commit_failed" && error.status === 503,
+  );
+});
+
 test("json mode and unrelated runtime files never open the auth SQL path", async (t) => {
   const dataDir = temporaryData(t);
   write(path.join(dataDir, "users.json"), { users: [] });

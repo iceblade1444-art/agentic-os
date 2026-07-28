@@ -7,6 +7,7 @@ import { mfa } from "./mfa.js";
 import { onboarding, userSoulDocument } from "./onboarding.js";
 import { sessions } from "./sessions.js";
 import { users } from "./users.js";
+import { commitAuthGroups } from "./auth-persistence.js";
 
 function accountError(message, code, status = 400) {
   const error = new Error(message);
@@ -61,10 +62,11 @@ export async function deleteOwnAccount(user, input = {}, dependencies = {}) {
 
 const clearCookie = "aos_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
 
-export function changeOwnPasswordHandler(req, res) {
+export async function changeOwnPasswordHandler(req, res) {
   try {
     const user = authenticatedUser(req);
     changeOwnPassword(user, req.body);
+    await commitAuthGroups("users", "sessions", "accountTokens");
     governance.recordAudit("account.password.change", user.name, user.id, "all sessions revoked");
     res.setHeader("Set-Cookie", clearCookie);
     res.json({ ok: true, reauthenticationRequired: true });
@@ -91,6 +93,7 @@ export async function deleteOwnAccountHandler(req, res) {
   try {
     const user = authenticatedUser(req);
     const removed = await deleteOwnAccount(user, req.body);
+    await commitAuthGroups("users", "sessions", "mfaRecords", "accountTokens");
     governance.recordAudit("account.delete.self", user.name, removed.id, `role ${removed.role}`);
     res.setHeader("Set-Cookie", clearCookie);
     res.json({ ok: true, deletedUserId: removed.id });

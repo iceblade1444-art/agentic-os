@@ -33,21 +33,21 @@ test("signed user sessions preserve registered user display names", () => {
   assert.equal(userFromSession({}).name, config.creator.name);
 });
 
-test("a mobile pairing grant exchanges once for the same account identity", () => {
+test("a mobile pairing grant exchanges once for the same account identity", async () => {
   const grant = mobilePairingGrant(creatorUser());
   const responses = [];
   const response = {
     status(code) { this.statusCode = code; return this; },
     json(body) { responses.push({ status: this.statusCode || 200, body }); return this; },
   };
-  mobilePairExchangeHandler({ body: { grant } }, response);
+  await mobilePairExchangeHandler({ body: { grant } }, response);
   assert.equal(responses[0].status, 200);
   assert.equal(responses[0].body.user.id, "creator");
   assert.equal(authenticatedUser({
     headers: { authorization: `Bearer ${responses[0].body.accessToken}` },
   }).role, "Creator");
 
-  mobilePairExchangeHandler({ body: { grant } }, response);
+  await mobilePairExchangeHandler({ body: { grant } }, response);
   assert.equal(responses[1].status, 401);
 });
 

@@ -18,7 +18,7 @@ export function configureMemberWriteAdapter(adapter) {
 }
 
 function sendError(res, error) {
-  const status = error.code === "invalid_title" ? 400 : 500;
+  const status = error.status || (error.code === "invalid_title" ? 400 : 500);
   res.status(status).json({ error: error.message, code: error.code });
 }
 

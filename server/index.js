@@ -47,6 +47,7 @@ import { PostgresMemberWriteAdapter } from "./lib/postgres-member-write.js";
 import { PostgresAuthWriteAdapter } from "./lib/postgres-auth-write.js";
 import { PostgresAuthReadAdapter } from "./lib/postgres-auth-read.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
+import { configureAuthWriteAdapter } from "./lib/auth-persistence.js";
 import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
@@ -99,6 +100,7 @@ configureMemberReadAdapter(postgresMemberReads);
 configureMemberWriteAdapter(postgresMemberWrites);
 configureAccountWorkspaceStore(postgresMemberWrites);
 configureAuthReadAdapter(postgresAuthReads);
+configureAuthWriteAdapter(postgresAuthWrites);
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 

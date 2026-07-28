@@ -6,6 +6,7 @@ import { governance } from "./governance.js";
 import { mfa } from "./mfa.js";
 import { sessions } from "./sessions.js";
 import { users } from "./users.js";
+import { commitAuthGroups } from "./auth-persistence.js";
 
 function constEq(left, right) {
   const a = String(left || "");
@@ -33,6 +34,7 @@ export async function mfaSetupHandler(req, res) {
       return res.status(401).json({ error: "Current password is incorrect", code: "invalid_password" });
     }
     const setup = await mfa.begin(user);
+    await commitAuthGroups("mfaRecords");
     governance.recordAudit("account.mfa.setup", user.name, user.id, "pending authenticator confirmation");
     res.json(setup);
   } catch (error) {
@@ -40,10 +42,11 @@ export async function mfaSetupHandler(req, res) {
   }
 }
 
-export function mfaEnableHandler(req, res) {
+export async function mfaEnableHandler(req, res) {
   try {
     const user = authenticatedUser(req);
     const result = mfa.confirm(user, req.body?.code);
+    await commitAuthGroups("mfaRecords");
     governance.recordAudit("account.mfa.enable", user.name, user.id, "TOTP enabled");
     res.json(result);
   } catch (error) {
@@ -51,10 +54,11 @@ export function mfaEnableHandler(req, res) {
   }
 }
 
-export function mfaRecoveryHandler(req, res) {
+export async function mfaRecoveryHandler(req, res) {
   try {
     const user = authenticatedUser(req);
     const result = mfa.regenerateRecoveryCodes(user, req.body?.code);
+    await commitAuthGroups("mfaRecords");
     governance.recordAudit("account.mfa.recovery.regenerate", user.name, user.id, "recovery codes replaced");
     res.json(result);
   } catch (error) {
@@ -62,11 +66,12 @@ export function mfaRecoveryHandler(req, res) {
   }
 }
 
-export function mfaDisableHandler(req, res) {
+export async function mfaDisableHandler(req, res) {
   try {
     const user = authenticatedUser(req);
     const result = mfa.disable(user, req.body?.code);
     sessions.removeUser(user.id);
+    await commitAuthGroups("mfaRecords", "sessions");
     governance.recordAudit("account.mfa.disable", user.name, user.id, "all sessions revoked");
     res.setHeader("Set-Cookie", "aos_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
     res.json({ ...result, reauthenticationRequired: true });

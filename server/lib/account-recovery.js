@@ -3,6 +3,7 @@ import { accountMailer } from "./mailer.js";
 import { accountTokens } from "./account-tokens.js";
 import { sessions } from "./sessions.js";
 import { users } from "./users.js";
+import { commitAuthGroups } from "./auth-persistence.js";
 
 const generic = {
   ok: true,
@@ -17,6 +18,7 @@ function link(kind, token) {
 
 export async function sendVerification(user) {
   const token = accountTokens.create(user.id, "verify_email", 24 * 60 * 60 * 1000);
+  await commitAuthGroups("users", "accountTokens");
   return accountMailer.sendLink({
     to: user.email,
     name: user.name,
@@ -30,6 +32,7 @@ export async function forgotPasswordHandler(req, res) {
   if (user && accountMailer.ready) {
     try {
       const token = accountTokens.create(user.id, "reset_password", 30 * 60 * 1000);
+      await commitAuthGroups("accountTokens");
       await accountMailer.sendLink({
         to: user.email,
         name: user.name,
@@ -52,15 +55,20 @@ export async function resendVerificationHandler(req, res) {
   res.status(202).json(generic);
 }
 
-export function verifyEmailHandler(req, res) {
-  const userId = accountTokens.consume(req.body?.token, "verify_email");
-  if (!userId) return res.status(400).json({ error: "This verification link is invalid or expired", code: "invalid_token" });
-  const user = users.markEmailVerified(userId);
-  if (!user) return res.status(400).json({ error: "This verification link is invalid or expired", code: "invalid_token" });
-  res.json({ ok: true });
+export async function verifyEmailHandler(req, res) {
+  try {
+    const userId = accountTokens.consume(req.body?.token, "verify_email");
+    if (!userId) return res.status(400).json({ error: "This verification link is invalid or expired", code: "invalid_token" });
+    const user = users.markEmailVerified(userId);
+    if (!user) return res.status(400).json({ error: "This verification link is invalid or expired", code: "invalid_token" });
+    await commitAuthGroups("users", "accountTokens");
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message, code: error.code });
+  }
 }
 
-export function resetPasswordHandler(req, res) {
+export async function resetPasswordHandler(req, res) {
   const token = String(req.body?.token || "");
   const password = String(req.body?.password || "");
   if (password.length < 10 || password.length > 256) {
@@ -73,6 +81,7 @@ export function resetPasswordHandler(req, res) {
     if (!user) return res.status(400).json({ error: "This reset link is invalid or expired", code: "invalid_token" });
     sessions.removeUser(userId);
     accountTokens.removeUser(userId);
+    await commitAuthGroups("users", "sessions", "accountTokens");
     res.json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message, code: error.code });

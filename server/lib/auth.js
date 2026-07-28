@@ -11,6 +11,7 @@ import { accountMailer } from "./mailer.js";
 import { accountTokens } from "./account-tokens.js";
 import { sendVerification } from "./account-recovery.js";
 import { mfa } from "./mfa.js";
+import { commitAuthGroups } from "./auth-persistence.js";
 
 const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
@@ -218,7 +219,7 @@ function pairingUser(payload) {
   return user;
 }
 
-export function mobilePairExchangeHandler(req, res) {
+export async function mobilePairExchangeHandler(req, res) {
   const now = Date.now();
   for (const [id, expiresAt] of usedPairingGrants) {
     if (expiresAt <= now) usedPairingGrants.delete(id);
@@ -231,6 +232,13 @@ export function mobilePairExchangeHandler(req, res) {
   }
   usedPairingGrants.set(payload.jti, Number(payload.exp) || now + 10 * 60 * 1000);
   const session = createTrackedSession(req, user, "mobile");
+  try {
+    await commitAuthGroups("sessions");
+  } catch (error) {
+    sessions.revoke(user.id, session.id);
+    await commitAuthGroups("sessions").catch(() => {});
+    return res.status(error.status || 503).json({ error: error.message, code: error.code });
+  }
   res.json({
     ok: true,
     accessToken: mobileSessionToken(user, session.id),
@@ -240,7 +248,7 @@ export function mobilePairExchangeHandler(req, res) {
   });
 }
 
-export function loginHandler(req, res) {
+export async function loginHandler(req, res) {
   if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
   const { email = "", password = "" } = req.body || {};
   const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
@@ -250,33 +258,51 @@ export function loginHandler(req, res) {
   }
   if (requireMfa(user, "web", res)) return;
   const session = createTrackedSession(req, user, "web");
+  try {
+    await commitAuthGroups("sessions");
+  } catch (error) {
+    sessions.revoke(user.id, session.id);
+    await commitAuthGroups("sessions").catch(() => {});
+    return res.status(error.status || 503).json({ error: error.message, code: error.code });
+  }
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
   res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
 }
 export async function registerHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
   if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
+  let createdUser = null;
   try {
     const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    createdUser = user;
     if (config.emailVerificationRequired) {
       try {
         await sendVerification(user);
+        await commitAuthGroups("users", "accountTokens");
         return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
       } catch (error) {
         accountTokens.removeUser(user.id);
         users.remove(user.id);
+        await commitAuthGroups("users", "accountTokens").catch(() => {});
         return res.status(503).json({ error: "Could not send verification email. Try again later." });
       }
     }
     const session = createTrackedSession(req, user, "web");
+    await commitAuthGroups("users", "sessions");
     res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
     res.status(201).json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
   } catch (error) {
-    res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
+    if (error.code === "postgres_commit_failed" && createdUser) {
+      sessions.removeUser(createdUser.id);
+      accountTokens.removeUser(createdUser.id);
+      users.remove(createdUser.id);
+      await commitAuthGroups("users", "sessions", "accountTokens").catch(() => {});
+    }
+    res.status(error.status || (error.code === "email_exists" ? 409 : 400)).json({ error: error.message, code: error.code });
   }
 }
 
-export function mobileLoginHandler(req, res) {
+export async function mobileLoginHandler(req, res) {
   if (!authEnabled()) return res.status(503).json({ error: "Authentication is not configured" });
   const { email = "", password = "" } = req.body || {};
   const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
@@ -286,6 +312,13 @@ export function mobileLoginHandler(req, res) {
   }
   if (requireMfa(user, "mobile", res)) return;
   const session = createTrackedSession(req, user, "mobile");
+  try {
+    await commitAuthGroups("sessions");
+  } catch (error) {
+    sessions.revoke(user.id, session.id);
+    await commitAuthGroups("sessions").catch(() => {});
+    return res.status(error.status || 503).json({ error: error.message, code: error.code });
+  }
   res.json({
     ok: true,
     accessToken: mobileSessionToken(user, session.id),
@@ -298,19 +331,24 @@ export function mobileLoginHandler(req, res) {
 export async function mobileRegisterHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
   if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
+  let createdUser = null;
   try {
     const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    createdUser = user;
     if (config.emailVerificationRequired) {
       try {
         await sendVerification(user);
+        await commitAuthGroups("users", "accountTokens");
         return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
       } catch (error) {
         accountTokens.removeUser(user.id);
         users.remove(user.id);
+        await commitAuthGroups("users", "accountTokens").catch(() => {});
         return res.status(503).json({ error: "Could not send verification email. Try again later." });
       }
     }
     const session = createTrackedSession(req, user, "mobile");
+    await commitAuthGroups("users", "sessions");
     res.status(201).json({
       ok: true,
       accessToken: mobileSessionToken(user, session.id),
@@ -319,17 +357,24 @@ export async function mobileRegisterHandler(req, res) {
       capabilities: capabilities(user),
     });
   } catch (error) {
-    res.status(error.code === "email_exists" ? 409 : 400).json({ error: error.message, code: error.code });
+    if (error.code === "postgres_commit_failed" && createdUser) {
+      sessions.removeUser(createdUser.id);
+      accountTokens.removeUser(createdUser.id);
+      users.remove(createdUser.id);
+      await commitAuthGroups("users", "sessions", "accountTokens").catch(() => {});
+    }
+    res.status(error.status || (error.code === "email_exists" ? 409 : 400)).json({ error: error.message, code: error.code });
   }
 }
-export function logoutHandler(req, res) {
+export async function logoutHandler(req, res) {
   const payload = signedPayload(req);
   if (payload?.sid && payload.user?.id) sessions.revoke(String(payload.user.id), payload.sid);
+  await commitAuthGroups("sessions").catch(() => {});
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });
 }
 
-export function mfaVerifyHandler(req, res) {
+export async function mfaVerifyHandler(req, res) {
   try {
     const now = Date.now();
     for (const [id, expiresAt] of usedMfaChallenges) {
@@ -342,6 +387,7 @@ export function mfaVerifyHandler(req, res) {
     }
     usedMfaChallenges.set(payload.jti, Number(payload.exp) || now + 5 * 60 * 1000);
     const session = createTrackedSession(req, user, payload.channel);
+    await commitAuthGroups("mfaRecords", "sessions");
     governance.recordAudit("account.mfa.login", user.name, user.id, payload.channel);
     if (payload.channel === "mobile") {
       return res.json({
@@ -354,8 +400,11 @@ export function mfaVerifyHandler(req, res) {
     }
     res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
     res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
-  } catch {
-    res.status(401).json({ error: "Invalid or expired MFA challenge", code: "invalid_mfa_challenge" });
+  } catch (error) {
+    res.status(error.status || 401).json({
+      error: error.code === "postgres_commit_failed" ? error.message : "Invalid or expired MFA challenge",
+      code: error.code || "invalid_mfa_challenge",
+    });
   }
 }
 export function meHandler(req, res) {
@@ -378,25 +427,28 @@ export function listSessionsHandler(req, res) {
   });
 }
 
-export function revokeSessionHandler(req, res) {
+export async function revokeSessionHandler(req, res) {
   const user = authenticatedUser(req);
   const currentId = signedPayload(req)?.sid || "";
   const revoked = sessions.revoke(user.id, String(req.params.id || ""));
   if (!revoked) return res.status(404).json({ error: "Session not found" });
+  await commitAuthGroups("sessions");
   if (revoked.id === currentId && revoked.kind === "web") {
     res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   }
   res.json({ ok: true, revoked, currentRevoked: revoked.id === currentId });
 }
 
-export function revokeOtherSessionsHandler(req, res) {
+export async function revokeOtherSessionsHandler(req, res) {
   const user = authenticatedUser(req);
   const currentId = signedPayload(req)?.sid || "";
   if (!currentId) return res.status(409).json({ error: "Sign in again before revoking other sessions" });
-  res.json({ ok: true, revoked: sessions.revokeOthers(user.id, currentId) });
+  const revoked = sessions.revokeOthers(user.id, currentId);
+  await commitAuthGroups("sessions");
+  res.json({ ok: true, revoked });
 }
 
-export function updateUserHandler(req, res) {
+export async function updateUserHandler(req, res) {
   if (req.params.id === "creator") return res.status(400).json({ error: "The Creator account is managed through server configuration" });
   try {
     const previous = users.get(req.params.id);
@@ -406,6 +458,7 @@ export function updateUserHandler(req, res) {
     if (previous?.role !== user.role) changes.push(`role ${previous.role} -> ${user.role}`);
     if (previous?.disabled !== user.disabled) changes.push(user.disabled ? "account disabled" : "account enabled");
     if (changes.length) sessions.removeUser(user.id);
+    await commitAuthGroups("users", ...(changes.length ? ["sessions"] : []));
     if (changes.length) governance.recordAudit("account.update", req.user?.name, user.id, changes.join("; "));
     res.json(user);
   } catch (error) {
