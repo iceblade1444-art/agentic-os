@@ -19,6 +19,7 @@ function publicUser(user) {
     disabled: !!user.disabled,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+    emailVerified: user.emailVerifiedAt !== "",
   };
 }
 
@@ -91,6 +92,7 @@ export class UserStore {
       salt,
       passwordHash,
       sessionVersion: 1,
+      emailVerifiedAt: input.emailVerified === false ? "" : now,
       createdAt: now,
       updatedAt: now,
     };
@@ -108,6 +110,34 @@ export class UserStore {
     const expected = Buffer.from(user.passwordHash, "base64url");
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
     return this.sessionUser(user.id);
+  }
+
+  findByEmail(emailInput) {
+    const email = String(emailInput || "").trim().toLowerCase();
+    return publicUser(this.users.find((item) => item.email === email));
+  }
+
+  markEmailVerified(id) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) return null;
+    user.emailVerifiedAt = new Date().toISOString();
+    user.updatedAt = user.emailVerifiedAt;
+    this.#save();
+    return publicUser(user);
+  }
+
+  setPassword(id, passwordInput) {
+    const user = this.users.find((item) => item.id === id);
+    if (!user) return null;
+    const password = String(passwordInput || "");
+    if (password.length < 10) fail("Password must contain at least 10 characters", "weak_password");
+    if (password.length > 256) fail("Password is too long", "weak_password");
+    user.salt = crypto.randomBytes(16).toString("base64url");
+    user.passwordHash = crypto.scryptSync(password, user.salt, 64).toString("base64url");
+    user.sessionVersion = (Number(user.sessionVersion) || 1) + 1;
+    user.updatedAt = new Date().toISOString();
+    this.#save();
+    return publicUser(user);
   }
 
   update(id, patch = {}) {

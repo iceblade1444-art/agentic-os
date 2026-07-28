@@ -364,6 +364,9 @@ function renderLogin() {
   const app = qs("#app");
   app.removeAttribute("aria-busy");
   const canRegister = api.auth.registration;
+  const params = new URLSearchParams(location.search);
+  const verifyToken = params.get("verify") || "";
+  const resetToken = params.get("reset") || "";
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
     <label class="login-language" aria-label="${tr("login.language")}">${icon("chat")}<select id="loginLocale">
       ${SUPPORTED_LOCALES.map(([code, label]) => `<option value="${code}" ${getLocale() === code ? "selected" : ""}>${label}</option>`).join("")}
@@ -373,11 +376,13 @@ function renderLogin() {
     <p class="brand-sub">Agentic OS</p>
     <p class="muted" id="loginLead" style="text-align:center;margin:6px 0 18px">${tr("login.lead")}</p>
     ${canRegister ? `<div class="login-tabs" role="tablist"><button type="button" class="active" data-auth-mode="login">${tr("login.signIn")}</button><button type="button" data-auth-mode="register">${tr("login.create")}</button></div>` : ""}
-    <div class="field auth-register-only"><label class="label" for="loginName">${tr("login.name")}</label><input class="input" id="loginName" autocomplete="name"/></div>
-    <div class="field"><label class="label" for="loginEmail">${tr("login.email")} <span class="auth-login-only muted">${tr("login.creatorHint")}</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
-    <div class="field"><label class="label" for="loginPw">${tr("login.password")}</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
+    <div class="field" id="authNameField"><label class="label" for="loginName">${tr("login.name")}</label><input class="input" id="loginName" autocomplete="name"/></div>
+    <div class="field" id="authEmailField"><label class="label" for="loginEmail">${tr("login.email")} <span class="muted" id="creatorHint">${tr("login.creatorHint")}</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
+    <div class="field" id="authPasswordField"><label class="label" for="loginPw" id="passwordLabel">${tr("login.password")}</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
     <div id="loginErr"></div>
     <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>${tr("login.signIn")}</span></button>
+    <button class="btn btn-ghost block" id="forgotPassword" type="button">${tr("login.forgot")}</button>
+    <button class="btn btn-ghost block" id="authBack" type="button" hidden>${tr("login.back")}</button>
   </form></div>`;
   const form = qs("#loginForm");
   qs("#loginLocale").onchange = (event) => {
@@ -387,24 +392,78 @@ function renderLogin() {
   const setMode = (mode) => {
     form.dataset.mode = mode;
     form.querySelectorAll("[data-auth-mode]").forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-    qs("#loginLead").textContent = tr(mode === "register" ? "login.registerLead" : "login.lead");
-    qs("#authSubmit span").textContent = tr(mode === "register" ? "login.create" : "login.signIn");
-    qs("#loginPw").autocomplete = mode === "register" ? "new-password" : "current-password";
+    const login = mode === "login";
+    const register = mode === "register";
+    const forgot = mode === "forgot";
+    const reset = mode === "reset";
+    const terminal = mode === "sent" || mode === "verify";
+    qs("#authNameField").hidden = !register;
+    qs("#authEmailField").hidden = !(login || register || forgot);
+    qs("#authPasswordField").hidden = !(login || register || reset);
+    qs(".login-tabs")?.toggleAttribute("hidden", !(login || register));
+    qs("#forgotPassword").hidden = !login;
+    qs("#authBack").hidden = login || register || mode === "verify";
+    qs("#authSubmit").hidden = terminal;
+    qs("#creatorHint").hidden = !login;
+    qs("#loginLead").textContent = tr(register ? "login.registerLead" : forgot ? "login.forgotLead" : reset ? "login.resetLead" : mode === "verify" ? "login.verifying" : "login.lead");
+    qs("#authSubmit span").textContent = tr(register ? "login.create" : forgot ? "login.sendReset" : reset ? "login.resetPassword" : "login.signIn");
+    qs("#passwordLabel").textContent = tr(reset ? "login.newPassword" : "login.password");
+    qs("#loginPw").autocomplete = register || reset ? "new-password" : "current-password";
     qs("#loginErr").innerHTML = "";
-    (mode === "register" ? qs("#loginName") : qs("#loginEmail")).focus();
+    if (!terminal) (register ? qs("#loginName") : reset ? qs("#loginPw") : qs("#loginEmail")).focus();
   };
   form.querySelectorAll("[data-auth-mode]").forEach((button) => button.onclick = () => setMode(button.dataset.authMode));
+  qs("#forgotPassword").onclick = () => setMode("forgot");
+  qs("#authBack").onclick = () => setMode("login");
+  setMode("login");
   qs("#loginEmail").focus();
   form.onsubmit = async (e) => {
     e.preventDefault();
     const btn = qs("#authSubmit"); btn.classList.add("loading");
     const body = { email: qs("#loginEmail").value.trim(), password: qs("#loginPw").value };
     try {
-      if (form.dataset.mode === "register") await api.auth.register({ ...body, name: qs("#loginName").value.trim() });
-      else await api.auth.login(body);
+      if (form.dataset.mode === "forgot") {
+        await api.auth.forgotPassword(body.email);
+        setMode("sent");
+        qs("#loginLead").textContent = tr("login.emailSentText");
+        qs("#loginErr").innerHTML = `<div class="alert success"><div class="a-body"><div class="a-title">${tr("login.emailSent")}</div></div></div>`;
+        return;
+      }
+      if (form.dataset.mode === "reset") {
+        await api.auth.resetPassword(resetToken, body.password);
+        setMode("sent");
+        qs("#loginLead").textContent = tr("login.passwordReset");
+        return;
+      }
+      if (form.dataset.mode === "register") {
+        const result = await api.auth.register({ ...body, name: qs("#loginName").value.trim() });
+        if (result.verificationRequired) {
+          setMode("sent");
+          qs("#loginLead").textContent = tr("login.verificationSent");
+          return;
+        }
+      } else await api.auth.login(body);
       location.reload();
-    } catch (err) { qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || tr("login.failed"))}</div>`; btn.classList.remove("loading"); qs("#loginPw").focus(); }
+    } catch (err) {
+      qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || tr("login.failed"))}</div>${err.code === "email_unverified" ? `<button class="btn btn-outline block" id="resendVerification" type="button">${tr("login.resend")}</button>` : ""}`;
+      const resend = qs("#resendVerification");
+      if (resend) resend.onclick = async () => { await api.auth.resendVerification(body.email); setMode("sent"); qs("#loginLead").textContent = tr("login.verificationSent"); };
+      btn.classList.remove("loading");
+      if (!qs("#loginPw").hidden) qs("#loginPw").focus();
+    }
   };
+  if (resetToken) setMode("reset");
+  if (verifyToken) {
+    setMode("verify");
+    api.auth.verifyEmail(verifyToken).then(() => {
+      qs("#loginLead").textContent = tr("login.emailVerified");
+      qs("#authBack").hidden = false;
+      history.replaceState({}, "", location.pathname);
+    }).catch((error) => {
+      qs("#loginErr").innerHTML = `<div class="field-error">${esc(error.message)}</div>`;
+      qs("#authBack").hidden = false;
+    });
+  }
 }
 function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", t); }
 

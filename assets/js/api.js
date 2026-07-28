@@ -1,7 +1,7 @@
 // Frontend API client + backend detection. When the Node backend is present,
 // MCP / Integrations / Chat use real endpoints; otherwise the app falls back to
 // the local localStorage mock so the static build still works.
-const state = { on: false, health: null, authRequired: false, registration: false, authed: true, user: null, capabilities: {} };
+const state = { on: false, health: null, authRequired: false, registration: false, accountRecovery: {}, authed: true, user: null, capabilities: {} };
 
 async function j(url, opts = {}) {
   const res = await fetch(url, {
@@ -10,7 +10,12 @@ async function j(url, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+  if (!res.ok) {
+    const error = new Error(data.error || "HTTP " + res.status);
+    error.code = data.code || "";
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -26,6 +31,7 @@ export const api = {
         state.on = true;
         state.authRequired = !!state.health.auth;
         state.registration = !!state.health.registration;
+        state.accountRecovery = state.health.accountRecovery || {};
         try {
           const me = await (await fetch("/api/auth/me")).json();
           state.authed = !!me.authed;
@@ -44,6 +50,7 @@ export const api = {
   auth: {
     get user() { return state.user; },
     get registration() { return state.registration; },
+    get accountRecovery() { return state.accountRecovery || {}; },
     get capabilities() { return state.capabilities; },
     get canAdmin() { return !!state.capabilities.canAdmin; },
     get canWrite() { return state.capabilities.canWrite !== false; },
@@ -67,6 +74,10 @@ export const api = {
     sessions: () => j("/api/auth/sessions"),
     revokeSession: (id) => j(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
     revokeOtherSessions: () => j("/api/auth/sessions/revoke-others", { method: "POST" }),
+    forgotPassword: (email) => j("/api/auth/password/forgot", { method: "POST", body: { email } }),
+    resetPassword: (token, password) => j("/api/auth/password/reset", { method: "POST", body: { token, password } }),
+    verifyEmail: (token) => j("/api/auth/email/verify", { method: "POST", body: { token } }),
+    resendVerification: (email) => j("/api/auth/email/resend", { method: "POST", body: { email } }),
     users: () => j("/api/auth/users"),
     updateUser: (id, body) => j(`/api/auth/users/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },

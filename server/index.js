@@ -30,6 +30,9 @@ import {
   requireWriteAccess, revokeOtherSessionsHandler, revokeSessionHandler, updateUserHandler,
 } from "./lib/auth.js";
 import { deleteUserHandler } from "./lib/account-lifecycle.js";
+import {
+  forgotPasswordHandler, recoveryStatus, resendVerificationHandler, resetPasswordHandler, verifyEmailHandler,
+} from "./lib/account-recovery.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import * as mcpManager from "./mcp/manager.js";
@@ -84,7 +87,7 @@ app.get("/api/health", (req, res) =>
       anthropic: !!(config.anthropic.key || db.integrations.byProvider("anthropic")?.config?.apiKey),
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
-    auth: authEnabled(), registration: config.allowRegistration,
+    auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
@@ -93,6 +96,10 @@ app.post("/api/auth/mobile/register", rateLimit({ windowMs: 10 * 60000, max: 5 }
 app.post("/api/auth/mobile/exchange", rateLimit({ windowMs: 60000, max: 10 }), mobilePairExchangeHandler);
 app.post("/api/auth/logout", logoutHandler);
 app.get("/api/auth/me", meHandler);
+app.post("/api/auth/password/forgot", rateLimit({ windowMs: 10 * 60000, max: 5 }), forgotPasswordHandler);
+app.post("/api/auth/password/reset", rateLimit({ windowMs: 10 * 60000, max: 5 }), resetPasswordHandler);
+app.post("/api/auth/email/verify", rateLimit({ windowMs: 10 * 60000, max: 10 }), verifyEmailHandler);
+app.post("/api/auth/email/resend", rateLimit({ windowMs: 10 * 60000, max: 5 }), resendVerificationHandler);
 
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
 app.use("/api", requireAuth);

@@ -7,6 +7,9 @@ import { config } from "../config.js";
 import { governance } from "./governance.js";
 import { sessions } from "./sessions.js";
 import { users } from "./users.js";
+import { accountMailer } from "./mailer.js";
+import { accountTokens } from "./account-tokens.js";
+import { sendVerification } from "./account-recovery.js";
 
 const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
@@ -192,14 +195,28 @@ export function loginHandler(req, res) {
   const { email = "", password = "" } = req.body || {};
   const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
+  if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
+    return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
+  }
   const session = createTrackedSession(req, user, "web");
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
   res.json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
 }
-export function registerHandler(req, res) {
+export async function registerHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
+  if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
   try {
-    const user = users.register(req.body || {});
+    const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    if (config.emailVerificationRequired) {
+      try {
+        await sendVerification(user);
+        return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
+      } catch (error) {
+        accountTokens.removeUser(user.id);
+        users.remove(user.id);
+        return res.status(503).json({ error: "Could not send verification email. Try again later." });
+      }
+    }
     const session = createTrackedSession(req, user, "web");
     res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
     res.status(201).json({ ok: true, user: userFromSession({ user }), capabilities: capabilities(user) });
@@ -213,6 +230,9 @@ export function mobileLoginHandler(req, res) {
   const { email = "", password = "" } = req.body || {};
   const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
+  if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
+    return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
+  }
   const session = createTrackedSession(req, user, "mobile");
   res.json({
     ok: true,
@@ -223,10 +243,21 @@ export function mobileLoginHandler(req, res) {
   });
 }
 
-export function mobileRegisterHandler(req, res) {
+export async function mobileRegisterHandler(req, res) {
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
+  if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
   try {
-    const user = users.register(req.body || {});
+    const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    if (config.emailVerificationRequired) {
+      try {
+        await sendVerification(user);
+        return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
+      } catch (error) {
+        accountTokens.removeUser(user.id);
+        users.remove(user.id);
+        return res.status(503).json({ error: "Could not send verification email. Try again later." });
+      }
+    }
     const session = createTrackedSession(req, user, "mobile");
     res.status(201).json({
       ok: true,
