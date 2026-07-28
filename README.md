@@ -543,15 +543,17 @@ Dockerfile · .env.example · package.json
 
 ## 🔒 Notes
 
-- Fonts (Inter, JetBrains Mono) load from Google Fonts; the UI falls back to system fonts if
-  offline. To self-host, download the fonts and swap the `<link>` in `index.html`.
+- Inter and JetBrains Mono are self-hosted under `assets/fonts`; the interface
+  does not depend on Google Fonts and falls back to system fonts if an asset is
+  unavailable.
 - **What's real with the backend running:** MCP tool discovery & calls, integration credential
   checks, streaming LLM chat, Kanban, Obsidian, Hermes, Claude workspace, personal tasks,
   personal notes and per-user SOUL profiles. Appearance and transient chat UI state remain
   client-side in a separate `localStorage` namespace for every authenticated user.
 - **Observability is host-backed:** after installing the operations units, the dashboard reports
-  real API, Docker, Hermes, disk and backup health. Daily backups include app data, Obsidian and
-  runtime workspaces with configurable retention. See [Operations](docs/OPERATIONS.md).
+  real API, Docker, Hermes, disk and backup health. Daily backups include app data, PostgreSQL,
+  Obsidian, runtime workspaces, and selective Hermes routines/profile memory without provider
+  credentials. See [Operations](docs/OPERATIONS.md).
 - Integration secrets and LLM keys live **server-side** (`.env` and `DATA_DIR/db.json`, both
   git-ignored). The server static-serves only `assets/` + `index.html` — never `.env` or `server/`.
 - **Auth & hardening:** set `AUTH_TOKEN` to require login on `/api/*` (browser session cookie or a
