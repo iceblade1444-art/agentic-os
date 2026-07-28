@@ -16,6 +16,18 @@ const COOKIE = "aos_session";
 const b64 = (buf) => Buffer.from(buf).toString("base64url");
 const usedPairingGrants = new Map();
 const usedMfaChallenges = new Map();
+let authReadAdapter = null;
+
+export function configureAuthReadAdapter(adapter) {
+  authReadAdapter = adapter;
+}
+
+const authenticateAccount = (email, password) =>
+  authReadAdapter ? authReadAdapter.authenticate(email, password) : users.authenticate(email, password);
+const readSessionUser = (id) =>
+  authReadAdapter ? authReadAdapter.sessionUser(id) : users.sessionUser(id);
+const touchSession = (id, userId) =>
+  authReadAdapter ? authReadAdapter.touchSession(id, userId) : sessions.touch(id, userId);
 
 export function authEnabled() { return !!config.authToken; }
 
@@ -67,17 +79,17 @@ export function authenticatedUser(req) {
     if (constEq(token, config.authToken)) return creatorUser();
     const payload = verify(token);
     if (payload?.kind !== "mobile" || !payload.user?.id) return null;
-    if (payload.sid && !sessions.touch(payload.sid, String(payload.user.id))) return null;
+    if (payload.sid && !touchSession(payload.sid, String(payload.user.id))) return null;
     if (payload.user.id === "creator") return creatorUser();
-    const user = users.sessionUser(String(payload.user.id));
+    const user = readSessionUser(String(payload.user.id));
     if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
     return userFromSession({ user });
   }
   const payload = verify(parseCookies(req)[COOKIE]);
   if (!payload?.user) return null;
-  if (payload.sid && !sessions.touch(payload.sid, String(payload.user.id))) return null;
+  if (payload.sid && !touchSession(payload.sid, String(payload.user.id))) return null;
   if (payload.user.id === "creator") return creatorUser();
-  const user = users.sessionUser(String(payload.user.id || ""));
+  const user = readSessionUser(String(payload.user.id || ""));
   if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
   return userFromSession({ user });
 }
@@ -160,7 +172,7 @@ function mfaChallenge(user, channel) {
 function challengeUser(payload) {
   if (payload?.kind !== "mfa_challenge" || !payload.jti || !payload.user?.id) return null;
   if (payload.user.id === "creator") return creatorUser();
-  const user = users.sessionUser(String(payload.user.id));
+  const user = readSessionUser(String(payload.user.id));
   if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
   return user;
 }
@@ -201,7 +213,7 @@ export function mobilePairingGrant(user) {
 function pairingUser(payload) {
   if (payload?.kind !== "mobile_pair" || !payload.jti || !payload.user?.id) return null;
   if (payload.user.id === "creator") return creatorUser();
-  const user = users.sessionUser(String(payload.user.id));
+  const user = readSessionUser(String(payload.user.id));
   if (!user || Number(payload.sessionVersion) !== user.sessionVersion) return null;
   return user;
 }
@@ -231,7 +243,7 @@ export function mobilePairExchangeHandler(req, res) {
 export function loginHandler(req, res) {
   if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
   const { email = "", password = "" } = req.body || {};
-  const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
+  const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
@@ -267,7 +279,7 @@ export async function registerHandler(req, res) {
 export function mobileLoginHandler(req, res) {
   if (!authEnabled()) return res.status(503).json({ error: "Authentication is not configured" });
   const { email = "", password = "" } = req.body || {};
-  const user = email ? users.authenticate(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
+  const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
@@ -352,13 +364,18 @@ export function meHandler(req, res) {
 }
 
 export function listUsersHandler(req, res) {
-  res.json([creatorUser(), ...users.list()]);
+  res.json([creatorUser(), ...(authReadAdapter ? authReadAdapter.listUsers() : users.list())]);
 }
 
 export function listSessionsHandler(req, res) {
   const user = authenticatedUser(req);
   const currentId = signedPayload(req)?.sid || "";
-  res.json({ sessions: sessions.list(user.id, currentId), legacyCurrent: !currentId });
+  res.json({
+    sessions: authReadAdapter
+      ? authReadAdapter.listSessions(user.id, currentId)
+      : sessions.list(user.id, currentId),
+    legacyCurrent: !currentId,
+  });
 }
 
 export function revokeSessionHandler(req, res) {

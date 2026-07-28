@@ -131,9 +131,11 @@ test("server health exposes shadow state and shuts the worker down cleanly", asy
   assert.match(server, /reads: postgresMemberReads\.status\(\)/);
   assert.match(server, /writes: postgresMemberWrites\.status\(\)/);
   assert.match(server, /authWrites: postgresAuthWrites\.status\(\)/);
+  assert.match(server, /authReads: postgresAuthReads\.status\(\)/);
   assert.match(server, /postgresShadow\.start\(\)/);
   assert.match(server, /postgresShadow\.enabled && postgresOutbox\.record\(file\)/);
   assert.match(server, /await postgresShadow\.stop\(\)/);
   assert.match(server, /await postgresMemberWrites\.stop\(\)/);
   assert.match(server, /await postgresAuthWrites\.stop\(\)/);
+  assert.match(server, /await postgresAuthReads\.stop\(\)/);
 });

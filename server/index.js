@@ -25,7 +25,7 @@ import routines from "./routes/routines.js";
 import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import {
-  authEnabled, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
+  authEnabled, configureAuthReadAdapter, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mfaVerifyHandler, mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
   requireWriteAccess, revokeOtherSessionsHandler, revokeSessionHandler, updateUserHandler,
 } from "./lib/auth.js";
@@ -45,11 +45,14 @@ import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
 import { PostgresMemberReadAdapter } from "./lib/postgres-member-read.js";
 import { PostgresMemberWriteAdapter } from "./lib/postgres-member-write.js";
 import { PostgresAuthWriteAdapter } from "./lib/postgres-auth-write.js";
+import { PostgresAuthReadAdapter } from "./lib/postgres-auth-read.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
 import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
 import { memberWorkspaces } from "./lib/member-workspace.js";
+import { sessions } from "./lib/sessions.js";
+import { users } from "./lib/users.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -68,6 +71,13 @@ const postgresAuthWrites = new PostgresAuthWriteAdapter({
   dataDir: config.dataDir,
   databaseUrl: config.postgres.databaseUrl,
   shadowStatus: () => postgresShadow.status(),
+});
+const postgresAuthReads = new PostgresAuthReadAdapter({
+  mode: config.postgres.authReadMode,
+  databaseUrl: config.postgres.databaseUrl,
+  shadowStatus: () => postgresShadow.status(),
+  userStore: users,
+  sessionStore: sessions,
 });
 const stopPostgresMutationListener = onRuntimeFileMutation((file) => {
   postgresAuthWrites.request(file);
@@ -88,6 +98,7 @@ const postgresMemberWrites = new PostgresMemberWriteAdapter({
 configureMemberReadAdapter(postgresMemberReads);
 configureMemberWriteAdapter(postgresMemberWrites);
 configureAccountWorkspaceStore(postgresMemberWrites);
+configureAuthReadAdapter(postgresAuthReads);
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 
@@ -140,6 +151,7 @@ app.get("/api/health", (req, res) =>
       reads: postgresMemberReads.status(),
       writes: postgresMemberWrites.status(),
       authWrites: postgresAuthWrites.status(),
+      authReads: postgresAuthReads.status(),
     },
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
@@ -213,6 +225,7 @@ server.listen(config.port, async () => {
   if (authEnabled()) console.log(`    Auth        : enabled ✓${config.allowCustomMcp ? "   Custom MCP: allowed" : ""}`);
   else console.log(`    \x1b[33mAuth        : DISABLED — set AUTH_TOKEN before exposing this beyond localhost\x1b[0m`);
   postgresShadow.start();
+  postgresAuthReads.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {
@@ -234,6 +247,7 @@ server.listen(config.port, async () => {
 
 async function bye() {
   stopPostgresMutationListener();
+  await postgresAuthReads.stop();
   await postgresAuthWrites.stop();
   await postgresMemberWrites.stop();
   await postgresMemberReads.stop();

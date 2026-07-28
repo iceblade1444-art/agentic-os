@@ -41,6 +41,7 @@ POSTGRES_SHADOW_SYNC_DEBOUNCE_MS=500
 POSTGRES_READ_MODE=member
 POSTGRES_WRITE_MODE=member-shadow
 POSTGRES_AUTH_WRITE_MODE=shadow
+POSTGRES_AUTH_READ_MODE=canary
 ```
 
 Пароль нельзя добавлять в Git. PostgreSQL доступен только контейнерам
@@ -184,3 +185,22 @@ POSTGRES_AUTH_WRITE_MODE=json
 Финальное переключение auth reads на PostgreSQL выполняется только после
 production-canary web/mobile login, logout, смены пароля и восстановления после
 контролируемого отказа базы.
+
+## Canary-чтение авторизации
+
+`POSTGRES_AUTH_READ_MODE` управляет чтением аккаунтов и активных сессий:
+
+- `json` — мгновенный rollback на текущие JSON-store;
+- `canary` — сравнить PostgreSQL-кэш с JSON и использовать SQL только при полном
+  совпадении;
+- `postgres` — использовать проверенный PostgreSQL-кэш.
+
+Кэш обновляется в фоне и никогда не применяется, если shadow-sync не готов,
+outbox не пуст, идёт синхронизация или `sourceHash` кэша отстаёт от последней
+миграции. Поэтому новая регистрация, смена пароля и отзыв сессии немедленно
+читаются из JSON до подтверждённого обновления PostgreSQL.
+
+В canary входят login по email/паролю, проверка подписанной web/mobile-сессии,
+список пользователей и список устройств. Мутации и аварийный fallback остаются
+на JSON. Метрики доступны как `database.authReads`; содержимого аккаунтов,
+паролей и токенов там нет.
