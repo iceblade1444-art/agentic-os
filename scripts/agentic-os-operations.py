@@ -11,11 +11,13 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+import urllib.parse
 
 
 def now() -> dt.datetime:
@@ -73,6 +75,9 @@ class Operations:
             bind = "127.0.0.1"
         self.health_url = os.environ.get("OPS_HEALTH_URL", f"http://{bind}:{os.environ.get('HOST_PORT', '8787')}/api/health")
         self.public_health_url = os.environ.get("OPS_PUBLIC_HEALTH_URL", "").strip()
+        self.auth_token = os.environ.get("AGENTIC_OS_TOKEN", "") or os.environ.get("AUTH_TOKEN", "")
+        livekit_url = os.environ.get("OPS_LIVEKIT_URL", "") or os.environ.get("LIVEKIT_URL", "http://127.0.0.1:7880")
+        self.livekit_url = livekit_url.replace("host.docker.internal", "127.0.0.1")
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
@@ -307,12 +312,19 @@ class Operations:
                 removed.append(item.name)
         return removed
 
+    def fetch_json(self, url: str, authenticated: bool = False) -> tuple[int, dict]:
+        headers = {"Accept": "application/json"}
+        if authenticated and self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=8) as response:
+            return response.status, json.loads(response.read(256_000))
+
     def check_http(self, url: str, check_id: str, label: str, include_providers: bool = False) -> dict:
         try:
-            with urllib.request.urlopen(url, timeout=8) as response:
-                payload = json.loads(response.read(256_000))
-            if response.status != 200 or not payload.get("ok"):
-                raise RuntimeError(f"HTTP {response.status}")
+            status_code, payload = self.fetch_json(url)
+            if status_code != 200 or not payload.get("ok"):
+                raise RuntimeError(f"HTTP {status_code}")
             providers = payload.get("providers", {})
             detail = "API ready"
             if include_providers and providers.get("hermes"):
@@ -320,6 +332,30 @@ class Operations:
             return self.check(check_id, label, "healthy", detail)
         except Exception as error:
             return self.check(check_id, label, "critical", str(error))
+
+    def check_capability(self, pathname: str, check_id: str, label: str, evaluator) -> dict:
+        if not self.auth_token:
+            return self.check(check_id, label, "degraded", "authenticated operations token is not configured")
+        try:
+            base = self.health_url.rsplit("/api/health", 1)[0]
+            status_code, payload = self.fetch_json(f"{base}{pathname}", authenticated=True)
+            if status_code != 200:
+                raise RuntimeError(f"HTTP {status_code}")
+            healthy, detail = evaluator(payload)
+            return self.check(check_id, label, "healthy" if healthy else "critical", detail)
+        except Exception as error:
+            return self.check(check_id, label, "critical", str(error))
+
+    def check_livekit(self) -> dict:
+        try:
+            parsed = urllib.parse.urlparse(self.livekit_url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or (443 if parsed.scheme in {"https", "wss"} else 80)
+            with socket.create_connection((host, port), timeout=5):
+                pass
+            return self.check("livekit", "LiveKit signaling", "healthy", f"{host}:{port} reachable")
+        except Exception as error:
+            return self.check("livekit", "LiveKit signaling", "critical", str(error))
 
     def check_container(self, name: str, label: str) -> dict:
         result = self.run("docker", "inspect", "--format", "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}", name)
@@ -386,6 +422,21 @@ class Operations:
                 self.check_container("agentic-os-postgres", "PostgreSQL persistence"),
                 self.check_service("hermes-dashboard.service", "Hermes Dashboard"),
                 self.check_service("agentic-os-hermes-chat.service", "Hermes text bridge"),
+                self.check_capability(
+                    "/api/integrations/mila/status", "mila", "MILA voice backend",
+                    lambda payload: (
+                        payload.get("ok") is True and payload.get("voiceConfigured") is True,
+                        f"backend ok={payload.get('ok') is True}, voice={payload.get('voiceConfigured') is True}",
+                    ),
+                ),
+                self.check_livekit(),
+                self.check_capability(
+                    "/api/knowledge/status", "obsidian", "Obsidian vault",
+                    lambda payload: (
+                        payload.get("writable") is True,
+                        f"{payload.get('notes', 0)} notes, writable={payload.get('writable') is True}",
+                    ),
+                ),
                 self.check_disk(),
                 self.check_backup(previous),
                 self.check_restore_drill(previous),
@@ -403,7 +454,10 @@ class Operations:
                 "checks": checks,
                 "incidents": incidents[-50:],
                 "activeIncidents": sum(1 for incident in incidents if incident.get("status") == "active"),
-                "schedule": {"monitorEveryMinutes": 5, "backupDailyAt": "03:15", "timezone": "server local time"},
+                "schedule": {
+                    "monitorEveryMinutes": 5, "backupDailyAt": "03:15",
+                    "deepCheckDailyAt": "04:00", "timezone": "server local time",
+                },
             }
             old_status = previous.get("status")
             self.save(state)

@@ -4,6 +4,9 @@
 set -e
 cd "$(dirname "$0")"
 
+echo "· running release test suite…"
+npm test
+
 # 1) ensure .env exists
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -65,6 +68,36 @@ else
 fi
 echo "· building Agentic OS application images…"
 docker compose build agentic-os agentos-runtime
+
+# Validate the just-built image in an isolated candidate container. It uses
+# temporary JSON state and no PostgreSQL adapter, so the production datastore is
+# never touched before the candidate answers its own health probe.
+CANDIDATE_NAME="agentic-os-candidate"
+docker rm -f "$CANDIDATE_NAME" >/dev/null 2>&1 || true
+cleanup_candidate() { docker rm -f "$CANDIDATE_NAME" >/dev/null 2>&1 || true; }
+trap cleanup_candidate EXIT
+docker compose run -d --name "$CANDIDATE_NAME" --no-deps \
+  -e PORT=18787 -e DATA_DIR=/tmp/agentic-os-candidate-data \
+  -e DATABASE_URL= -e POSTGRES_READ_MODE=json -e POSTGRES_WRITE_MODE=json \
+  -e POSTGRES_AUTH_READ_MODE=json -e POSTGRES_AUTH_WRITE_MODE=json \
+  agentic-os >/dev/null
+for _ in $(seq 1 20); do
+  if docker exec "$CANDIDATE_NAME" node -e \
+    "fetch('http://127.0.0.1:18787/api/health').then(r=>r.json()).then(v=>process.exit(v.ok?0:1)).catch(()=>process.exit(1))"; then
+    CANDIDATE_READY=1
+    break
+  fi
+  sleep 1
+done
+[ "${CANDIDATE_READY:-0}" = 1 ] || {
+  docker logs --tail 100 "$CANDIDATE_NAME"
+  echo "Candidate image failed its staging health check" >&2
+  exit 1
+}
+cleanup_candidate
+trap - EXIT
+echo "· candidate staging health passed"
+
 docker compose up -d --no-build
 
 # Keep container-written runtime files readable by the host services that create
@@ -91,8 +124,13 @@ for _ in $(seq 1 15); do
   fi
   sleep 1
 done
-[ "${READY:-0}" = 1 ] || echo "(not ready — check: docker compose logs -f)"
+[ "${READY:-0}" = 1 ] || {
+  echo "(not ready — check: docker compose logs -f)" >&2
+  exit 1
+}
 echo
+AGENTIC_OS_INTERNAL_URL="http://${HEALTH_HOST}:${HOST_PORT}" npm run prod:e2e
+echo "· mandatory post-deploy smoke passed"
 if systemctl --user is-enabled agentic-os-monitor.timer >/dev/null 2>&1; then
   systemctl --user start --no-block agentic-os-monitor.service
   echo "· queued post-deploy operations check"

@@ -7,6 +7,8 @@ import { accountTokens } from "./account-tokens.js";
 import { mfa } from "./mfa.js";
 import { users } from "./users.js";
 import { commitAuthGroups } from "./auth-persistence.js";
+import { googleWorkspace } from "./google-workspace.js";
+import { personalFiles } from "./personal-files.js";
 
 let configuredWorkspaceStore = memberWorkspaces;
 
@@ -18,6 +20,8 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const sessionStore = dependencies.sessions || sessions;
   const tokenStore = dependencies.accountTokens || accountTokens;
   const mfaStore = dependencies.mfa || mfa;
+  const googleStore = dependencies.googleWorkspace || googleWorkspace;
+  const personalFileStore = dependencies.personalFiles || personalFiles;
   const user = userStore.get(id);
   if (!user) return null;
 
@@ -25,6 +29,8 @@ export async function deleteUserAccount(id, dependencies = {}) {
   onboardingStore.remove(id);
   sessionStore.removeUser(id);
   tokenStore.removeUser(id);
+  googleStore.disconnect(id);
+  personalFileStore.removeUser(id);
 
   const slug = safeUserSlug(user);
   for (const note of [

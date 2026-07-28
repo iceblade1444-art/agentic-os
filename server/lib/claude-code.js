@@ -93,14 +93,31 @@ function defaultExecute(bin, args, options = {}) {
 function safeAuth(raw) {
   try {
     const value = JSON.parse(raw || "{}");
+    const rawExpiry = value.expiresAt ?? value.expires_at ?? value.tokenExpiresAt ?? value.token_expires_at;
+    const parsedExpiry = typeof rawExpiry === "number"
+      ? (rawExpiry < 10_000_000_000 ? rawExpiry * 1000 : rawExpiry)
+      : Date.parse(String(rawExpiry || ""));
+    const expiresAt = Number.isFinite(parsedExpiry) ? parsedExpiry : null;
+    const expiresInMs = expiresAt ? expiresAt - Date.now() : null;
+    const loggedIn = value.loggedIn === true;
     return {
-      loggedIn: value.loggedIn === true,
+      loggedIn,
       authMethod: bounded(value.authMethod, 40),
       apiProvider: bounded(value.apiProvider, 40),
       subscriptionType: bounded(value.subscriptionType, 40),
+      expiryKnown: expiresAt !== null,
+      expiresAt,
+      expiresInMs,
+      reauthRequired: !loggedIn || (expiresInMs !== null && expiresInMs <= 0),
+      warning: loggedIn && expiresInMs !== null && expiresInMs > 0 && expiresInMs <= 72 * 60 * 60 * 1000
+        ? "Claude OAuth expires within 72 hours"
+        : "",
     };
   } catch {
-    return { loggedIn: false, authMethod: "unknown", apiProvider: "", subscriptionType: "" };
+    return {
+      loggedIn: false, authMethod: "unknown", apiProvider: "", subscriptionType: "",
+      expiryKnown: false, expiresAt: null, expiresInMs: null, reauthRequired: true, warning: "",
+    };
   }
 }
 
@@ -401,6 +418,11 @@ export function createClaudeCodeManager(options = {}) {
       model: { name: defaultModel, ...modelProbe },
       workRoot,
       auth,
+      authHealth: {
+        checkedAt: Date.now(),
+        state: auth.reauthRequired ? "reauth_required" : auth.warning ? "expiring" : "authenticated",
+        warning: auth.warning,
+      },
       runningSessions: [...running],
       checkedAt: Date.now(),
       error: !version.ok

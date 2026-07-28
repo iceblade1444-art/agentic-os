@@ -2568,6 +2568,17 @@ body.compact .card.pad-lg { padding: 16px; }
   border-right: 1px solid var(--border);
   color: var(--text-3);
 }
+.personal-source:is(button) {
+  width: 100%;
+  background: transparent;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.personal-source:is(button):disabled { cursor: default; }
 .personal-source:last-child { border-right: 0; }
 .personal-source.disabled { opacity: .62; }
 .personal-source-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; background: var(--surface); color: var(--text-2); }
@@ -2612,7 +2623,8 @@ body.compact .card.pad-lg { padding: 16px; }
 .personal-memory-search svg { width: 16px; }
 .personal-memory-search input { border: 0; outline: 0; background: transparent; color: var(--text); }
 .personal-memory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 14px 14px; }
-.personal-memory-grid > a { min-height: 150px; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+.personal-memory-grid > :is(a, article) { min-height: 150px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+.personal-memory-grid > a { grid-template-columns: 32px minmax(0, 1fr); }
 .personal-memory-grid > a:hover { border-color: var(--primary); }
 .personal-memory-glyph { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; background: var(--primary-soft); color: var(--primary); }
 .personal-memory-glyph svg { width: 15px; }

@@ -101,12 +101,38 @@ Unit=agentic-os-restore-drill.service
 WantedBy=default.target
 EOF
 
-chmod 600 "$UNIT_DIR"/agentic-os-{monitor,backup}.{service,timer} "$UNIT_DIR/agentic-os-backup.path" "$UNIT_DIR/agentic-os-restore-drill.service" "$UNIT_DIR/agentic-os-restore-drill.path"
+cat > "$UNIT_DIR/agentic-os-deep-check.service" <<EOF
+[Unit]
+Description=Run the complete Agentic OS production smoke suite
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=$ROOT
+EnvironmentFile=-$ROOT/.env
+ExecStart=/bin/sh -lc 'AGENTIC_OS_INTERNAL_URL="http://127.0.0.1:\${HOST_PORT:-8787}" exec /usr/bin/npm run prod:e2e'
+EOF
+
+cat > "$UNIT_DIR/agentic-os-deep-check.timer" <<'EOF'
+[Unit]
+Description=Run the complete Agentic OS production smoke suite daily
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=10min
+Persistent=true
+Unit=agentic-os-deep-check.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+chmod 600 "$UNIT_DIR"/agentic-os-{monitor,backup,deep-check}.{service,timer} "$UNIT_DIR/agentic-os-backup.path" "$UNIT_DIR/agentic-os-restore-drill.service" "$UNIT_DIR/agentic-os-restore-drill.path"
 systemctl --user daemon-reload
-systemctl --user enable --now agentic-os-monitor.timer agentic-os-backup.timer agentic-os-backup.path agentic-os-restore-drill.path
+systemctl --user enable --now agentic-os-monitor.timer agentic-os-backup.timer agentic-os-deep-check.timer agentic-os-backup.path agentic-os-restore-drill.path
 systemctl --user start agentic-os-backup.service
 systemctl --user start agentic-os-restore-drill.service
 systemctl --user start agentic-os-monitor.service
 
 echo "Agentic OS operations services installed."
-systemctl --user list-timers --all --no-pager | grep -E 'agentic-os-(monitor|backup)' || true
+systemctl --user list-timers --all --no-pager | grep -E 'agentic-os-(monitor|backup|deep-check)' || true

@@ -56,10 +56,10 @@
    задачу и заметку во второй сессии. Второй Member не увидел эти данные. Оба
    временных аккаунта и их workspace затем удалены через self-service API.
 6. Подготовить миграцию `users.json` и персональных данных в PostgreSQL.
-   **Foundation готов:** закрытый PostgreSQL-сервис, нормализованная shadow-схема,
-   транзакционный импорт, dry-run, parity-проверка, обнаружение orphan workspace,
-   `pg_dump` в ежедневной резервной копии и безопасный restore drill. JSON пока
-   остаётся источником истины до отдельного adapter cutover и production soak.
+   **Готово:** PostgreSQL является production source of truth для аккаунтов,
+   сессий, MFA, account tokens, задач и заметок. JSON оставлен только как
+   write-ahead rollback слой; accepted write требует SQL commit, а outbox,
+   parity-проверка, `pg_dump` и restore drill защищают восстановление.
 
 Готово, когда новый пользователь самостоятельно регистрируется, подтверждает
 email, входит в web и Android, видит только свои задачи/заметки/SOUL и может
@@ -89,14 +89,19 @@ email, входит в web и Android, видит только свои зада
 - `server/routes/`
 - `server/store.js`
 
-## Этап 4. Панель Member и Personal
+## Этап 4. Панель Member и Personal — код завершён
 
-1. Оставить операторские экраны только Creator/Admin.
-2. Довести пользовательский dashboard: briefing, задачи, заметки, календарь,
-   файлы, личная память, разрешения и устройства.
-3. Подключить Personal Calendar/Inbox к реальному Google Workspace статусу.
-4. Показывать понятное состояние `не подключено`, а не фиктивные данные.
-5. Синхронизировать изменения web/mobile через сервер, не через localStorage.
+1. Операторские экраны доступны только Creator/Admin.
+2. Member dashboard содержит briefing, задачи, заметки, приватные файлы, личную
+   память, настройки, MFA и управление устройствами.
+3. Personal Calendar/Inbox используют per-user Google OAuth с PKCE,
+   зашифрованными токенами и минимальными read-only scopes.
+4. До подключения показывается честное состояние `не настроено` или
+   `не подключено`; демо-данных нет.
+5. Web/mobile используют один серверный аккаунт, задачи, заметки, профиль и SOUL.
+
+Для production-активации Google нужен внешний Web OAuth client; точный callback
+и переменные перечислены в `docs/RELEASE_READINESS.md`.
 
 ## Этап 5. Полный RU/EN/UZ — завершён
 
@@ -114,15 +119,18 @@ Observability, Integrations и MCP используют общий словар�
 Готово, когда переключение языка меняет весь текущий экран без перезагрузки и
 нет смешения языков кроме пользовательского контента.
 
-## Этап 6. Интеграции и эксплуатация
+## Этап 6. Интеграции и эксплуатация — завершён
 
-1. Повторно авторизовать Claude Workspace и добавить раннее предупреждение об
-   истечении OAuth.
-2. Расширить Google OAuth scopes только для реально включаемых функций.
-3. Добавить ежедневную проверку Agentic OS, MILA, LiveKit, Hermes, Obsidian и
-   резервных копий.
-4. Добавить staging перед production и обязательный smoke test после deploy.
-5. Подключить метрики задержки voice-to-voice, ошибок STT и завершения turn.
+1. Claude Workspace авторизован; статус различает `authenticated`, `expiring`
+   и `reauth_required`. Реальный model probe выполняется из UI и ежедневного
+   production smoke, потому что Claude CLI может не возвращать дату OAuth.
+2. Google OAuth запрашивает только Calendar read-only и Gmail read-only.
+3. Пятиминутный monitor и ежедневный deep check проверяют Agentic OS, MILA,
+   LiveKit, Hermes, Obsidian, PostgreSQL, backup и restore drill.
+4. `deploy.sh` сначала запускает тесты, затем изолированный candidate container,
+   и только после его health меняет production; post-deploy E2E обязателен.
+5. Пассивная voice telemetry считает response latency, STT warnings, ошибки и
+   completion rate без записи аудио или текста разговора.
 
 ## Обязательная проверка каждого релиза
 

@@ -8,6 +8,7 @@ const tabs = [
   ["today", "home"],
   ["soul", "brain"],
   ["memory", "knowledge"],
+  ["files", "file"],
   ["approvals", "guardrails"],
   ["account", "user"],
 ];
@@ -74,6 +75,12 @@ function sourceRow(name, key, glyph, target = "") {
   return target ? `<a class="personal-source" href="${target}">${body}</a>` : `<div class="personal-source disabled">${body}</div>`;
 }
 
+function googleSource(name, key, glyph) {
+  const value = data.sources[key];
+  const body = `<span class="personal-source-icon">${icon(glyph)}</span><span><strong>${name}</strong><small class="${stateTone(value)}">${stateLabel(value)}</small></span>${icon("chevright")}`;
+  return `<button type="button" class="personal-source ${data.google?.configured ? "" : "disabled"}" data-google-connect ${data.google?.configured ? "" : "disabled"}>${body}</button>`;
+}
+
 function todayView() {
   const focus = data.briefing.focus;
   const briefing = briefingCopy();
@@ -104,7 +111,7 @@ function todayView() {
     </div>
     <section class="personal-sources">
       <header><div><span>${t("personal.daySources")}</span><h3>${t("personal.connections")}</h3></div></header>
-      <div>${sourceRow(t("personal.source.tasks"), "tasks", "evaluations", "#/my-tasks")}${sourceRow(t("personal.source.notes"), "notes", "knowledge", "#/my-notes")}${sourceRow("MILA", "mila", "mic", "#/chat")}${sourceRow(t("personal.source.calendar"), "calendar", "calendar")}${sourceRow(t("personal.source.inbox"), "inbox", "mail")}</div>
+      <div>${sourceRow(t("personal.source.tasks"), "tasks", "evaluations", "#/my-tasks")}${sourceRow(t("personal.source.notes"), "notes", "knowledge", "#/my-notes")}${sourceRow("MILA", "mila", "mic", "#/chat")}${googleSource(t("personal.source.calendar"), "calendar", "calendar")}${googleSource(t("personal.source.inbox"), "inbox", "mail")}</div>
     </section>
   </section>`;
 }
@@ -155,6 +162,21 @@ function memoryView(query = "") {
   </section>`;
 }
 
+function fileSize(value) {
+  return value < 1024 ? `${value} B` : `${Math.round(value / 1024)} KB`;
+}
+
+function filesView() {
+  return `<section class="personal-panel personal-memory">
+    <header><div><span>${t("personal.privateFiles")}</span><h3>${t("personal.fileLibrary")}</h3></div><label class="btn btn-primary sm">${icon("plus")}${t("personal.upload")}<input type="file" data-personal-file hidden></label></header>
+    <div class="personal-memory-grid">${data.files?.length ? data.files.map((item) => `<article>
+      <span class="personal-memory-glyph">${icon("file")}</span>
+      <div><strong>${esc(item.name)}</strong><p>${esc(item.type)} · ${fileSize(item.size)}</p><small>${shortDate(item.createdAt)}</small></div>
+      <div><a class="icon-btn" href="/api/personal/files/${encodeURIComponent(item.id)}/download" title="${t("personal.download")}">${icon("download")}</a><button class="icon-btn" data-file-delete="${esc(item.id)}" title="${t("personal.delete")}">${icon("trash")}</button></div>
+    </article>`).join("") : `<div class="personal-empty wide">${icon("file")}<strong>${t("personal.noFiles")}</strong><span>${t("personal.filesHint")}</span></div>`}</div>
+  </section>`;
+}
+
 function approvalsView() {
   return `<section class="personal-panel personal-approvals">
     <header><div><span>${t("personal.actionSafety")}</span><h3>${t("personal.approvalQueue")}</h3></div><span class="badge ${data.approvals.length ? "warning" : "success"}">${t("personal.waitingCount", { count: data.approvals.length })}</span></header>
@@ -185,6 +207,7 @@ function content() {
   if (!data) return `<div class="member-loading"><span></span><span></span><span></span></div>`;
   if (activeTab === "soul") return soulView();
   if (activeTab === "memory") return memoryView();
+  if (activeTab === "files") return filesView();
   if (activeTab === "approvals") return approvalsView();
   if (activeTab === "account") return accountView();
   return todayView();
@@ -202,6 +225,44 @@ async function reload(root, tab = activeTab) {
 }
 
 function wire(root) {
+  root.querySelector("[data-personal-file]")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",").at(-1));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await api.personal.uploadFile({ name: file.name, type: file.type, base64 });
+      await reload(root, "files");
+      toast("success", t("personal.fileUploaded"));
+    } catch (error) { toast("error", t("personal.fileError"), error.message); }
+  });
+  root.querySelectorAll("[data-file-delete]").forEach((button) => button.onclick = async () => {
+    button.disabled = true;
+    try {
+      await api.personal.deleteFile(button.dataset.fileDelete);
+      await reload(root, "files");
+    } catch (error) { button.disabled = false; toast("error", t("personal.fileError"), error.message); }
+  });
+  root.querySelectorAll("[data-google-connect]").forEach((button) => button.onclick = async () => {
+    button.disabled = true;
+    try {
+      if (data.google?.connected) {
+        await api.personal.googleDisconnect();
+        await reload(root, "today");
+        toast("success", t("personal.googleDisconnected"));
+      } else {
+        const result = await api.personal.googleConnect();
+        location.assign(result.authorizationUrl);
+      }
+    } catch (error) {
+      button.disabled = false;
+      toast("error", t("personal.googleError"), error.message);
+    }
+  });
   root.querySelectorAll("[data-personal-tab]").forEach((button) => button.onclick = () => openTab(root, button.dataset.personalTab));
   root.querySelectorAll("[data-open-tab]").forEach((button) => button.onclick = () => openTab(root, button.dataset.openTab));
   root.querySelector("[data-personal-new]")?.addEventListener("click", () => {

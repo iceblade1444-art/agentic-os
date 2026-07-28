@@ -22,7 +22,14 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   const execute = async (_bin, args, options) => {
     calls.push({ args, options });
     if (args[0] === "--version") return { ok: true, stdout: "2.1.214 (Claude Code)\n", stderr: "" };
-    if (args[0] === "auth") return { ok: true, stdout: JSON.stringify({ loggedIn: true, authMethod: "claude.ai", email: "must-not-leak@example.com", subscriptionType: "max" }), stderr: "" };
+    if (args[0] === "auth") return {
+      ok: true,
+      stdout: JSON.stringify({
+        loggedIn: true, authMethod: "claude.ai", email: "must-not-leak@example.com",
+        subscriptionType: "max", expiresAt: Date.now() + 60 * 60 * 1000,
+      }),
+      stderr: "",
+    };
     return { ok: true, stdout: JSON.stringify({ session_id: "cli_session_1", result: "Implemented and tested.", duration_ms: 2500, num_turns: 2 }), stderr: "" };
   };
   const manager = createClaudeCodeManager({
@@ -35,6 +42,8 @@ test("Claude workspace persists safe sessions and resumable messages", async (t)
   const status = await manager.status();
   assert.equal(status.ready, true);
   assert.equal(JSON.stringify(status).includes("must-not-leak"), false);
+  assert.equal(status.authHealth.state, "expiring");
+  assert.match(status.authHealth.warning, /72 hours/);
 
   const created = manager.createSession({ title: "Demo project", workdir: path.join(dirs.work, "demo") });
   const completed = await manager.message(created.id, {

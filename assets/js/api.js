@@ -22,6 +22,7 @@ async function j(url, opts = {}) {
 export const api = {
   get on() { return state.on; },
   get health() { return state.health; },
+  voiceMetric: (body) => j("/api/telemetry/voice", { method: "POST", body }),
   serverHasLLM() { const p = state.health?.providers || {}; return state.on && Object.values(p).some(Boolean); },
   async detect() {
     try {
@@ -125,6 +126,11 @@ export const api = {
   },
   personal: {
     dashboard: () => j("/api/personal"),
+    googleConnect: () => j("/api/personal/google/connect", { method: "POST" }),
+    googleDisconnect: () => j("/api/personal/google", { method: "DELETE" }),
+    files: () => j("/api/personal/files"),
+    uploadFile: (body) => j("/api/personal/files", { method: "POST", body }),
+    deleteFile: (id) => j(`/api/personal/files/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   memory: {
     snapshot: () => j("/api/memory"),

@@ -31,6 +31,8 @@ to the same commit before a release is considered complete.
 
 - Separate navigation and route allowlist
 - Personal home, Personal workspace, MILA chat, tasks, notes, and settings
+- Private Personal file library with account-scoped downloads and cleanup
+- Per-user Google Calendar/Gmail OAuth readiness with least-privilege scopes
 - No access to operator pages or privileged APIs
 - Per-user task and note storage
 - Per-user onboarding profile and `SOUL.md`
@@ -59,7 +61,7 @@ to the same commit before a release is considered complete.
 
 ## Verified checks
 
-- Node test suite: 181 passed, 1 intentionally skipped, 0 failed.
+- Node test suite: 184 passed, 1 intentionally skipped, 0 failed.
 - Flutter test suite: 18 passed, 0 failed.
 - Android release build: successful.
 - Public SPA and health production E2E: successful.
@@ -91,6 +93,9 @@ Android output:
 
 ## Remaining external configuration
 
+The product code and release pipeline are complete. Two provider activations
+still require credentials owned by the deployment administrator.
+
 Password-reset and email-verification code is implemented, but production email
 delivery is not configured. Until SMTP is configured:
 
@@ -114,3 +119,16 @@ Do not commit real SMTP credentials to Git. After configuration, verify that
 `/api/health` reports `accountRecovery.deliveryReady: true`, then test
 registration confirmation and password reset with a real mailbox.
 
+Google Personal integration requires an OAuth client of type **Web application**.
+The previously downloaded `installed` client with a localhost redirect cannot
+be used by the production web application. Configure:
+
+```dotenv
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=https://agent.milanapremium.uz/api/personal/google/callback
+```
+
+Add the same HTTPS callback to the Google Cloud OAuth client. Tokens are stored
+per user with AES-256-GCM encryption; only `calendar.readonly` and
+`gmail.readonly` are requested. Never commit the client secret.

@@ -65,6 +65,11 @@ export const config = {
   secureCookie: env.SECURE_COOKIE === "true",            // set true behind HTTPS
   allowRegistration: env.ALLOW_REGISTRATION === "true", // public sign-up creates Member accounts
   publicUrl: strip(env.PUBLIC_URL, "http://localhost:8787"),
+  googleWorkspace: {
+    clientId: env.GOOGLE_OAUTH_CLIENT_ID || "",
+    clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET || "",
+    redirectUri: env.GOOGLE_OAUTH_REDIRECT_URI || `${strip(env.PUBLIC_URL, "http://localhost:8787")}/api/personal/google/callback`,
+  },
   emailVerificationRequired: env.EMAIL_VERIFICATION_REQUIRED === "true",
   mail: {
     host: env.SMTP_HOST || "",

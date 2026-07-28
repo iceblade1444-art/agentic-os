@@ -19,15 +19,21 @@ function controller() {
   return { signal: item.signal, cancel: () => clearTimeout(timer) };
 }
 
-async function request(base, path, { auth = false, json = true } = {}) {
+async function request(base, path, { auth = false, json = true, method = "GET", body } = {}) {
   const url = `${base}${path}`;
   const abort = controller();
   try {
-    const headers = auth && token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await fetch(url, { headers, signal: abort.signal });
-    const body = json ? await response.json().catch(() => ({})) : await response.text();
+    const headers = {
+      ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    };
+    const response = await fetch(url, {
+      method, headers, signal: abort.signal,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const responseBody = json ? await response.json().catch(() => ({})) : await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return body;
+    return responseBody;
   } finally {
     abort.cancel();
   }
@@ -53,6 +59,7 @@ async function checkBase(base) {
     check("Health API", async () => {
       const health = await request(base, "/api/health");
       if (!health.ok) throw new Error("health payload is not ok");
+      if (health.database?.sourceOfTruth !== "postgres") throw new Error(`database source is ${health.database?.sourceOfTruth || "unknown"}`);
       return `providers=${Object.entries(health.providers || {}).filter(([, ready]) => ready).map(([key]) => key).join(",") || "none"}`;
     }),
   ];
@@ -78,15 +85,27 @@ async function checkBase(base) {
       }),
       check("Obsidian library", async () => {
         const knowledge = await request(base, "/api/knowledge/status", { auth: true });
+        if (knowledge.writable !== true) throw new Error("vault is not writable");
         return `${knowledge.notes || 0} notes, writable=${knowledge.writable === true}`;
       }),
       check("MILA integration", async () => {
         const mila = await request(base, "/api/integrations/mila/status", { auth: true });
-        return mila.ok ? `ok voice=${mila.voiceConfigured === true}` : (mila.error || "unavailable");
+        if (!mila.ok || mila.voiceConfigured !== true) throw new Error(mila.error || "voice backend is not configured");
+        const room = await request(base, "/api/integrations/mila/livekit-token", {
+          auth: true, method: "POST", body: { language: "auto" },
+        });
+        if (!room.serverUrl || !room.participantToken) throw new Error("LiveKit room token was not minted");
+        return "backend and LiveKit token ready";
       }),
       check("Hermes control", async () => {
         const hermes = await request(base, "/api/hermes/control/status", { auth: true });
-        return hermes.ready ? "ready" : (hermes.error || "unavailable");
+        if (!hermes.ready) throw new Error(hermes.error || "Hermes is unavailable");
+        return "ready";
+      }),
+      check("Claude Workspace", async () => {
+        const claude = await request(base, "/api/claude-code/status?probe=true", { auth: true });
+        if (!claude.ready) throw new Error(claude.error || claude.authHealth?.warning || "Claude is unavailable");
+        return `${claude.model?.resolved || claude.defaultModel || "model"} authenticated`;
       }),
     );
   }

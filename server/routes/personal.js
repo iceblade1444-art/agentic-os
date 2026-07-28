@@ -5,6 +5,8 @@ import { memberWorkspaces } from "../lib/member-workspace.js";
 import { onboarding, userSoulDocument } from "../lib/onboarding.js";
 import { personalBriefing } from "../lib/personal.js";
 import { pendingApprovals } from "../lib/pulse.js";
+import { googleWorkspace } from "../lib/google-workspace.js";
+import { personalFiles } from "../lib/personal-files.js";
 
 const r = Router();
 
@@ -22,6 +24,8 @@ r.get("/", async (req, res, next) => {
     const approvalResult = operator ? await settle(pendingApprovals(), null) : [];
     const approvals = Array.isArray(approvalResult) ? approvalResult : [];
     const soul = userSoulDocument(user, state);
+    const google = googleWorkspace.status(user.id);
+    const files = personalFiles.list(user.id);
 
     res.json({
       account: user,
@@ -33,6 +37,7 @@ r.get("/", async (req, res, next) => {
       counts: dashboard.counts,
       tasks: dashboard.tasks,
       notes: dashboard.notes,
+      files,
       approvals,
       approvalsAvailable: operator ? approvalResult !== null : false,
       briefing: personalBriefing(user, dashboard, state, approvals),
@@ -46,11 +51,68 @@ r.get("/", async (req, res, next) => {
         notes: "connected",
         soul: state.profile?.completedAt ? "connected" : "setup_required",
         mila: "connected",
-        calendar: "not_connected",
-        inbox: "not_connected",
+        calendar: google.connected ? "connected" : google.configured ? "setup_required" : "not_connected",
+        inbox: google.connected ? "connected" : google.configured ? "setup_required" : "not_connected",
+        files: "connected",
       },
+      google,
     });
   } catch (error) { next(error); }
+});
+
+r.get("/files", (req, res) => {
+  const user = req.user || authenticatedUser(req);
+  res.json({ files: personalFiles.list(user.id) });
+});
+
+r.post("/files", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.status(201).json({ file: personalFiles.add(user.id, req.body) });
+  } catch (error) { next(error); }
+});
+
+r.get("/files/:id/download", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    const item = personalFiles.get(user.id, req.params.id);
+    res.setHeader("Content-Type", item.type);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(item.name)}`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(item.buffer);
+  } catch (error) { next(error); }
+});
+
+r.delete("/files/:id", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.json(personalFiles.remove(user.id, req.params.id));
+  } catch (error) { next(error); }
+});
+
+r.get("/google/status", (req, res) => {
+  const user = req.user || authenticatedUser(req);
+  res.json(googleWorkspace.status(user.id));
+});
+
+r.post("/google/connect", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.json(googleWorkspace.connect(user.id));
+  } catch (error) { next(error); }
+});
+
+r.get("/google/callback", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    await googleWorkspace.callback(user.id, req.query.code, req.query.state);
+    res.redirect("/#/personal");
+  } catch (error) { next(error); }
+});
+
+r.delete("/google", (req, res) => {
+  const user = req.user || authenticatedUser(req);
+  res.json(googleWorkspace.disconnect(user.id));
 });
 
 export default r;

@@ -276,6 +276,7 @@ class MilaSessionHub {
     this.statusPromise = null;
     this.timer = null;
     this.claudeWatchers = new Set();
+    this.voiceTiming = { thinkingAt: 0, speakingAt: 0 };
     this.state = {
       phase: "checking", error: "", backendReady: false,
       model: "gemini-3.1-flash-live-preview", language: initialLanguage(),
@@ -453,6 +454,7 @@ class MilaSessionHub {
       onTranscriptWarning: () => {
         this.state.transcriptWarning += 1;
         this.state.partials.user = "";
+        this.metric("stt_warning");
         this.notify();
       },
       onPartial: (role, value) => { this.state.partials[role] = value; this.notify(); },
@@ -469,10 +471,12 @@ class MilaSessionHub {
     this.session = live;
     try {
       await live.start();
+      this.metric("session_started");
     } catch (error) {
       if (this.session === live) this.session = null;
       this.state.phase = "error";
       this.state.error = error.message || "Could not start Mila Live";
+      this.metric("session_error");
       this.stopTimer();
       this.notify();
       throw error;
@@ -481,9 +485,22 @@ class MilaSessionHub {
 
   handleState(live, phase, error = "") {
     if (live !== this.session && phase !== "connecting") return;
+    const previous = this.state.phase;
     this.state.phase = phase;
     this.state.error = error || "";
     if (phase === "listening" && !this.state.startedAt) this.startTimer();
+    if (phase === "thinking" && previous !== "thinking") {
+      this.voiceTiming.thinkingAt = Date.now();
+      this.metric("turn_input");
+    }
+    if (phase === "speaking" && previous !== "speaking") {
+      this.voiceTiming.speakingAt = Date.now();
+      this.metric("turn_response", this.voiceTiming.thinkingAt ? Date.now() - this.voiceTiming.thinkingAt : null);
+    }
+    if (phase === "listening" && previous === "speaking") {
+      this.metric("turn_completed", this.voiceTiming.speakingAt ? Date.now() - this.voiceTiming.speakingAt : null);
+      this.voiceTiming = { thinkingAt: 0, speakingAt: 0 };
+    }
     if (phase === "idle") {
       if (this.session === live) this.session = null;
       this.state.sendingTurn = false;
@@ -492,6 +509,7 @@ class MilaSessionHub {
       this.stopTimer();
     }
     if (phase === "error") {
+      this.metric("session_error");
       const shouldCleanup = this.session === live && !!this.state.startedAt;
       if (this.session === live) this.session = null;
       this.state.sendingTurn = false;
@@ -511,6 +529,16 @@ class MilaSessionHub {
       }
     }
     this.notify();
+  }
+
+  metric(event, valueMs = null) {
+    api.voiceMetric({
+      event,
+      valueMs,
+      transport: this.state.preferences.transport,
+      model: this.state.model,
+      language: this.state.language,
+    }).catch(() => {});
   }
 
   startTimer() {
@@ -542,6 +570,7 @@ class MilaSessionHub {
     const live = this.session;
     this.session = null;
     if (live) await live.stop();
+    if (live) this.metric("session_ended");
     this.state.phase = this.state.backendReady ? "idle" : "error";
     this.state.error = this.state.backendReady ? "" : this.state.error;
     this.state.transcriptionMode = "gemini";
