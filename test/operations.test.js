@@ -104,7 +104,8 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(productionE2e, /\/api\/knowledge\/status/);
   assert.match(productionE2e, /\/api\/integrations\/mila\/livekit-token/);
   assert.match(productionE2e, /method:\s*"POST"/);
-  assert.match(productionE2e, /\/api\/claude-code\/status\?probe=true/);
+  assert.match(productionE2e, /\/api\/claude-code\/status\?probe=\$\{internal\}/);
+  assert.match(productionE2e, /timeout: internal \? 60000/);
   assert.match(deploy, /candidate staging health passed/);
   assert.match(deploy, /mandatory post-deploy smoke passed/);
   assert.match(deploy, /docker run --rm agentic-os:latest npm test/);

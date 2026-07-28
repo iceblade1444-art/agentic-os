@@ -13,15 +13,15 @@ function baseUrls() {
   return [...new Set(values)];
 }
 
-function controller() {
+function controller(duration = timeoutMs) {
   const item = new AbortController();
-  const timer = setTimeout(() => item.abort(), timeoutMs);
+  const timer = setTimeout(() => item.abort(), duration);
   return { signal: item.signal, cancel: () => clearTimeout(timer) };
 }
 
-async function request(base, path, { auth = false, json = true, method = "GET", body } = {}) {
+async function request(base, path, { auth = false, json = true, method = "GET", body, timeout = timeoutMs } = {}) {
   const url = `${base}${path}`;
-  const abort = controller();
+  const abort = controller(timeout);
   try {
     const headers = {
       ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
@@ -103,7 +103,10 @@ async function checkBase(base) {
         return "ready";
       }),
       check("Claude Workspace", async () => {
-        const claude = await request(base, "/api/claude-code/status?probe=true", { auth: true });
+        const internal = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(base);
+        const claude = await request(base, `/api/claude-code/status?probe=${internal}`, {
+          auth: true, timeout: internal ? 60000 : timeoutMs,
+        });
         if (!claude.ready) throw new Error(claude.error || claude.authHealth?.warning || "Claude is unavailable");
         return `${claude.model?.resolved || claude.defaultModel || "model"} authenticated`;
       }),

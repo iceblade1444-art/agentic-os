@@ -6,7 +6,6 @@ data
 .gitignore
 Dockerfile
 .dockerignore
-test
 agentos-runtime/agents/queue.json
 agentos-runtime/approvals
 agentos-runtime/artifacts
