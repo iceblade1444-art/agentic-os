@@ -118,7 +118,10 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(runtimeFiles, /fs\.chownSync\(file, config\.runtimeFiles\.uid, config\.runtimeFiles\.gid\)/);
 });
 
-test("host backup can be restore-drilled without touching source data", { skip: process.platform === "win32" }, (t) => {
+const hasPython = process.platform !== "win32"
+  && spawnSync("python3", ["--version"], { encoding: "utf8" }).status === 0;
+
+test("host backup can be restore-drilled without touching source data", { skip: !hasPython }, (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-ops-drill-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   fs.mkdirSync(path.join(dir, "data"), { recursive: true });
