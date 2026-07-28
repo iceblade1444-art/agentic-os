@@ -66,6 +66,8 @@ const postgresShadow = new PostgresShadowSync({
   intervalMs: config.postgres.shadowSyncIntervalMs,
   debounceMs: config.postgres.shadowSyncDebounceMs,
   outbox: postgresOutbox,
+  replayOnly: config.postgres.writeMode === "member-primary"
+    && config.postgres.authWriteMode === "primary",
 });
 const postgresAuthWrites = new PostgresAuthWriteAdapter({
   mode: config.postgres.authWriteMode,
@@ -149,6 +151,8 @@ app.get("/api/health", (req, res) =>
     },
     auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
     database: {
+      sourceOfTruth: postgresMemberWrites.primary && postgresAuthWrites.primary ? "postgres" : "hybrid",
+      jsonRole: postgresMemberWrites.primary && postgresAuthWrites.primary ? "write-ahead-rollback" : "primary-shadow",
       ...postgresShadow.status(),
       reads: postgresMemberReads.status(),
       writes: postgresMemberWrites.status(),

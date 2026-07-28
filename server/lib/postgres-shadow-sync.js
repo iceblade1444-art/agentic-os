@@ -19,6 +19,7 @@ export class PostgresShadowSync {
     debounceMs = 500,
     migrate = migratePostgresShadow,
     outbox = null,
+    replayOnly = false,
   } = {}) {
     this.enabled = !!enabled && !!databaseUrl;
     this.dataDir = dataDir;
@@ -27,12 +28,13 @@ export class PostgresShadowSync {
     this.debounceMs = Math.max(100, Number(debounceMs) || 500);
     this.migrate = migrate;
     this.outbox = outbox;
+    this.replayOnly = !!replayOnly;
     this.timer = null;
     this.debounceTimer = null;
     this.currentRun = null;
     this.resyncRequested = false;
     this.state = {
-      mode: "shadow",
+      mode: this.replayOnly ? "primary-replay" : "shadow",
       status: this.enabled ? "pending" : "disabled",
       lastAttemptAt: null,
       lastSuccessAt: null,
@@ -65,8 +67,17 @@ export class PostgresShadowSync {
   start() {
     if (!this.enabled || this.timer) return;
     void this.run();
-    this.timer = setInterval(() => void this.run(), this.intervalMs);
+    this.timer = setInterval(() => void this.tick(), this.intervalMs);
     this.timer.unref?.();
+  }
+
+  tick() {
+    if (!this.replayOnly) return this.run();
+    const outbox = this.outbox?.status();
+    if (this.state.status !== "ready" || outbox?.error || (outbox?.pending || 0) > 0) {
+      return this.run();
+    }
+    return { skipped: true, reason: "primary_idle" };
   }
 
   request() {

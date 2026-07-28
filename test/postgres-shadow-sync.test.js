@@ -125,6 +125,36 @@ test("a mutation during a successful sync schedules one debounced follow-up", as
   assert.equal(sync.debounceTimer, null);
 });
 
+test("primary replay skips idle intervals and runs only for recovery work", async () => {
+  let pending = 0;
+  let calls = 0;
+  const outbox = {
+    snapshot: () => pending ? [{ id: "evt_primary" }] : [],
+    acknowledge: () => { pending = 0; },
+    status: () => ({ pending, oldestAt: null, bytes: 0, error: null }),
+  };
+  const sync = new PostgresShadowSync({
+    enabled: true,
+    databaseUrl: "postgresql://private",
+    replayOnly: true,
+    outbox,
+    migrate: async () => {
+      calls += 1;
+      return { ok: true, sourceHash: "d".repeat(64), sourceCounts: {} };
+    },
+  });
+
+  await sync.run();
+  assert.equal(sync.status().mode, "primary-replay");
+  assert.deepEqual(sync.tick(), { skipped: true, reason: "primary_idle" });
+  assert.equal(calls, 1);
+
+  pending = 1;
+  await sync.tick();
+  assert.equal(calls, 2);
+  assert.equal(pending, 0);
+});
+
 test("server health exposes shadow state and shuts the worker down cleanly", async () => {
   const fs = await import("node:fs");
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
