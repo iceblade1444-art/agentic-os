@@ -1,30 +1,31 @@
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { closeOverlay, confirmDialog, esc, openModal, toast } from "../ui.js";
+import { getLocale, t } from "../i18n.js";
 
 const dateLabel = (value) => {
-  if (!value) return "No due date";
+  if (!value) return t("member.noDue");
   const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).format(date);
 };
 
 const updatedLabel = (value) => {
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? "" : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  return Number.isNaN(date.valueOf()) ? "" : new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).format(date);
 };
 
 const loading = () => `<div class="member-loading"><span></span><span></span><span></span></div>`;
-const failure = (message) => `<div class="empty member-empty">${icon("alert")}<h4>Could not load your workspace</h4><p>${esc(message)}</p></div>`;
+const failure = (message) => `<div class="empty member-empty">${icon("alert")}<h4>${t("member.loadFailed")}</h4><p>${esc(message)}</p></div>`;
 
 function taskForm(task = {}) {
   return `
-    <div class="field"><label class="label" for="memberTaskTitle">Title</label><input class="input" id="memberTaskTitle" maxlength="160" value="${esc(task.title || "")}" autofocus/></div>
-    <div class="field"><label class="label" for="memberTaskDetail">Details</label><textarea class="textarea" id="memberTaskDetail" maxlength="4000" rows="5">${esc(task.detail || "")}</textarea></div>
+    <div class="field"><label class="label" for="memberTaskTitle">${t("member.title")}</label><input class="input" id="memberTaskTitle" maxlength="160" value="${esc(task.title || "")}" autofocus/></div>
+    <div class="field"><label class="label" for="memberTaskDetail">${t("member.details")}</label><textarea class="textarea" id="memberTaskDetail" maxlength="4000" rows="5">${esc(task.detail || "")}</textarea></div>
     <div class="member-form-row">
-      <div class="field"><label class="label" for="memberTaskPriority">Priority</label><select class="select" id="memberTaskPriority">
-        ${["low", "normal", "high"].map((value) => `<option value="${value}" ${(task.priority || "normal") === value ? "selected" : ""}>${value[0].toUpperCase() + value.slice(1)}</option>`).join("")}
+      <div class="field"><label class="label" for="memberTaskPriority">${t("member.priority")}</label><select class="select" id="memberTaskPriority">
+        ${["low", "normal", "high"].map((value) => `<option value="${value}" ${(task.priority || "normal") === value ? "selected" : ""}>${t(`member.priority.${value}`)}</option>`).join("")}
       </select></div>
-      <div class="field"><label class="label" for="memberTaskDue">Due date</label><input class="input" id="memberTaskDue" type="date" value="${esc(task.dueDate || "")}"/></div>
+      <div class="field"><label class="label" for="memberTaskDue">${t("member.dueDate")}</label><input class="input" id="memberTaskDue" type="date" value="${esc(task.dueDate || "")}"/></div>
     </div>
     <div class="field-error hidden" data-form-error></div>`;
 }
@@ -32,10 +33,10 @@ function taskForm(task = {}) {
 function openTaskEditor(task, onSaved) {
   const editing = !!task?.id;
   openModal({
-    title: editing ? "Edit task" : "New task",
+    title: t(editing ? "member.editTask" : "member.newTask"),
     width: 560,
     body: taskForm(task),
-    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" data-save>${icon("save")}<span>${editing ? "Save changes" : "Create task"}</span></button>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.cancel")}</button><button class="btn btn-primary" data-save>${icon("save")}<span>${t(editing ? "member.saveChanges" : "member.createTask")}</span></button>`,
     onMount: (modal) => {
       modal.querySelector("[data-save]").onclick = async () => {
         const button = modal.querySelector("[data-save]");
@@ -50,7 +51,7 @@ function openTaskEditor(task, onSaved) {
         try {
           const saved = editing ? await api.member.updateTask(task.id, body) : await api.member.createTask(body);
           closeOverlay();
-          toast("success", editing ? "Task updated" : "Task created");
+          toast("success", t(editing ? "member.taskUpdated" : "member.taskCreated"));
           onSaved(saved);
         } catch (saveError) {
           error.textContent = saveError.message;
@@ -67,7 +68,7 @@ function taskRow(task, compact = false) {
     <span class="member-priority ${esc(task.priority)}"></span>
     <div class="member-task-copy"><strong>${esc(task.title)}</strong>${task.detail ? `<p>${esc(task.detail)}</p>` : ""}</div>
     <span class="member-due ${task.dueDate && task.dueDate <= new Date().toISOString().slice(0, 10) ? "due" : ""}">${icon("calendar")}${esc(dateLabel(task.dueDate))}</span>
-    ${compact ? `<span class="badge ${task.status === "doing" ? "warning" : "neutral"}">${task.status === "doing" ? "In progress" : "To do"}</span>` : ""}
+    ${compact ? `<span class="badge ${task.status === "doing" ? "warning" : "neutral"}">${t(task.status === "doing" ? "member.status.doing" : "member.status.todo")}</span>` : ""}
   </article>`;
 }
 
@@ -80,27 +81,27 @@ export const memberHome = {
       const name = esc(data.account?.name?.split(/\s+/)[0] || "there");
       root.innerHTML = `
         <div class="page-head member-welcome">
-          <div><p class="member-eyebrow">Personal workspace</p><h1 class="page-title">Hello, ${name}</h1><p class="page-sub">Your tasks, notes and Mila assistant are ready.</p></div>
+          <div><p class="member-eyebrow">${t("member.workspace")}</p><h1 class="page-title">${t("member.hello", { name })}</h1><p class="page-sub">${t("member.homeSubtitle")}</p></div>
           <div class="spacer"></div>
-          <a class="btn btn-secondary" href="#/chat">${icon("chat")}Ask Mila</a>
-          <a class="btn btn-primary" href="#/my-tasks/new">${icon("plus")}New task</a>
+          <a class="btn btn-secondary" href="#/chat">${icon("chat")}${t("member.askMila")}</a>
+          <a class="btn btn-primary" href="#/my-tasks/new">${icon("plus")}${t("member.newTask")}</a>
         </div>
         <div class="grid cols-4 member-stats">
           ${[
-            ["Open tasks", data.counts.open, "evaluations"],
-            ["In progress", data.counts.doing, "activity"],
-            ["Due now", data.counts.due, "calendar"],
-            ["Notes", data.counts.notes, "knowledge"],
+            [t("member.openTasks"), data.counts.open, "evaluations"],
+            [t("member.status.doing"), data.counts.doing, "activity"],
+            [t("member.dueNow"), data.counts.due, "calendar"],
+            [t("member.notes"), data.counts.notes, "knowledge"],
           ].map(([label, value, glyph]) => `<div class="stat"><div class="stat-top"><span class="stat-label">${label}</span><span class="stat-ico">${icon(glyph)}</span></div><div class="stat-value">${value}</div></div>`).join("")}
         </div>
         <div class="member-home-grid">
           <section class="card member-section">
-            <div class="card-head"><h3>Focus</h3><div class="spacer"></div><a class="btn btn-ghost sm" href="#/my-tasks">All tasks ${icon("arrowright")}</a></div>
-            <div class="member-list">${data.tasks.length ? data.tasks.map((task) => taskRow(task, true)).join("") : `<div class="member-inline-empty">${icon("check")}<span>No open tasks</span></div>`}</div>
+            <div class="card-head"><h3>${t("member.focus")}</h3><div class="spacer"></div><a class="btn btn-ghost sm" href="#/my-tasks">${t("member.allTasks")} ${icon("arrowright")}</a></div>
+            <div class="member-list">${data.tasks.length ? data.tasks.map((task) => taskRow(task, true)).join("") : `<div class="member-inline-empty">${icon("check")}<span>${t("member.noOpenTasks")}</span></div>`}</div>
           </section>
           <section class="card member-section">
-            <div class="card-head"><h3>Recent notes</h3><div class="spacer"></div><a class="btn btn-ghost sm" href="#/my-notes">All notes ${icon("arrowright")}</a></div>
-            <div class="member-note-list">${data.notes.length ? data.notes.map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}"><span>${icon("file")}</span><div><strong>${esc(note.title)}</strong><small>Updated ${esc(updatedLabel(note.updatedAt))}</small></div>${icon("chevright")}</a>`).join("") : `<div class="member-inline-empty">${icon("file")}<span>No notes yet</span></div>`}</div>
+            <div class="card-head"><h3>${t("member.recentNotes")}</h3><div class="spacer"></div><a class="btn btn-ghost sm" href="#/my-notes">${t("member.allNotes")} ${icon("arrowright")}</a></div>
+            <div class="member-note-list">${data.notes.length ? data.notes.map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}"><span>${icon("file")}</span><div><strong>${esc(note.title)}</strong><small>${t("personal.updated", { date: updatedLabel(note.updatedAt) })}</small></div>${icon("chevright")}</a>`).join("") : `<div class="member-inline-empty">${icon("file")}<span>${t("member.noNotesYet")}</span></div>`}</div>
           </section>
         </div>`;
     } catch (error) {
@@ -113,13 +114,13 @@ let tasksCache = [];
 
 function tasksView() {
   const columns = [
-    ["todo", "To do", "list"],
-    ["doing", "In progress", "activity"],
-    ["done", "Done", "check"],
+    ["todo", t("member.status.todo"), "list"],
+    ["doing", t("member.status.doing"), "activity"],
+    ["done", t("member.status.done"), "check"],
   ];
   return `<div class="page-head">
-    <div><h1 class="page-title">My Tasks</h1><p class="page-sub">Your private work queue.</p></div><div class="spacer"></div>
-    <button class="btn btn-primary" data-new-task>${icon("plus")}New task</button>
+    <div><h1 class="page-title">${t("member.myTasks")}</h1><p class="page-sub">${t("member.tasksSubtitle")}</p></div><div class="spacer"></div>
+    <button class="btn btn-primary" data-new-task>${icon("plus")}${t("member.newTask")}</button>
   </div>
   <div class="member-task-board">
     ${columns.map(([status, label, glyph]) => {
@@ -127,12 +128,12 @@ function tasksView() {
       return `<section class="member-task-column" data-status="${status}">
         <header><span>${icon(glyph)}</span><strong>${label}</strong><small>${tasks.length}</small></header>
         <div>${tasks.length ? tasks.map((task) => `<article class="member-task-card" data-task="${esc(task.id)}">
-          <div class="member-task-card-head"><span class="member-priority ${esc(task.priority)}"></span><span>${esc(task.priority)}</span><button class="icon-btn" data-edit="${esc(task.id)}" title="Edit task">${icon("edit")}</button></div>
+          <div class="member-task-card-head"><span class="member-priority ${esc(task.priority)}"></span><span>${t(`member.priority.${task.priority}`)}</span><button class="icon-btn" data-edit="${esc(task.id)}" title="${t("member.editTask")}">${icon("edit")}</button></div>
           <h3>${esc(task.title)}</h3>${task.detail ? `<p>${esc(task.detail)}</p>` : ""}
           <footer><span>${icon("calendar")}${esc(dateLabel(task.dueDate))}</span><select class="select member-status" data-status-id="${esc(task.id)}" aria-label="Task status">
             ${columns.map(([value, text]) => `<option value="${value}" ${status === value ? "selected" : ""}>${text}</option>`).join("")}
-          </select><button class="icon-btn danger" data-delete="${esc(task.id)}" title="Delete task">${icon("trash")}</button></footer>
-        </article>`).join("") : `<div class="member-column-empty">No tasks</div>`}</div>
+          </select><button class="icon-btn danger" data-delete="${esc(task.id)}" title="${t("member.deleteTask")}">${icon("trash")}</button></footer>
+        </article>`).join("") : `<div class="member-column-empty">${t("member.noTasks")}</div>`}</div>
       </section>`;
     }).join("")}
   </div>`;
@@ -160,22 +161,22 @@ function wireTasks(root) {
       root.innerHTML = tasksView();
       wireTasks(root);
     } catch (error) {
-      toast("error", "Could not update task", error.message);
+      toast("error", t("member.updateFailed"), error.message);
       select.disabled = false;
     }
   });
   root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => confirmDialog({
-    title: "Delete task",
-    message: "This task will be permanently removed.",
-    confirmText: "Delete",
+    title: t("member.deleteTask"),
+    message: t("member.deleteTaskText"),
+    confirmText: t("system.delete"),
     onConfirm: async () => {
       try {
         await api.member.deleteTask(button.dataset.delete);
         tasksCache = tasksCache.filter((item) => item.id !== button.dataset.delete);
         root.innerHTML = tasksView();
         wireTasks(root);
-        toast("success", "Task deleted");
-      } catch (error) { toast("error", "Could not delete task", error.message); }
+        toast("success", t("member.taskDeleted"));
+      } catch (error) { toast("error", t("member.deleteTaskFailed"), error.message); }
     },
   }));
 }
@@ -200,29 +201,29 @@ function notesView() {
   const active = notesCache.find((note) => note.id === activeNoteId) || notesCache[0] || null;
   if (active) activeNoteId = active.id;
   return `<div class="page-head">
-    <div><h1 class="page-title">My Notes</h1><p class="page-sub">Private notes connected to your account.</p></div><div class="spacer"></div>
-    <button class="btn btn-primary" data-new-note>${icon("plus")}New note</button>
+    <div><h1 class="page-title">${t("member.myNotes")}</h1><p class="page-sub">${t("member.notesSubtitle")}</p></div><div class="spacer"></div>
+    <button class="btn btn-primary" data-new-note>${icon("plus")}${t("member.newNote")}</button>
   </div>
   <div class="member-notes">
     <aside class="member-note-index">
-      ${notesCache.length ? notesCache.map((note) => `<button class="${note.id === active?.id ? "active" : ""}" data-note="${esc(note.id)}"><span>${icon("file")}</span><div><strong>${esc(note.title)}</strong><small>${esc(updatedLabel(note.updatedAt))}</small></div></button>`).join("") : `<div class="member-column-empty">No notes</div>`}
+      ${notesCache.length ? notesCache.map((note) => `<button class="${note.id === active?.id ? "active" : ""}" data-note="${esc(note.id)}"><span>${icon("file")}</span><div><strong>${esc(note.title)}</strong><small>${esc(updatedLabel(note.updatedAt))}</small></div></button>`).join("") : `<div class="member-column-empty">${t("member.noNotes")}</div>`}
     </aside>
     <section class="member-note-editor">
-      ${active ? `<div class="member-note-toolbar"><span class="badge neutral">Saved to your workspace</span><div class="spacer"></div><button class="icon-btn danger" data-delete-note="${esc(active.id)}" title="Delete note">${icon("trash")}</button></div>
-        <input class="member-note-title" id="memberNoteTitle" maxlength="160" value="${esc(active.title)}" aria-label="Note title"/>
-        <textarea class="member-note-content" id="memberNoteContent" maxlength="20000" aria-label="Note content" placeholder="Start writing…">${esc(active.content)}</textarea>
-        <footer><span class="muted" data-note-state>Saved</span><button class="btn btn-primary" data-save-note>${icon("save")}Save</button></footer>`
-        : `<div class="empty member-empty">${icon("file")}<h4>Create your first note</h4><button class="btn btn-primary" data-new-note-empty>${icon("plus")}New note</button></div>`}
+      ${active ? `<div class="member-note-toolbar"><span class="badge neutral">${t("member.savedWorkspace")}</span><div class="spacer"></div><button class="icon-btn danger" data-delete-note="${esc(active.id)}" title="${t("member.deleteNote")}">${icon("trash")}</button></div>
+        <input class="member-note-title" id="memberNoteTitle" maxlength="160" value="${esc(active.title)}" aria-label="${t("member.noteTitle")}"/>
+        <textarea class="member-note-content" id="memberNoteContent" maxlength="20000" aria-label="${t("member.noteContent")}" placeholder="${t("member.startWriting")}">${esc(active.content)}</textarea>
+        <footer><span class="muted" data-note-state>${t("member.saved")}</span><button class="btn btn-primary" data-save-note>${icon("save")}${t("member.save")}</button></footer>`
+        : `<div class="empty member-empty">${icon("file")}<h4>${t("member.createFirstNote")}</h4><button class="btn btn-primary" data-new-note-empty>${icon("plus")}${t("member.newNote")}</button></div>`}
     </section>
   </div>`;
 }
 
 function openNewNote(root) {
   openModal({
-    title: "New note",
+    title: t("member.newNote"),
     width: 480,
-    body: `<div class="field"><label class="label" for="newNoteTitle">Title</label><input class="input" id="newNoteTitle" maxlength="160" autofocus/></div><div class="field-error hidden" data-form-error></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" data-create-note>${icon("plus")}Create</button>`,
+    body: `<div class="field"><label class="label" for="newNoteTitle">${t("member.title")}</label><input class="input" id="newNoteTitle" maxlength="160" autofocus/></div><div class="field-error hidden" data-form-error></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.cancel")}</button><button class="btn btn-primary" data-create-note>${icon("plus")}${t("member.create")}</button>`,
     onMount: (modal) => {
       modal.querySelector("[data-create-note]").onclick = async () => {
         const button = modal.querySelector("[data-create-note]");
@@ -262,9 +263,9 @@ function wireNotes(root) {
         content: root.querySelector("#memberNoteContent").value,
       });
       notesCache = notesCache.map((note) => note.id === saved.id ? saved : note);
-      state.textContent = "Saved";
+      state.textContent = t("member.saved");
       button.classList.remove("loading");
-      toast("success", "Note saved");
+      toast("success", t("member.noteSaved"));
     } catch (error) {
       state.textContent = error.message;
       button.classList.remove("loading");
@@ -273,9 +274,9 @@ function wireNotes(root) {
   root.querySelector("[data-delete-note]")?.addEventListener("click", (event) => {
     const noteId = event.currentTarget.dataset.deleteNote;
     confirmDialog({
-      title: "Delete note",
-      message: "This note will be permanently removed.",
-      confirmText: "Delete",
+      title: t("member.deleteNote"),
+      message: t("member.deleteNoteText"),
+      confirmText: t("system.delete"),
       onConfirm: async () => {
       try {
         await api.member.deleteNote(noteId);
@@ -283,8 +284,8 @@ function wireNotes(root) {
         activeNoteId = notesCache[0]?.id || "";
         root.innerHTML = notesView();
         wireNotes(root);
-        toast("success", "Note deleted");
-      } catch (error) { toast("error", "Could not delete note", error.message); }
+        toast("success", t("member.noteDeleted"));
+      } catch (error) { toast("error", t("member.deleteNoteFailed"), error.message); }
       },
     });
   });

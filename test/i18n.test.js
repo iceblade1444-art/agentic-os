@@ -6,13 +6,16 @@ import { getLocale, localizedDate, setLocale, t } from "../assets/js/i18n.js";
 import { timeAgo } from "../assets/js/store.js";
 
 const sourceKeys = (source, fn) => [
-  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations)\\.[^"]+)"`, "g")),
+  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations|member|settings|kanban|operations|mcp|integrations)\\.[^"]+)"`, "g")),
 ].map((match) => match[1]);
 
 test("interface dictionary provides RU, EN and UZ copy for localized product surfaces", () => {
   const personal = fs.readFileSync(new URL("../assets/js/pages/personal.js", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
   const misc = fs.readFileSync(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8");
+  const member = fs.readFileSync(new URL("../assets/js/pages/member.js", import.meta.url), "utf8");
+  const settings = fs.readFileSync(new URL("../assets/js/pages/settings.js", import.meta.url), "utf8");
+  const kanban = fs.readFileSync(new URL("../assets/js/pages/workflows.js", import.meta.url), "utf8");
   const dynamicKeys = [
     "personal.tab.today", "personal.tab.soul", "personal.tab.memory", "personal.tab.approvals",
     "personal.tab.account", "personal.greeting.night", "personal.greeting.morning",
@@ -22,8 +25,16 @@ test("interface dictionary provides RU, EN and UZ copy for localized product sur
     "personal.task.doing", "personal.task.todo", "personal.approved", "personal.rejected",
     "personal.noAgentRequests", "personal.operatorOnly", "personal.noDecisions", "personal.memberSafe",
     "shell.newKanbanTask", "shell.newPersonalTask",
+    ...["normal", "high", "urgent", "critical"].map((value) => `kanban.priority.${value}`),
+    ...["triage", "todo", "scheduled", "ready", "running", "review", "blocked", "done", "archived"].map((value) => `kanban.status.${value}`),
+    ...["orchestrator", "research", "writing", "growth", "engineering", "specialist"].map((value) => `kanban.role.${value}`),
+    ...["working", "waiting", "queued"].map((value) => `kanban.agent.${value}`),
+    ...["healthy", "degraded", "critical", "success", "running", "error", "unknown"].map((value) => `operations.status.${value}`),
   ];
-  const keys = new Set([...sourceKeys(personal, "t"), ...sourceKeys(app, "tr"), ...sourceKeys(misc, "t"), ...dynamicKeys]);
+  const keys = new Set([
+    ...sourceKeys(personal, "t"), ...sourceKeys(app, "tr"), ...sourceKeys(misc, "t"),
+    ...sourceKeys(member, "t"), ...sourceKeys(settings, "t"), ...sourceKeys(kanban, "t"), ...dynamicKeys,
+  ]);
 
   for (const locale of ["ru-RU", "en-US", "uz-UZ"]) {
     setLocale(locale, false);

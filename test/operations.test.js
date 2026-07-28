@@ -70,9 +70,9 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(api, /\/api\/operations\/backup/);
   assert.match(api, /\/api\/operations\/restore-drill/);
   assert.doesNotMatch(page, /14,208|Rate limit approaching|search_web\(query/);
-  assert.match(page, /Host checks/);
-  assert.match(page, /Restore drill/);
-  assert.match(page, /Four C readiness/);
+  assert.match(page, /operations\.hostChecks/);
+  assert.match(page, /operations\.restoreDrill/);
+  assert.match(page, /operations\.readiness/);
   assert.match(dashboard, /api\.operations\.status/);
   assert.match(dashboard, /api\.kanban\.board/);
   assert.match(dashboard, /api\.routines\.list/);

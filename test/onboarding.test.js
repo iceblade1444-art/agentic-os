@@ -103,7 +103,7 @@ test("frontend gates the shell on server onboarding and exposes settings entry",
   const settings = fs.readFileSync(new URL("../assets/js/pages/settings.js", import.meta.url), "utf8");
   assert.match(app, /onboarding\.needsOnboarding/);
   assert.match(api, /\/api\/onboarding/);
-  assert.match(settings, /Review workspace setup/);
+  assert.match(settings, /settings\.reviewSetup/);
 });
 
 test("all primary execution paths receive server-owned shared context", () => {

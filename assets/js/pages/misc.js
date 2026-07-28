@@ -490,17 +490,17 @@ async function loadMemory(force = false) {
 
 /* ============================ MCP SERVERS ============================ */
 export const mcp = {
-  title: "MCP Servers",
+  title: t("mcp.title"),
   render() {
-    const action = `<button class="btn btn-primary" id="addMcp">${icon("plus")}Add server</button>`;
+    const action = `<button class="btn btn-primary" id="addMcp">${icon("plus")}${t("mcp.add")}</button>`;
     if (!api.on) {
       const list = store.state.mcpServers;
-      return head("MCP Servers", "Model Context Protocol servers exposing tools over stdio", action)
-        + demoNote("Start the Node backend (npm start) to spawn real MCP servers and call their tools.")
+      return head(t("mcp.title"), t("mcp.subtitle"), action)
+        + demoNote(t("mcp.demo"))
         + mcpTableHTML(list.map((m) => ({ id: m.id, name: m.name, desc: m.cmd, kind: "custom", status: m.status === "active" ? "active" : "stopped", tools: m.tools })));
     }
-    return head("MCP Servers", "Spawn real MCP servers over stdio and call their tools", action)
-      + `<div id="mcpBody">${loadingCard("Loading servers…")}</div>`;
+    return head(t("mcp.title"), t("mcp.realSubtitle"), action)
+      + `<div id="mcpBody">${loadingCard(t("mcp.loading"))}</div>`;
   },
   mount(root) {
     if (!api.on) return mcpMountLocal(root);
@@ -510,16 +510,16 @@ export const mcp = {
 
 /* ============================ INTEGRATIONS ============================ */
 export const integrations = {
-  title: "Integrations",
+  title: t("integrations.title"),
   render() {
     if (!api.on) {
       const list = store.state.integrations;
-      return head("Integrations", `${list.filter((i) => i.connected).length} connected`, "")
-        + demoNote("Start the Node backend to make real connections (OpenAI, Anthropic, GitHub, Notion, Slack).")
+      return head(t("integrations.title"), t("integrations.connectedCount", { count: list.filter((i) => i.connected).length }), "")
+        + demoNote(t("integrations.demo"))
         + `<div class="grid cols-3">${list.map(intCardLocal).join("")}</div>`;
     }
-    return head("Integrations", "Connect services with real credential checks", "")
-      + `<div id="intBody">${loadingCard("Loading integrations…")}</div>`;
+    return head(t("integrations.title"), t("integrations.subtitle"), "")
+      + `<div id="intBody">${loadingCard(t("integrations.loading"))}</div>`;
   },
   mount(root) {
     if (!api.on) return intMountLocal(root);
@@ -533,13 +533,13 @@ let operationsError = "";
 let operationsLoading = false;
 
 export const observability = {
-  title: "Observability",
+  title: t("operations.title"),
   render() {
-    const actions = api.on ? `<div class="row gap-2"><button class="btn btn-secondary" id="opsRefresh">${icon("refresh")}Refresh</button>${api.auth.canAdmin ? `<button class="btn btn-secondary" id="opsRestoreDrill">${icon("check")}Verify restore</button><button class="btn btn-primary" id="opsBackup">${icon("database")}Create backup</button>` : ""}</div>` : "";
-    if (!api.on) return head("Observability", "Server health, backups and incidents", actions) + demoNote("Start the Node backend to read host operations state.");
-    if (operationsError) return head("Observability", "Server health, backups and incidents", actions) + errCard(operationsError);
-    if (!operationsState) return head("Observability", "Server health, backups and incidents", actions) + loadingCard("Loading host health…");
-    return head("Observability", `Last checked ${opsAge(operationsState.checkedAt)}`, actions) + operationsHTML(operationsState);
+    const actions = api.on ? `<div class="row gap-2"><button class="btn btn-secondary" id="opsRefresh">${icon("refresh")}${t("system.refresh")}</button>${api.auth.canAdmin ? `<button class="btn btn-secondary" id="opsRestoreDrill">${icon("check")}${t("operations.verifyRestore")}</button><button class="btn btn-primary" id="opsBackup">${icon("database")}${t("operations.createBackup")}</button>` : ""}</div>` : "";
+    if (!api.on) return head(t("operations.title"), t("operations.subtitle"), actions) + demoNote(t("operations.demo"));
+    if (operationsError) return head(t("operations.title"), t("operations.subtitle"), actions) + errCard(operationsError);
+    if (!operationsState) return head(t("operations.title"), t("operations.subtitle"), actions) + loadingCard(t("operations.loading"));
+    return head(t("operations.title"), t("operations.lastChecked", { value: opsAge(operationsState.checkedAt) }), actions) + operationsHTML(operationsState);
   },
   mount(root) {
     if (!api.on) return;
@@ -549,9 +549,9 @@ export const observability = {
       button.classList.add("loading");
       try {
         await api.operations.backup();
-        toast("success", "Backup queued", "The host service will start it immediately.");
+        toast("success", t("operations.backupQueued"), t("operations.backupQueuedText"));
         [4000, 12000, 30000].forEach((delay) => setTimeout(() => loadOperations(true), delay));
-      } catch (error) { toast("error", "Could not queue backup", error.message); }
+      } catch (error) { toast("error", t("operations.backupFailed"), error.message); }
       button.classList.remove("loading");
     });
     root.querySelector("#opsRestoreDrill")?.addEventListener("click", async (event) => {
@@ -559,9 +559,9 @@ export const observability = {
       button.classList.add("loading");
       try {
         await api.operations.restoreDrill();
-        toast("success", "Restore drill queued", "The host service will verify the latest backup safely.");
+        toast("success", t("operations.restoreQueued"), t("operations.restoreQueuedText"));
         [4000, 12000, 30000].forEach((delay) => setTimeout(() => loadOperations(true), delay));
-      } catch (error) { toast("error", "Could not queue restore drill", error.message); }
+      } catch (error) { toast("error", t("operations.restoreFailed"), error.message); }
       button.classList.remove("loading");
     });
     if (!operationsState && !operationsLoading) loadOperations();
@@ -572,13 +572,13 @@ async function loadOperations(force = false) {
   if (operationsLoading && !force) return;
   operationsLoading = true;
   try { operationsState = await api.operations.status(); operationsError = ""; }
-  catch (error) { operationsError = error.message || "Operations state unavailable"; }
+  catch (error) { operationsError = error.message || t("operations.unavailable"); }
   operationsLoading = false;
   rerender();
 }
 
 function operationsHTML(state) {
-  if (!state.available) return `${fourCReadinessHTML(state.readiness)}<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Host monitor is not installed</div><div class="a-desc">Install the Agentic OS operations systemd units on the server to enable checks and backups.</div></div></div>`;
+  if (!state.available) return `${fourCReadinessHTML(state.readiness)}<div class="alert warning"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("operations.monitorMissing")}</div><div class="a-desc">${t("operations.monitorMissingText")}</div></div></div>`;
   const backup = state.backup || {};
   const restoreDrill = state.restoreDrill || {};
   const disk = (state.checks || []).find((check) => check.id === "disk");
@@ -586,51 +586,51 @@ function operationsHTML(state) {
   return `
     ${fourCReadinessHTML(state.readiness)}
     <div class="grid cols-4 mb-4">
-      ${statMini("System status", opsStatusText(state.status), state.status === "healthy" ? "check" : "warn")}
-      ${statMini("Active incidents", state.activeIncidents || 0, "alert")}
-      ${statMini("Last backup", opsAge(backup.lastSuccessAt), "database")}
-      ${statMini("Restore verified", opsAge(restoreDrill.lastSuccessAt), "check")}
-      ${statMini("Server storage", disk?.metrics?.usedPercent != null ? `${disk.metrics.usedPercent}%` : "Unknown", "database")}
+      ${statMini(t("operations.systemStatus"), opsStatusText(state.status), state.status === "healthy" ? "check" : "warn")}
+      ${statMini(t("operations.activeIncidents"), state.activeIncidents || 0, "alert")}
+      ${statMini(t("operations.lastBackup"), opsAge(backup.lastSuccessAt), "database")}
+      ${statMini(t("operations.restoreVerified"), opsAge(restoreDrill.lastSuccessAt), "check")}
+      ${statMini(t("operations.serverStorage"), disk?.metrics?.usedPercent != null ? `${disk.metrics.usedPercent}%` : t("operations.unknown"), "database")}
     </div>
     <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr);margin-bottom:16px">
-      <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Host checks</h3><span class="badge ${opsTone(state.status)}">${esc(opsStatusText(state.status))}</span></div><div class="table-wrap"><table class="tbl">
-        <thead><tr><th>Service</th><th>Status</th><th>Detail</th><th>Checked</th></tr></thead>
+      <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>${t("operations.hostChecks")}</h3><span class="badge ${opsTone(state.status)}">${esc(opsStatusText(state.status))}</span></div><div class="table-wrap"><table class="tbl">
+        <thead><tr><th>${t("operations.service")}</th><th>${t("system.status")}</th><th>${t("operations.detail")}</th><th>${t("operations.checked")}</th></tr></thead>
         <tbody>${(state.checks || []).map((check) => `<tr><td class="fw-600">${esc(check.name)}</td><td><span class="badge ${opsTone(check.status)}"><span class="dot"></span>${esc(opsStatusText(check.status))}</span></td><td class="muted">${esc(check.detail || "")}</td><td class="muted nowrap">${opsAge(check.checkedAt)}</td></tr>`).join("")}</tbody>
       </table></div></div>
-      <div class="card pad-lg"><div class="card-head"><h3>Backups</h3><span class="badge ${opsTone(backup.status)}">${esc(opsStatusText(backup.status))}</span></div>
+      <div class="card pad-lg"><div class="card-head"><h3>${t("operations.backups")}</h3><span class="badge ${opsTone(backup.status)}">${esc(opsStatusText(backup.status))}</span></div>
         <div class="stack gap-3">
-          ${opsFact("Last successful", opsAge(backup.lastSuccessAt))}
-          ${opsFact("Archive size", opsBytes(backup.sizeBytes))}
-          ${opsFact("Stored copies", String(backup.count || 0))}
-          ${opsFact("Retention", `${backup.retentionDays || 14} days / ${backup.maxCount || 14} copies`)}
-          ${opsFact("Daily schedule", `${state.schedule?.backupDailyAt || "03:15"} · ${state.schedule?.timezone || "server time"}`)}
+          ${opsFact(t("operations.lastSuccessful"), opsAge(backup.lastSuccessAt))}
+          ${opsFact(t("operations.archiveSize"), opsBytes(backup.sizeBytes))}
+          ${opsFact(t("operations.storedCopies"), String(backup.count || 0))}
+          ${opsFact(t("operations.retention"), t("operations.retentionValue", { days: backup.retentionDays || 14, copies: backup.maxCount || 14 }))}
+          ${opsFact(t("operations.dailySchedule"), `${state.schedule?.backupDailyAt || "03:15"} · ${state.schedule?.timezone || t("operations.serverTime")}`)}
         </div>
         ${backup.error ? `<div class="field-error mt-3">${esc(backup.error)}</div>` : ""}
         <div class="divider"></div>
-        <div class="card-head" style="padding:0"><h3>Restore drill</h3><span class="badge ${opsTone(restoreDrill.status)}">${esc(opsStatusText(restoreDrill.status))}</span></div>
+        <div class="card-head" style="padding:0"><h3>${t("operations.restoreDrill")}</h3><span class="badge ${opsTone(restoreDrill.status)}">${esc(opsStatusText(restoreDrill.status))}</span></div>
         <div class="stack gap-3 mt-3">
-          ${opsFact("Last verified", opsAge(restoreDrill.lastSuccessAt))}
-          ${opsFact("Files checked", String(restoreDrill.filesChecked || 0))}
-          ${opsFact("Archives", Array.isArray(restoreDrill.archives) ? String(restoreDrill.archives.length) : "0")}
-          ${opsFact("Backup commit", restoreDrill.gitHead ? String(restoreDrill.gitHead).slice(0, 12) : "Unknown")}
+          ${opsFact(t("operations.lastVerified"), opsAge(restoreDrill.lastSuccessAt))}
+          ${opsFact(t("operations.filesChecked"), String(restoreDrill.filesChecked || 0))}
+          ${opsFact(t("operations.archives"), Array.isArray(restoreDrill.archives) ? String(restoreDrill.archives.length) : "0")}
+          ${opsFact(t("operations.backupCommit"), restoreDrill.gitHead ? String(restoreDrill.gitHead).slice(0, 12) : t("operations.unknown"))}
         </div>
         ${restoreDrill.error ? `<div class="field-error mt-3">${esc(restoreDrill.error)}</div>` : ""}
       </div>
     </div>
-    <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>Incidents</h3><span class="hint">Latest ${Math.min(incidents.length, 50)}</span></div>
-      ${incidents.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Status</th><th>Check</th><th>Message</th><th>First seen</th></tr></thead><tbody>${incidents.map((incident) => `<tr><td><span class="badge ${incident.status === "resolved" ? "success" : opsTone(incident.severity)}">${esc(incident.status || "active")}</span></td><td class="fw-600">${esc(incident.name || incident.checkId)}</td><td class="muted">${esc(incident.message || "")}</td><td class="muted nowrap">${opsAge(incident.firstSeenAt)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty" style="min-height:180px"><div class="empty-ico">${icon("check")}</div><h4>No incidents recorded</h4><p>All monitored services are operating normally.</p></div>`}
+    <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>${t("operations.incidents")}</h3><span class="hint">${t("operations.latest", { count: Math.min(incidents.length, 50) })}</span></div>
+      ${incidents.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${t("system.status")}</th><th>${t("operations.check")}</th><th>${t("operations.message")}</th><th>${t("operations.firstSeen")}</th></tr></thead><tbody>${incidents.map((incident) => `<tr><td><span class="badge ${incident.status === "resolved" ? "success" : opsTone(incident.severity)}">${esc(incident.status || "active")}</span></td><td class="fw-600">${esc(incident.name || incident.checkId)}</td><td class="muted">${esc(incident.message || "")}</td><td class="muted nowrap">${opsAge(incident.firstSeenAt)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty" style="min-height:180px"><div class="empty-ico">${icon("check")}</div><h4>${t("operations.noIncidents")}</h4><p>${t("operations.noIncidentsText")}</p></div>`}
     </div>`;
 }
 
 function fourCReadinessHTML(readiness) {
-  if (!readiness || readiness.error) return `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Four C readiness audit is unavailable</div><div class="a-desc">${esc(readiness?.error || "The server did not return an audit.")}</div></div></div>`;
+  if (!readiness || readiness.error) return `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("operations.readinessUnavailable")}</div><div class="a-desc">${esc(readiness?.error || t("operations.noAudit"))}</div></div></div>`;
   const sections = readiness.sections || [];
   const recommendations = readiness.recommendations || [];
   return `
     <div class="card pad-lg mb-4">
       <div class="card-head">
-        <div><h3>Four C readiness</h3><p class="hint mt-1">Live audit of context, connections, capabilities and cadence</p></div>
-        <span class="badge ${readiness.score >= 80 ? "success" : readiness.score >= 50 ? "warning" : "error"}">${esc(readiness.score)}% ready</span>
+        <div><h3>${t("operations.readiness")}</h3><p class="hint mt-1">${t("operations.readinessText")}</p></div>
+        <span class="badge ${readiness.score >= 80 ? "success" : readiness.score >= 50 ? "warning" : "error"}">${t("operations.readyPercent", { score: esc(readiness.score) })}</span>
       </div>
       <div class="grid cols-4 mt-4">
         ${sections.map((section) => `
@@ -642,7 +642,7 @@ function fourCReadinessHTML(readiness) {
             </div>
           </div>`).join("")}
       </div>
-      ${recommendations.length ? `<div class="readiness-actions mt-4"><div class="fw-700 mb-3">Next operational actions</div><div class="grid cols-2">${recommendations.map((item) => `<a class="readiness-action" href="${esc(item.href)}"><div><span class="eyebrow">${esc(item.section)}</span><div class="fw-600 mt-1">${esc(item.title)}</div><div class="hint mt-1">${esc(item.detail)}</div></div>${icon("arrowright")}</a>`).join("")}</div></div>` : `<div class="alert success mt-4"><span class="a-ico">${icon("check")}</span><div class="a-body"><div class="a-title">All operational layers are ready</div><div class="a-desc">No readiness gaps were detected.</div></div></div>`}
+      ${recommendations.length ? `<div class="readiness-actions mt-4"><div class="fw-700 mb-3">${t("operations.nextActions")}</div><div class="grid cols-2">${recommendations.map((item) => `<a class="readiness-action" href="${esc(item.href)}"><div><span class="eyebrow">${esc(item.section)}</span><div class="fw-600 mt-1">${esc(item.title)}</div><div class="hint mt-1">${esc(item.detail)}</div></div>${icon("arrowright")}</a>`).join("")}</div></div>` : `<div class="alert success mt-4"><span class="a-ico">${icon("check")}</span><div class="a-body"><div class="a-title">${t("operations.allReady")}</div><div class="a-desc">${t("operations.noGaps")}</div></div></div>`}
     </div>`;
 }
 
@@ -650,9 +650,9 @@ function opsFact(label, value) {
   return `<div class="row between" style="padding-bottom:10px;border-bottom:1px solid var(--border)"><span class="muted">${esc(label)}</span><span class="fw-600">${esc(value)}</span></div>`;
 }
 function opsTone(status) { return status === "healthy" || status === "success" ? "success" : status === "critical" || status === "error" ? "error" : status === "degraded" || status === "running" ? "warning" : "neutral"; }
-function opsStatusText(status) { return ({ healthy: "Healthy", degraded: "Degraded", critical: "Critical", success: "Protected", running: "Running", error: "Failed", unknown: "Unknown" })[status] || status || "Unknown"; }
-function opsAge(value) { const stamp = value ? new Date(value).getTime() : NaN; return Number.isFinite(stamp) ? timeAgo(stamp) : "Never"; }
-function opsBytes(value) { if (!Number.isFinite(Number(value)) || Number(value) <= 0) return "Unknown"; const units = ["B", "KB", "MB", "GB", "TB"]; let amount = Number(value), index = 0; while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; } return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`; }
+function opsStatusText(status) { return t(`operations.status.${status || "unknown"}`); }
+function opsAge(value) { const stamp = value ? new Date(value).getTime() : NaN; return Number.isFinite(stamp) ? timeAgo(stamp) : t("operations.never"); }
+function opsBytes(value) { if (!Number.isFinite(Number(value)) || Number(value) <= 0) return t("operations.unknown"); const units = ["B", "KB", "MB", "GB", "TB"]; let amount = Number(value), index = 0; while (amount >= 1024 && index < units.length - 1) { amount /= 1024; index += 1; } return `${amount.toFixed(index ? 1 : 0)} ${units[index]}`; }
 
 /* ============================ GUARDRAILS ============================ */
 let guardrailsState = null;
@@ -841,22 +841,22 @@ function errCard(msg) {
 function mcpRowHTML(m) {
   const count = Array.isArray(m.tools) ? m.tools.length : (m.tools || 0);
   const active = m.status === "active";
-  const badge = active ? `<span class="badge success"><span class="dot"></span>Active</span>`
-    : m.status === "error" ? `<span class="badge error"><span class="dot"></span>Error</span>`
-    : `<span class="badge neutral">Stopped</span>`;
+  const badge = active ? `<span class="badge success"><span class="dot"></span>${t("mcp.active")}</span>`
+    : m.status === "error" ? `<span class="badge error"><span class="dot"></span>${t("mcp.error")}</span>`
+    : `<span class="badge neutral">${t("mcp.stopped")}</span>`;
   return `<tr>
     <td><div class="cell-main"><div class="aico" style="background:${store.colors.blue};width:30px;height:30px">${icon("mcp")}</div><div class="stack"><span class="fw-600">${esc(m.name)}</span><span class="cell-sub">${esc(m.desc || m.kind || "")}</span></div></div></td>
     <td>${badge}</td>
     <td class="mono">${count}</td>
     <td><div class="row gap-2">
-      ${active ? `<button class="btn sm btn-secondary" data-mcpstop="${m.id}">Stop</button>` : `<button class="btn sm btn-primary" data-mcpstart="${m.id}">Start</button>`}
-      ${active && count ? `<button class="btn sm btn-ghost" data-mcptools="${m.id}">${icon("tools")}Tools</button>` : ""}
-      ${m.kind === "custom" ? `<button class="icon-btn" data-mcpdel="${m.id}" title="Delete">${icon("trash")}</button>` : ""}
+      ${active ? `<button class="btn sm btn-secondary" data-mcpstop="${m.id}">${t("mcp.stop")}</button>` : `<button class="btn sm btn-primary" data-mcpstart="${m.id}">${t("mcp.start")}</button>`}
+      ${active && count ? `<button class="btn sm btn-ghost" data-mcptools="${m.id}">${icon("tools")}${t("mcp.tools")}</button>` : ""}
+      ${m.kind === "custom" ? `<button class="icon-btn" data-mcpdel="${m.id}" title="${t("system.delete")}">${icon("trash")}</button>` : ""}
     </div></td>
   </tr>`;
 }
 function mcpTableHTML(rows) {
-  return `<div class="card" style="padding:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>Server</th><th>Status</th><th>Tools</th><th>Actions</th></tr></thead><tbody id="mcpRows">${rows.map(mcpRowHTML).join("")}</tbody></table></div></div>`;
+  return `<div class="card" style="padding:0"><div class="table-wrap"><table class="tbl"><thead><tr><th>${t("mcp.server")}</th><th>${t("system.status")}</th><th>${t("mcp.tools")}</th><th>${t("mcp.actions")}</th></tr></thead><tbody id="mcpRows">${rows.map(mcpRowHTML).join("")}</tbody></table></div></div>`;
 }
 async function mcpMountReal(root) {
   const body = root.querySelector("#mcpBody");
@@ -865,17 +865,17 @@ async function mcpMountReal(root) {
   body.innerHTML = mcpTableHTML(servers);
   root.querySelectorAll("[data-mcpstart]").forEach((b) => (b.onclick = async () => {
     b.classList.add("loading");
-    try { const r = await api.mcp.connect(b.dataset.mcpstart); toast("success", "Server started", (r.tools?.length || 0) + " tools discovered"); }
-    catch (e) { toast("error", "Start failed", e.message); }
+    try { const r = await api.mcp.connect(b.dataset.mcpstart); toast("success", t("mcp.started"), t("mcp.discovered", { count: r.tools?.length || 0 })); }
+    catch (e) { toast("error", t("mcp.startFailed"), e.message); }
     rerender();
   }));
   root.querySelectorAll("[data-mcpstop]").forEach((b) => (b.onclick = async () => {
-    try { await api.mcp.disconnect(b.dataset.mcpstop); toast("info", "Server stopped"); } catch (e) { toast("error", "Stop failed", e.message); }
+    try { await api.mcp.disconnect(b.dataset.mcpstop); toast("info", t("mcp.serverStopped")); } catch (e) { toast("error", t("mcp.stopFailed"), e.message); }
     rerender();
   }));
   root.querySelectorAll("[data-mcpdel]").forEach((b) => (b.onclick = () => confirmDialog({
-    title: "Delete MCP server", message: "Remove this server definition?", confirmText: "Delete",
-    onConfirm: async () => { try { await api.mcp.remove(b.dataset.mcpdel); toast("success", "Server removed"); rerender(); } catch (e) { toast("error", "Failed", e.message); } },
+    title: t("mcp.deleteTitle"), message: t("mcp.deleteText"), confirmText: t("system.delete"),
+    onConfirm: async () => { try { await api.mcp.remove(b.dataset.mcpdel); toast("success", t("mcp.removed")); rerender(); } catch (e) { toast("error", t("system.failed"), e.message); } },
   })));
   root.querySelectorAll("[data-mcptools]").forEach((b) => (b.onclick = () => openToolRunner(servers.find((s) => s.id === b.dataset.mcptools))));
   wireAddMcp(root, true);
@@ -883,20 +883,20 @@ async function mcpMountReal(root) {
 function openToolRunner(server) {
   const tools = server.tools || [];
   openModal({
-    title: "Run tool · " + server.name, width: 540,
-    body: `<div class="field"><label class="label">Tool</label><select class="select" id="trTool">${tools.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}${t.description ? " — " + esc(t.description) : ""}</option>`).join("")}</select></div>
-      <div class="field"><label class="label">Arguments (JSON)</label><textarea class="textarea mono" id="trArgs" rows="3">{}</textarea></div>
+    title: t("mcp.runTool", { name: server.name }), width: 540,
+    body: `<div class="field"><label class="label">${t("mcp.tool")}</label><select class="select" id="trTool">${tools.map((tool) => `<option value="${esc(tool.name)}">${esc(tool.name)}${tool.description ? " — " + esc(tool.description) : ""}</option>`).join("")}</select></div>
+      <div class="field"><label class="label">${t("mcp.arguments")}</label><textarea class="textarea mono" id="trArgs" rows="3">{}</textarea></div>
       <div id="trResult"></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Close</button><button class="btn btn-primary" id="trRun">${icon("play")}Run</button>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.close")}</button><button class="btn btn-primary" id="trRun">${icon("play")}${t("mcp.run")}</button>`,
     onMount: (m) => (m.querySelector("#trRun").onclick = async () => {
       let args = {};
-      try { args = JSON.parse(m.querySelector("#trArgs").value || "{}"); } catch { return toast("error", "Arguments must be valid JSON"); }
+      try { args = JSON.parse(m.querySelector("#trArgs").value || "{}"); } catch { return toast("error", t("mcp.invalidJson")); }
       const btn = m.querySelector("#trRun"); btn.classList.add("loading");
       try {
         const r = await api.mcp.call(server.id, m.querySelector("#trTool").value, args);
         const text = (r.result?.content || []).map((c) => c.text).filter(Boolean).join("\n");
-        m.querySelector("#trResult").innerHTML = `<div class="section-title">Result</div><div class="codeblock"><pre>${esc(text || JSON.stringify(r.result, null, 2))}</pre></div>`;
-      } catch (e) { toast("error", "Call failed", e.message); }
+        m.querySelector("#trResult").innerHTML = `<div class="section-title">${t("mcp.result")}</div><div class="codeblock"><pre>${esc(text || JSON.stringify(r.result, null, 2))}</pre></div>`;
+      } catch (e) { toast("error", t("mcp.callFailed"), e.message); }
       btn.classList.remove("loading");
     }),
   });
@@ -905,20 +905,20 @@ function wireAddMcp(root, real) {
   const add = root.querySelector("#addMcp");
   if (!add) return;
   add.onclick = () => openModal({
-    title: "Add MCP server", width: 540,
-    body: `<div class="field"><label class="label">Name</label><input class="input" id="mn" placeholder="my-server"/></div>
-      <div class="field"><label class="label">Command</label><input class="input mono" id="mcmd" placeholder="npx"/></div>
-      <div class="field"><label class="label">Arguments (space-separated)</label><input class="input mono" id="marg" placeholder="-y @modelcontextprotocol/server-filesystem ."/></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="mok">${icon("plus")}Add server</button>`,
+    title: t("mcp.add"), width: 540,
+    body: `<div class="field"><label class="label">${t("mcp.name")}</label><input class="input" id="mn" placeholder="my-server"/></div>
+      <div class="field"><label class="label">${t("mcp.command")}</label><input class="input mono" id="mcmd" placeholder="npx"/></div>
+      <div class="field"><label class="label">${t("mcp.argumentsSpace")}</label><input class="input mono" id="marg" placeholder="-y @modelcontextprotocol/server-filesystem ."/></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.cancel")}</button><button class="btn btn-primary" id="mok">${icon("plus")}${t("mcp.add")}</button>`,
     onMount: (m) => (m.querySelector("#mok").onclick = async () => {
       const name = m.querySelector("#mn").value.trim(), command = m.querySelector("#mcmd").value.trim();
-      if (!name || !command) return toast("error", "Name and command required");
+      if (!name || !command) return toast("error", t("mcp.required"));
       const args = m.querySelector("#marg").value.trim();
       try {
         if (real) await api.mcp.add({ name, command, args });
         else store.set((s) => s.mcpServers.push({ id: store.uid(), name, cmd: command + " " + args, status: "idle", tools: 0 }));
-        closeOverlay(); toast("success", "Server added", name); rerender();
-      } catch (e) { toast("error", "Add failed", e.message); }
+        closeOverlay(); toast("success", t("mcp.added"), name); rerender();
+      } catch (e) { toast("error", t("mcp.addFailed"), e.message); }
     }),
   });
 }
@@ -935,20 +935,20 @@ function mcpMountLocal(root) {
 /* ---- Integrations ---- */
 function intCardLocal(i) {
   return `<div class="card tile"><div class="row between"><div class="row gap-3"><div class="aico" style="background:${store.colors[i.color]}">${icon(i.icon)}</div><div class="stack"><span class="fw-700">${esc(i.name)}</span><span class="hint">${esc(i.desc)}</span></div></div></div>
-    <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>Connected</span>` : `<span class="badge neutral">Not connected</span>`}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-int="${i.id}">${i.connected ? "Disconnect" : "Connect"}</button></div></div>`;
+    <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>${t("integrations.connected")}</span>` : `<span class="badge neutral">${t("integrations.notConnected")}</span>`}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-int="${i.id}">${t(i.connected ? "integrations.disconnect" : "integrations.connect")}</button></div></div>`;
 }
 function intMountLocal(root) {
   root.querySelectorAll("[data-int]").forEach((b) => (b.onclick = () => {
     const i = store.state.integrations.find((x) => x.id === b.dataset.int);
     store.set((s) => (s.integrations.find((x) => x.id === b.dataset.int).connected = !i.connected));
-    toast(i.connected ? "info" : "success", (i.connected ? "Disconnected " : "Connected ") + i.name); rerender();
+    toast(i.connected ? "info" : "success", t(i.connected ? "integrations.disconnectedName" : "integrations.connectedName", { name: i.name })); rerender();
   }));
 }
 function intCardReal(i) {
   return `<div class="card tile" data-intcard="${i.provider}"><div class="row between"><div class="row gap-3"><div class="aico" style="background:${store.colors[i.color] || store.colors.violet}">${icon(i.icon)}</div><div class="stack"><span class="fw-700">${esc(i.name)}</span><span class="hint">${esc(i.desc)}</span></div></div></div>
     ${i.lastResult ? `<div class="hint mt-2">${i.lastResult.ok ? "✓" : "✕"} ${esc(i.lastResult.detail || "")}</div>` : ""}
-    <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>Connected</span>` : `<span class="badge neutral">Not connected</span>`}
-      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">Send test</button>` : ""}${i.connected && i.provider === "mila" ? `<button class="btn sm btn-ghost" data-intstatus="mila">Status</button><button class="btn sm btn-ghost" data-intdevices="mila">Devices</button><button class="btn sm btn-primary" data-intcode="mila">New code</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${i.connected ? "Disconnect" : "Connect"}</button></div>
+    <div class="row between mt-4">${i.connected ? `<span class="badge success"><span class="dot"></span>${t("integrations.connected")}</span>` : `<span class="badge neutral">${t("integrations.notConnected")}</span>`}
+      <div class="row gap-2">${i.connected && i.provider === "slack" ? `<button class="btn sm btn-ghost" data-intsend="${i.provider}">${t("integrations.sendTest")}</button>` : ""}${i.connected && i.provider === "mila" ? `<button class="btn sm btn-ghost" data-intstatus="mila">${t("system.status")}</button><button class="btn sm btn-ghost" data-intdevices="mila">${t("integrations.devices")}</button><button class="btn sm btn-primary" data-intcode="mila">${t("integrations.newCode")}</button>` : ""}<button class="btn sm ${i.connected ? "btn-secondary" : "btn-primary"}" data-intbtn="${i.provider}">${t(i.connected ? "integrations.disconnect" : "integrations.connect")}</button></div>
     </div></div>`;
 }
 async function intMountReal(root) {
@@ -960,13 +960,13 @@ async function intMountReal(root) {
     const card = body.querySelector(`[data-intcard="${i.provider}"]`); if (!card) return;
     card.querySelector("[data-intbtn]").onclick = () => (i.connected ? intDisconnect(i) : intConnect(i));
     const send = card.querySelector("[data-intsend]");
-    if (send) send.onclick = async () => { try { await api.integrations.slackSend("Test message from Agentic OS ✅"); toast("success", "Sent to Slack"); } catch (e) { toast("error", "Send failed", e.message); } };
+    if (send) send.onclick = async () => { try { await api.integrations.slackSend("Test message from Agentic OS"); toast("success", t("integrations.sentSlack")); } catch (e) { toast("error", t("integrations.sendFailed"), e.message); } };
     const status = card.querySelector("[data-intstatus]");
     if (status) status.onclick = async () => {
       try {
         const s = await api.integrations.milaStatus();
         toast(s.voiceConfigured ? "success" : "info", "MILA Voice", s.voiceConfigured ? `Ready · ${s.liveModel}` : "Backend online · Gemini key missing");
-      } catch (e) { toast("error", "MILA status failed", e.message); }
+      } catch (e) { toast("error", t("integrations.milaStatusFailed"), e.message); }
     };
     const code = card.querySelector("[data-intcode]");
     if (code) code.onclick = () => openMilaCode();
@@ -976,15 +976,15 @@ async function intMountReal(root) {
 }
 function openMilaCode() {
   openModal({
-    title: "Connect MILA mobile app", width: 460,
-    body: `<div class="field"><label class="label">Account label</label><input class="input" id="milaLabel" placeholder="Name or email"/></div><div id="milaCodeResult" class="mt-3"></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Close</button><button class="btn btn-primary" id="milaCreateCode">Create one-time code</button>`,
+    title: t("integrations.connectMila"), width: 460,
+    body: `<div class="field"><label class="label">${t("integrations.accountLabel")}</label><input class="input" id="milaLabel" placeholder="${t("integrations.nameEmail")}"/></div><div id="milaCodeResult" class="mt-3"></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.close")}</button><button class="btn btn-primary" id="milaCreateCode">${t("integrations.createCode")}</button>`,
     onMount: (m) => (m.querySelector("#milaCreateCode").onclick = async () => {
       const btn = m.querySelector("#milaCreateCode"); btn.classList.add("loading");
       try {
         const result = await api.integrations.milaConnectionCode(m.querySelector("#milaLabel").value.trim() || "MILA user");
         m.querySelector("#milaCodeResult").innerHTML = `<div class="alert success"><span class="a-ico">${icon("key")}</span><div class="a-body"><div class="a-title mono" style="font-size:22px;letter-spacing:3px">${esc(result.code)}</div><div class="a-desc">Enter in MILA → Settings → AI Providers. Expires in 10 minutes.</div></div></div>`;
-      } catch (e) { m.querySelector("#milaCodeResult").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Could not create code</div><div class="a-desc">${esc(e.message)}</div></div></div>`; }
+      } catch (e) { m.querySelector("#milaCodeResult").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${t("integrations.codeFailed")}</div><div class="a-desc">${esc(e.message)}</div></div></div>`; }
       btn.classList.remove("loading");
     }),
   });
@@ -996,26 +996,26 @@ function milaDeviceTime(value) {
 }
 function openMilaDevices() {
   openModal({
-    title: "MILA mobile devices", width: 620,
-    body: `<div id="milaDevicesList" class="stack gap-2"><div class="hint">Loading devices…</div></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Close</button>`,
+    title: t("integrations.milaDevices"), width: 620,
+    body: `<div id="milaDevicesList" class="stack gap-2"><div class="hint">${t("integrations.loadingDevices")}</div></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.close")}</button>`,
     onMount: async (m) => {
       const slot = m.querySelector("#milaDevicesList");
       const render = (devices) => {
-        if (!devices.length) { slot.innerHTML = `<div class="empty">No MILA devices have been paired yet.</div>`; return; }
+        if (!devices.length) { slot.innerHTML = `<div class="empty">${t("integrations.noDevices")}</div>`; return; }
         slot.innerHTML = devices.map((device) => `<div class="card tile"><div class="row between gap-3"><div class="stack"><strong>${esc(device.label || "MILA device")}</strong><span class="hint">Paired ${esc(milaDeviceTime(device.createdAt))}</span>${device.revokedAt ? `<span class="hint">Revoked ${esc(milaDeviceTime(device.revokedAt))}</span>` : ""}</div><div class="row gap-2"><span class="badge ${device.active ? "success" : "neutral"}">${device.active ? "Active" : "Revoked"}</span>${device.active ? `<button class="btn sm btn-secondary" data-mila-revoke="${esc(device.id)}">Revoke</button>` : ""}</div></div></div>`).join("");
         slot.querySelectorAll("[data-mila-revoke]").forEach((button) => {
           button.onclick = async () => {
             if (!window.confirm("Revoke this MILA device? It will need a new one-time code to reconnect.")) return;
             button.classList.add("loading");
-            try { await api.integrations.milaRevokeDevice(button.dataset.milaRevoke); const result = await api.integrations.milaDevices(); render(result.devices || []); toast("success", "MILA device revoked"); }
-            catch (error) { toast("error", "Could not revoke device", error.message); }
+            try { await api.integrations.milaRevokeDevice(button.dataset.milaRevoke); const result = await api.integrations.milaDevices(); render(result.devices || []); toast("success", t("integrations.deviceRevoked")); }
+            catch (error) { toast("error", t("integrations.revokeFailed"), error.message); }
             finally { button.classList.remove("loading"); }
           };
         });
       };
       try { const result = await api.integrations.milaDevices(); render(result.devices || []); }
-      catch (error) { slot.innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Could not load devices</div><div class="a-desc">${esc(error.message)}</div></div></div>`; }
+      catch (error) { slot.innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${t("integrations.loadDevicesFailed")}</div><div class="a-desc">${esc(error.message)}</div></div></div>`; }
     },
   });
 }
@@ -1023,20 +1023,20 @@ function intConnect(i) {
   openModal({
     title: "Connect " + i.name, width: 480,
     body: (i.fields || []).map((f) => `<div class="field"><label class="label">${esc(f.label)}</label><input class="input mono" id="if_${f.key}" ${f.secret ? 'type="password"' : ""} placeholder="${esc(f.label)}"/></div>`).join("") + `<div id="icErr"></div>`,
-    footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="icOk">${icon("lock")}Connect &amp; test</button>`,
+    footer: `<button class="btn btn-secondary" data-close>${t("system.cancel")}</button><button class="btn btn-primary" id="icOk">${icon("lock")}${t("integrations.connectTest")}</button>`,
     onMount: (m) => (m.querySelector("#icOk").onclick = async () => {
       const cfg = {}; (i.fields || []).forEach((f) => (cfg[f.key] = m.querySelector("#if_" + f.key).value.trim()));
       const btn = m.querySelector("#icOk"); btn.classList.add("loading");
       try {
         const r = await api.integrations.connect(i.provider, cfg);
-        if (r.ok) { closeOverlay(); toast("success", "Connected " + i.name, r.detail); rerender(); }
-        else m.querySelector("#icErr").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Connection failed</div><div class="a-desc">${esc(r.detail)}</div></div></div>`;
+        if (r.ok) { closeOverlay(); toast("success", t("integrations.connectedName", { name: i.name }), r.detail); rerender(); }
+        else m.querySelector("#icErr").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${t("integrations.connectionFailed")}</div><div class="a-desc">${esc(r.detail)}</div></div></div>`;
       } catch (e) { toast("error", "Error", e.message); }
       btn.classList.remove("loading");
     }),
   });
 }
 async function intDisconnect(i) {
-  try { await api.integrations.disconnect(i.provider); toast("info", "Disconnected " + i.name); rerender(); }
+  try { await api.integrations.disconnect(i.provider); toast("info", t("integrations.disconnectedName", { name: i.name })); rerender(); }
   catch (e) { toast("error", "Failed", e.message); }
 }
