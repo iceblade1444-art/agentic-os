@@ -1,5 +1,9 @@
 # Agentic OS — Dashboard
 
+Current production status, verification results, and the remaining external
+configuration are tracked in
+[`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
+
 ## Production architecture
 
 The repository contains the public Agentic OS visual and the private Python
