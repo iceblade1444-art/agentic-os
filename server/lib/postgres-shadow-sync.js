@@ -16,15 +16,21 @@ export class PostgresShadowSync {
     dataDir,
     databaseUrl,
     intervalMs = 30000,
+    debounceMs = 500,
     migrate = migratePostgresShadow,
+    outbox = null,
   } = {}) {
     this.enabled = !!enabled && !!databaseUrl;
     this.dataDir = dataDir;
     this.databaseUrl = databaseUrl;
     this.intervalMs = Math.max(5000, Number(intervalMs) || 30000);
+    this.debounceMs = Math.max(100, Number(debounceMs) || 500);
     this.migrate = migrate;
+    this.outbox = outbox;
     this.timer = null;
+    this.debounceTimer = null;
     this.currentRun = null;
+    this.resyncRequested = false;
     this.state = {
       mode: "shadow",
       status: this.enabled ? "pending" : "disabled",
@@ -51,6 +57,7 @@ export class PostgresShadowSync {
       consecutiveFailures: this.state.consecutiveFailures,
       sourceHash: this.state.sourceHash,
       counts: this.state.counts ? { ...this.state.counts } : null,
+      outbox: this.outbox?.status() || { pending: 0, oldestAt: null, bytes: 0, error: null },
       error: this.state.error,
     };
   }
@@ -62,6 +69,21 @@ export class PostgresShadowSync {
     this.timer.unref?.();
   }
 
+  request() {
+    if (!this.enabled) return false;
+    if (this.currentRun) {
+      this.resyncRequested = true;
+      return true;
+    }
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      void this.run();
+    }, this.debounceMs);
+    this.debounceTimer.unref?.();
+    return true;
+  }
+
   async run() {
     if (!this.enabled) return { skipped: true, reason: "disabled" };
     if (this.currentRun) return { skipped: true, reason: "in_flight" };
@@ -70,6 +92,8 @@ export class PostgresShadowSync {
     this.state.status = "syncing";
     this.state.lastAttemptAt = iso();
     this.state.error = null;
+    const outboxBatch = this.outbox?.snapshot() || [];
+    let succeeded = false;
     this.currentRun = (async () => {
       try {
         const result = await this.migrate({
@@ -82,6 +106,8 @@ export class PostgresShadowSync {
         this.state.consecutiveFailures = 0;
         this.state.sourceHash = result.sourceHash || null;
         this.state.counts = result.sourceCounts || null;
+        this.outbox?.acknowledge(outboxBatch.map((event) => event.id));
+        succeeded = true;
         return result;
       } catch (error) {
         this.state.status = "error";
@@ -92,6 +118,14 @@ export class PostgresShadowSync {
         return { ok: false, error: this.state.error };
       } finally {
         this.currentRun = null;
+        const outboxStatus = this.outbox?.status();
+        const shouldResync = succeeded
+          && !outboxStatus?.error
+          && (this.resyncRequested || (outboxStatus?.pending || 0) > 0);
+        this.resyncRequested = false;
+        if (shouldResync) {
+          this.request();
+        }
       }
     })();
     return this.currentRun;
@@ -100,6 +134,8 @@ export class PostgresShadowSync {
   async stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = null;
     if (this.currentRun) await this.currentRun;
   }
 }

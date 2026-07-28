@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { config } from "../config.js";
-import { hardenRuntimeFile } from "./runtime-files.js";
+import { hardenRuntimeFile, notifyRuntimeFileMutation } from "./runtime-files.js";
 
 const TASK_STATUSES = new Set(["todo", "doing", "done"]);
 const PRIORITIES = new Set(["low", "normal", "high"]);
@@ -97,6 +97,7 @@ export class MemberWorkspaceStore {
     const file = this.fileFor(userId);
     if (!fs.existsSync(file)) return false;
     fs.rmSync(file, { force: true });
+    notifyRuntimeFileMutation(file);
     return true;
   }
 

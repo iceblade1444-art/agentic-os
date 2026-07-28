@@ -41,18 +41,26 @@ import {
 } from "./lib/mfa-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
+import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
 import { PostgresShadowSync } from "./lib/postgres-shadow-sync.js";
+import { onRuntimeFileMutation } from "./lib/runtime-files.js";
 import * as mcpManager from "./mcp/manager.js";
 import { db } from "./store.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
 const server = createServer(app);
+const postgresOutbox = new PostgresShadowOutbox({ dataDir: config.dataDir });
 const postgresShadow = new PostgresShadowSync({
   enabled: config.postgres.shadowSyncEnabled,
   dataDir: config.dataDir,
   databaseUrl: config.postgres.databaseUrl,
   intervalMs: config.postgres.shadowSyncIntervalMs,
+  debounceMs: config.postgres.shadowSyncDebounceMs,
+  outbox: postgresOutbox,
+});
+const stopPostgresMutationListener = onRuntimeFileMutation((file) => {
+  if (postgresShadow.enabled && postgresOutbox.record(file)) postgresShadow.request();
 });
 app.disable("x-powered-by");
 app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
@@ -194,6 +202,7 @@ server.listen(config.port, async () => {
 });
 
 async function bye() {
+  stopPostgresMutationListener();
   await postgresShadow.stop();
   await mcpManager.shutdownAll();
   server.close(() => process.exit(0));

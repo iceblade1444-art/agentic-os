@@ -17,6 +17,7 @@ test("PostgreSQL shadow sync stays disabled without an explicit database rollout
     consecutiveFailures: 0,
     sourceHash: null,
     counts: null,
+    outbox: { pending: 0, oldestAt: null, bytes: 0, error: null },
     error: null,
   });
   assert.deepEqual(await sync.run(), { skipped: true, reason: "disabled" });
@@ -75,10 +76,60 @@ test("PostgreSQL shadow sync contains failures without exposing connection detai
   assert.match(sync.status().error, /\[database\]/);
 });
 
+test("PostgreSQL shadow sync acknowledges outbox only after success", async () => {
+  const events = [{ id: "evt_one" }, { id: "evt_two" }];
+  const acknowledged = [];
+  const outbox = {
+    snapshot: () => events,
+    acknowledge: (ids) => acknowledged.push(ids),
+    status: () => ({ pending: events.length, oldestAt: null, bytes: 100, error: null }),
+  };
+  const failed = new PostgresShadowSync({
+    enabled: true,
+    databaseUrl: "postgresql://private",
+    outbox,
+    migrate: async () => { throw new Error("offline"); },
+  });
+  await failed.run();
+  assert.deepEqual(acknowledged, []);
+  assert.equal(failed.debounceTimer, null);
+  await failed.stop();
+
+  const successful = new PostgresShadowSync({
+    enabled: true,
+    databaseUrl: "postgresql://private",
+    outbox,
+    migrate: async () => ({ ok: true, sourceHash: "b".repeat(64), sourceCounts: {} }),
+  });
+  await successful.run();
+  assert.deepEqual(acknowledged, [["evt_one", "evt_two"]]);
+  await successful.stop();
+});
+
+test("a mutation during a successful sync schedules one debounced follow-up", async () => {
+  let release;
+  const sync = new PostgresShadowSync({
+    enabled: true,
+    databaseUrl: "postgresql://private",
+    debounceMs: 5000,
+    migrate: () => new Promise((resolve) => {
+      release = () => resolve({ ok: true, sourceHash: "c".repeat(64), sourceCounts: {} });
+    }),
+  });
+  const running = sync.run();
+  assert.equal(sync.request(), true);
+  release();
+  await running;
+  assert.notEqual(sync.debounceTimer, null);
+  await sync.stop();
+  assert.equal(sync.debounceTimer, null);
+});
+
 test("server health exposes shadow state and shuts the worker down cleanly", async () => {
   const fs = await import("node:fs");
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   assert.match(server, /database: postgresShadow\.status\(\)/);
   assert.match(server, /postgresShadow\.start\(\)/);
+  assert.match(server, /postgresShadow\.enabled && postgresOutbox\.record\(file\)/);
   assert.match(server, /await postgresShadow\.stop\(\)/);
 });
