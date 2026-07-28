@@ -48,6 +48,7 @@ export class PostgresAuthReadAdapter {
     userStore,
     sessionStore,
     refreshMs = 1000,
+    cacheMaxAgeMs,
     pool = null,
   } = {}) {
     this.mode = MODES.has(mode) ? mode : "json";
@@ -56,6 +57,7 @@ export class PostgresAuthReadAdapter {
     this.userStore = userStore;
     this.sessionStore = sessionStore;
     this.refreshMs = Math.max(500, Number(refreshMs) || 1000);
+    this.cacheMaxAgeMs = Math.max(3000, Number(cacheMaxAgeMs) || this.refreshMs * 5);
     this.enabled = this.mode !== "json" && !!databaseUrl;
     this.ownedPool = !pool && this.enabled;
     this.pool = pool || (this.enabled ? new Pool({
@@ -188,6 +190,10 @@ export class PostgresAuthReadAdapter {
     if ((shadow.outbox?.pending || 0) > 0) return "outbox_pending";
     if (shadow.outbox?.error) return "outbox_error";
     if (!this.cache.ready) return "cache_not_ready";
+    if (!this.metrics.lastRefreshAt
+      || Date.now() - new Date(this.metrics.lastRefreshAt).getTime() > this.cacheMaxAgeMs) {
+      return "cache_expired";
+    }
     if (!shadow.sourceHash || this.cache.sourceHash !== shadow.sourceHash) return "cache_stale";
     return "";
   }

@@ -166,6 +166,25 @@ test("outbox and stale cache force JSON without consulting cached auth", async (
   assert.equal(adapter.status().consistencyFallbacks, 2);
 });
 
+test("an expired cache falls back to JSON even when its source hash still matches", async () => {
+  const fallback = stores();
+  const adapter = new PostgresAuthReadAdapter({
+    mode: "postgres",
+    databaseUrl: "postgresql://private",
+    shadowStatus: ready(),
+    userStore: fallback.userStore,
+    sessionStore: fallback.sessionStore,
+    cacheMaxAgeMs: 3000,
+    pool: fakePool(),
+  });
+  await adapter.refresh();
+  adapter.metrics.lastRefreshAt = new Date(Date.now() - 4000).toISOString();
+
+  assert.deepEqual(adapter.sessionUser(rawUser.id), sessionUser);
+  assert.equal(adapter.status().postgresReads, 0);
+  assert.equal(adapter.status().lastFallbackReason, "cache_expired");
+});
+
 test("refresh failures keep JSON auth available and redact the database URL", async () => {
   const fallback = stores();
   const secret = "postgresql://auth:secret@postgres/private";
