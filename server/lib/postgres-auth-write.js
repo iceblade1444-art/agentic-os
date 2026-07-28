@@ -58,6 +58,11 @@ export class PostgresAuthWriteAdapter {
       lastFallbackReason: null,
       error: null,
     };
+    if (typeof this.pool?.on === "function") {
+      this.pool.on("error", (error) => {
+        this.metrics.error = cleanError(error, this.databaseUrl);
+      });
+    }
   }
 
   status() {

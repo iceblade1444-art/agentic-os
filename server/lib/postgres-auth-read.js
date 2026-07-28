@@ -83,6 +83,12 @@ export class PostgresAuthReadAdapter {
       lastFallbackReason: null,
       error: null,
     };
+    if (typeof this.pool?.on === "function") {
+      this.pool.on("error", (error) => {
+        this.cache.ready = false;
+        this.metrics.error = cleanError(error, this.databaseUrl);
+      });
+    }
   }
 
   status() {
