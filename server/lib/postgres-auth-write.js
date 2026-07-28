@@ -58,16 +58,26 @@ export class PostgresAuthWriteAdapter {
       lastWriteAt: null,
       lastGroup: null,
       lastFallbackReason: null,
+      lastErrorAt: null,
       error: null,
     };
     if (typeof this.pool?.on === "function") {
       this.pool.on("error", (error) => {
         this.metrics.error = cleanError(error, this.databaseUrl);
+        this.metrics.lastErrorAt = new Date().toISOString();
       });
     }
   }
 
   status() {
+    const shadow = this.shadowStatus();
+    if (this.activeGroups.size === 0 && shadow.status === "ready" && shadow.outbox
+      && (shadow.outbox.pending || 0) === 0 && !shadow.outbox.error
+      && shadow.lastSuccessAt && this.metrics.lastErrorAt
+      && new Date(shadow.lastSuccessAt) > new Date(this.metrics.lastErrorAt)) {
+      this.metrics.error = null;
+      if (this.metrics.lastFallbackReason === "query_error") this.metrics.lastFallbackReason = null;
+    }
     return {
       enabled: this.enabled,
       mode: this.mode,
@@ -104,6 +114,7 @@ export class PostgresAuthWriteAdapter {
       })
       .catch((error) => {
         this.metrics.error = cleanError(error, this.databaseUrl);
+        this.metrics.lastErrorAt = new Date().toISOString();
         this.#fallback("query", "query_error");
       })
       .finally(() => {
