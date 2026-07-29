@@ -128,6 +128,13 @@ export const api = {
     dashboard: () => j("/api/personal"),
     googleConnect: () => j("/api/personal/google/connect", { method: "POST" }),
     googleDisconnect: () => j("/api/personal/google", { method: "DELETE" }),
+    googleEvents: ({ from, to, limit = 20 } = {}) => {
+      const query = new URLSearchParams();
+      if (from) query.set("from", from);
+      if (to) query.set("to", to);
+      query.set("limit", String(limit));
+      return j(`/api/personal/google/calendar/events?${query}`);
+    },
     files: () => j("/api/personal/files"),
     uploadFile: (body) => j("/api/personal/files", { method: "POST", body }),
     deleteFile: (id) => j(`/api/personal/files/${encodeURIComponent(id)}`, { method: "DELETE" }),

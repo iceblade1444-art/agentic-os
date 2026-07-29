@@ -56,6 +56,15 @@ function taskItem(task) {
   </article>`;
 }
 
+function calendarEventItem(event) {
+  const start = event.start ? localizedDate(event.start) : t("personal.calendar.noTime");
+  const detail = [start, event.location].filter(Boolean).join(" · ");
+  const body = `<span class="personal-source-icon">${icon("calendar")}</span><span><strong>${esc(event.title)}</strong><small>${esc(detail)}</small></span>${icon("chevright")}`;
+  return event.htmlLink
+    ? `<a class="personal-source" href="${esc(event.htmlLink)}" target="_blank" rel="noopener">${body}</a>`
+    : `<div class="personal-source">${body}</div>`;
+}
+
 function approvalTitle(item) {
   return item?.title || item?.description || item?.action || item?.summary || item?.id || t("personal.approval.action");
 }
@@ -107,6 +116,12 @@ function todayView() {
       <section class="personal-panel">
         <header><div><span>${t("personal.context")}</span><h3>${t("personal.latestMemory")}</h3></div><button class="link-button" data-open-tab="memory">${t("personal.open")}</button></header>
         <div class="personal-note-stream">${data.notes.length ? data.notes.slice(0, 4).map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}">${icon("file")}<span><strong>${esc(note.title)}</strong><small>${t("personal.updated", { date: shortDate(note.updatedAt) })}</small></span>${icon("chevright")}</a>`).join("") : `<div class="personal-empty">${icon("file")}<strong>${t("personal.emptyMemory")}</strong><span>${t("personal.createMemory")}</span></div>`}</div>
+      </section>
+      <section class="personal-panel">
+        <header><div><span>${t("personal.calendar.eyebrow")}</span><h3>${t("personal.calendar.upcoming")}</h3></div>${data.google?.connected ? `<button class="link-button" data-calendar-refresh>${t("personal.calendar.refresh")}</button>` : ""}</header>
+        <div class="personal-stack">${data.calendarEvents?.length
+          ? data.calendarEvents.slice(0, 5).map(calendarEventItem).join("")
+          : `<div class="personal-empty">${icon("calendar")}<strong>${t(data.google?.connected ? "personal.calendar.empty" : "personal.calendar.connect")}</strong><span>${t(data.google?.connected ? "personal.calendar.emptyHint" : "personal.calendar.connectHint")}</span></div>`}</div>
       </section>
     </div>
     <section class="personal-sources">
@@ -221,10 +236,23 @@ function openTab(root, tab) {
 
 async function reload(root, tab = activeTab) {
   data = await api.personal.dashboard();
+  data.calendarEvents = [];
+  if (data.google?.connected) {
+    try {
+      const result = await api.personal.googleEvents({ limit: 10 });
+      data.calendarEvents = result.events || [];
+    } catch (error) {
+      data.calendarError = error.message;
+    }
+  }
   openTab(root, tab);
 }
 
 function wire(root) {
+  root.querySelector("[data-calendar-refresh]")?.addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    await reload(root, "today");
+  });
   root.querySelector("[data-personal-file]")?.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;

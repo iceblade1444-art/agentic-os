@@ -52,7 +52,7 @@ r.get("/", async (req, res, next) => {
         soul: state.profile?.completedAt ? "connected" : "setup_required",
         mila: "connected",
         calendar: google.connected ? "connected" : google.configured ? "setup_required" : "not_connected",
-        inbox: google.connected ? "connected" : google.configured ? "setup_required" : "not_connected",
+        inbox: "not_connected",
         files: "connected",
       },
       google,
@@ -98,15 +98,21 @@ r.get("/google/status", (req, res) => {
 r.post("/google/connect", (req, res, next) => {
   try {
     const user = req.user || authenticatedUser(req);
-    res.json(googleWorkspace.connect(user.id));
+    res.json(googleWorkspace.connect(user.id, {
+      client: req.body?.client,
+      locale: req.body?.locale,
+    }));
   } catch (error) { next(error); }
 });
 
-r.get("/google/callback", async (req, res, next) => {
+r.get("/google/calendar/events", async (req, res, next) => {
   try {
     const user = req.user || authenticatedUser(req);
-    await googleWorkspace.callback(user.id, req.query.code, req.query.state);
-    res.redirect("/#/personal");
+    res.json(await googleWorkspace.calendarEvents(user.id, {
+      from: req.query.from,
+      to: req.query.to,
+      limit: req.query.limit,
+    }));
   } catch (error) { next(error); }
 });
 

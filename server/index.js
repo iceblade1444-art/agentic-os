@@ -55,6 +55,7 @@ import { db } from "./store.js";
 import { memberWorkspaces } from "./lib/member-workspace.js";
 import { sessions } from "./lib/sessions.js";
 import { users } from "./lib/users.js";
+import { googleWorkspace } from "./lib/google-workspace.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -173,6 +174,28 @@ app.post("/api/auth/password/forgot", rateLimit({ windowMs: 10 * 60000, max: 5 }
 app.post("/api/auth/password/reset", rateLimit({ windowMs: 10 * 60000, max: 5 }), resetPasswordHandler);
 app.post("/api/auth/email/verify", rateLimit({ windowMs: 10 * 60000, max: 10 }), verifyEmailHandler);
 app.post("/api/auth/email/resend", rateLimit({ windowMs: 10 * 60000, max: 5 }), resendVerificationHandler);
+app.get("/api/personal/google/callback", rateLimit({ windowMs: 10 * 60000, max: 30 }), async (req, res, next) => {
+  try {
+    const result = await googleWorkspace.callback(req.query.code, req.query.state);
+    if (result.client !== "mobile") {
+      res.redirect("/#/personal");
+      return;
+    }
+    const copy = {
+      ru: ["Google Calendar подключён", "Эту страницу можно закрыть и вернуться в MILA. Календарь синхронизирован с вашим аккаунтом Agentic OS."],
+      uz: ["Google Calendar ulandi", "Bu sahifani yopib, MILA ilovasiga qaytishingiz mumkin. Kalendar Agentic OS akkauntingiz bilan sinxronlandi."],
+      en: ["Google Calendar connected", "You can close this page and return to MILA. Your calendar is now synchronized with your Agentic OS account."],
+    }[result.locale] || ["Google Calendar connected", "You can close this page and return to MILA. Your calendar is now synchronized with your Agentic OS account."];
+    res.type("html").send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Google Calendar connected</title><style>
+body{margin:0;background:#090d18;color:#f8fafc;font-family:system-ui,sans-serif;display:grid;min-height:100vh;place-items:center}
+main{max-width:420px;padding:32px;text-align:center}b{display:block;font-size:24px;margin:16px}p{color:#a7b0c4;line-height:1.5}
+</style></head><body><main><div aria-hidden="true">✓</div><b>${copy[0]}</b>
+<p>${copy[1]}</p>
+</main></body></html>`);
+  } catch (error) { next(error); }
+});
 
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
 app.use("/api", requireAuth);
