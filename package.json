@@ -11,6 +11,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "prod:e2e": "node scripts/production-e2e.mjs",
+    "prod:member-e2e": "node scripts/production-member-e2e.mjs",
+    "smtp:verify": "node scripts/smtp-verify.mjs",
     "db:dry-run": "node scripts/postgres-migrate.mjs --dry-run",
     "db:migrate": "node scripts/postgres-migrate.mjs",
     "db:verify": "node scripts/postgres-migrate.mjs --verify-only",

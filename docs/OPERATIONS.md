@@ -30,6 +30,17 @@ authenticated `/api/operations/status` endpoint. A manual request only creates
 `backup.request` or `restore.request`; the host path unit performs the
 privileged work.
 
+Before opening registration to users, run:
+
+```bash
+npm run prod:member-e2e
+```
+
+The check creates two temporary Member accounts, verifies the same identity
+through web and mobile login, proves personal task isolation, verifies the
+per-user SOUL export, and removes both accounts. It never uses the Creator
+credential.
+
 ## Backup contents
 
 Each backup directory contains:

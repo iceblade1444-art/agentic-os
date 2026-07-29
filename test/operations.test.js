@@ -60,6 +60,8 @@ test("operations UI and host installer use real API, timers and path activation"
   const installer = fs.readFileSync(new URL("../scripts/install-agentic-os-operations.sh", import.meta.url), "utf8");
   const operator = fs.readFileSync(new URL("../scripts/agentic-os-operations.py", import.meta.url), "utf8");
   const productionE2e = fs.readFileSync(new URL("../scripts/production-e2e.mjs", import.meta.url), "utf8");
+  const memberE2e = fs.readFileSync(new URL("../scripts/production-member-e2e.mjs", import.meta.url), "utf8");
+  const smtpVerify = fs.readFileSync(new URL("../scripts/smtp-verify.mjs", import.meta.url), "utf8");
   const deploy = fs.readFileSync(new URL("../deploy.sh", import.meta.url), "utf8");
   const store = fs.readFileSync(new URL("../server/store.js", import.meta.url), "utf8");
   const users = fs.readFileSync(new URL("../server/lib/users.js", import.meta.url), "utf8");
@@ -102,6 +104,8 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(operator, /LiveKit signaling/);
   assert.match(operator, /Obsidian vault/);
   assert.equal(pkg.scripts["prod:e2e"], "node scripts/production-e2e.mjs");
+  assert.equal(pkg.scripts["prod:member-e2e"], "node scripts/production-member-e2e.mjs");
+  assert.equal(pkg.scripts["smtp:verify"], "node scripts/smtp-verify.mjs");
   assert.match(productionE2e, /AGENTIC_OS_PUBLIC_URL/);
   assert.match(productionE2e, /\/api\/operations\/status/);
   assert.match(productionE2e, /\/api\/kanban\/board/);
@@ -110,6 +114,14 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(productionE2e, /method:\s*"POST"/);
   assert.match(productionE2e, /\/api\/claude-code\/status\?probe=\$\{internal\}/);
   assert.match(productionE2e, /timeout: internal \? 60000/);
+  assert.match(memberE2e, /\/api\/auth\/mobile\/register/);
+  assert.match(memberE2e, /\/api\/auth\/login/);
+  assert.match(memberE2e, /\/api\/member\/tasks/);
+  assert.match(memberE2e, /\/api\/auth\/account\/export/);
+  assert.match(memberE2e, /method:\s*"DELETE"/);
+  assert.match(smtpVerify, /transport\.verify\(\)/);
+  assert.match(smtpVerify, /SMTP_TEST_TO/);
+  assert.doesNotMatch(smtpVerify, /console\.log\(.*password/);
   assert.match(deploy, /candidate staging health passed/);
   assert.match(deploy, /mandatory post-deploy smoke passed/);
   assert.match(deploy, /docker run --rm agentic-os:latest npm test/);

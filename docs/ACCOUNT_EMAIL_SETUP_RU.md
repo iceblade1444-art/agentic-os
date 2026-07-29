@@ -6,22 +6,44 @@ Agentic OS поддерживает подтверждение новых акк
 
 ## Настройка
 
+Для текущего запуска рекомендуется Brevo: пользователям Agentic OS не нужны
+свои Brevo-аккаунты, Google Cloud или SMTP-пароли. Один серверный SMTP-аккаунт
+отправляет системные письма всем пользователям. Бесплатный тариф Brevo включает
+до 300 писем в день.
+
+В Brevo откройте `Settings → SMTP & API → SMTP`, создайте отдельный SMTP key
+для Agentic OS и подтвердите адрес отправителя. Используйте именно SMTP key,
+не пароль аккаунта и не API key.
+
 Добавьте в серверный `.env`:
 
 ```dotenv
 PUBLIC_URL=https://agent.milanapremium.uz
-SMTP_HOST=smtp.example.com
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=your-smtp-user
-SMTP_PASSWORD=your-smtp-password
-SMTP_FROM="Mila Agentic OS <no-reply@example.com>"
+SMTP_USER=your-brevo-smtp-login
+SMTP_PASSWORD=your-brevo-smtp-key
+SMTP_FROM="Mila Agentic OS <verified-sender@milanapremium.uz>"
 EMAIL_VERIFICATION_REQUIRED=true
 ```
 
 Для SMTP на порту `465` обычно используются `SMTP_PORT=465` и
 `SMTP_SECURE=true`. Для STARTTLS на порту `587` оставьте `SMTP_SECURE=false`.
-Точные значения выдаёт выбранный почтовый сервис.
+Если хостинг блокирует `587`, Brevo также поддерживает `2525`; с production
+Agentic OS оба порта уже проверены и доступны.
+
+До включения обязательного подтверждения проверьте настройки внутри
+контейнера:
+
+```bash
+docker compose run --rm --no-deps \
+  -e SMTP_TEST_TO=your-address@example.com \
+  agentic-os npm run smtp:verify
+```
+
+Команда проверяет соединение и аутентификацию, а при `SMTP_TEST_TO` отправляет
+одно тестовое письмо. SMTP key в вывод не попадает.
 
 После изменения выполните:
 
