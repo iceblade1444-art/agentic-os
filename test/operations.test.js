@@ -114,6 +114,9 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(deploy, /mandatory post-deploy smoke passed/);
   assert.match(deploy, /docker run --rm agentic-os:latest npm test/);
   assert.match(deploy, /docker compose exec -T -e AGENTIC_OS_INTERNAL_URL/);
+  assert.match(deploy, /SPEECH_PROJECT=.*docker inspect/);
+  assert.match(deploy, /EXTERNAL_SPEECH=true/);
+  assert.match(deploy, /docker compose up -d --no-build --no-deps postgres agentos-runtime agentic-os/);
   assert.match(deploy, /chown -R \$\{HOST_UID\}:\$\{HOST_GID\} \/app\/data/);
   assert.match(deploy, /find \/app\/data -type f -exec chmod 600/);
   assert.match(store, /hardenRuntimeFile\(file, 0o600\)/);

@@ -65,7 +65,19 @@ fi
 # model tooling, so normal application deploys reuse the last verified image.
 # Rebuild it explicitly after speech-service changes:
 #   REBUILD_SPEECH=true bash deploy.sh
+COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$PWD")}"
+SPEECH_PROJECT="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' speech 2>/dev/null || true)"
+EXTERNAL_SPEECH=false
+if [ -n "$SPEECH_PROJECT" ] && [ "$SPEECH_PROJECT" != "$COMPOSE_PROJECT" ]; then
+  EXTERNAL_SPEECH=true
+  echo "· reusing speech container managed by the ${SPEECH_PROJECT} Compose project"
+fi
+
 if [ "${REBUILD_SPEECH:-false}" = "true" ] || ! docker image inspect agentos-speech:latest >/dev/null 2>&1; then
+  if [ "$EXTERNAL_SPEECH" = "true" ]; then
+    echo "Speech is managed by another Compose project; rebuild it from that project." >&2
+    exit 1
+  fi
   echo "· building speech service image…"
   docker compose build speech
 else
@@ -106,7 +118,13 @@ cleanup_candidate
 trap - EXIT
 echo "· candidate staging health passed"
 
-docker compose up -d --no-build
+if [ "$EXTERNAL_SPEECH" = "true" ]; then
+  # The standalone speech stack already owns the globally named container.
+  # --no-deps prevents Compose from trying to recreate it through depends_on.
+  docker compose up -d --no-build --no-deps postgres agentos-runtime agentic-os
+else
+  docker compose up -d --no-build
+fi
 
 # Keep container-written runtime files readable by the host services that create
 # backups. The app container runs as root for Claude's persisted config mount,

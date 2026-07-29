@@ -84,6 +84,16 @@ python3 scripts/agentic-os-operations.py restore-drill
 The result is written to `restoreDrill` in the operations state and appears in
 Operational Home, Observability, and the Four C readiness audit.
 
+### Standalone speech service
+
+Production may run the `speech` container from a dedicated Compose project so
+large speech models are not rebuilt during normal Agentic OS releases.
+`deploy.sh` detects the Compose project label on the existing `speech`
+container. When another project owns it, the release reuses that container and
+updates only PostgreSQL, AgentOS runtime, and the web application. Run speech
+image rebuilds from the standalone speech project instead of setting
+`REBUILD_SPEECH=true` in the Agentic OS project.
+
 ## Notifications
 
 Notifications are sent only when overall health changes or a backup fails. Use
