@@ -62,6 +62,7 @@ test("operations UI and host installer use real API, timers and path activation"
   const productionE2e = fs.readFileSync(new URL("../scripts/production-e2e.mjs", import.meta.url), "utf8");
   const memberE2e = fs.readFileSync(new URL("../scripts/production-member-e2e.mjs", import.meta.url), "utf8");
   const smtpVerify = fs.readFileSync(new URL("../scripts/smtp-verify.mjs", import.meta.url), "utf8");
+  const smtpSetup = fs.readFileSync(new URL("../scripts/configure-corporate-smtp.sh", import.meta.url), "utf8");
   const deploy = fs.readFileSync(new URL("../deploy.sh", import.meta.url), "utf8");
   const store = fs.readFileSync(new URL("../server/store.js", import.meta.url), "utf8");
   const users = fs.readFileSync(new URL("../server/lib/users.js", import.meta.url), "utf8");
@@ -122,6 +123,11 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(smtpVerify, /transport\.verify\(\)/);
   assert.match(smtpVerify, /SMTP_TEST_TO/);
   assert.doesNotMatch(smtpVerify, /console\.log\(.*password/);
+  assert.match(smtpSetup, /read -r -s -p "Mailbox password \(hidden\): "/);
+  assert.match(smtpSetup, /SMTP_HOST=mail\.milanapremium\.uz/);
+  assert.match(smtpSetup, /npm run smtp:verify/);
+  assert.match(smtpSetup, /EMAIL_VERIFICATION_REQUIRED=true/);
+  assert.match(smtpSetup, /trap restore ERR/);
   assert.match(deploy, /candidate staging health passed/);
   assert.match(deploy, /mandatory post-deploy smoke passed/);
   assert.match(deploy, /docker run --rm agentic-os:latest npm test/);
