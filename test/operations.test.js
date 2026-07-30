@@ -125,6 +125,7 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.doesNotMatch(smtpVerify, /console\.log\(.*password/);
   assert.match(smtpSetup, /read -r -s -p "Mailbox password \(hidden\): "/);
   assert.match(smtpSetup, /SMTP_HOST=mail\.milanapremium\.uz/);
+  assert.match(smtpSetup, /Enter a valid recipient email/);
   assert.match(smtpSetup, /npm run smtp:verify/);
   assert.match(smtpSetup, /EMAIL_VERIFICATION_REQUIRED=true/);
   assert.match(smtpSetup, /trap restore ERR/);

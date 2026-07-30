@@ -17,8 +17,14 @@ read -r -s -p "Mailbox password (hidden): " SMTP_PASSWORD_INPUT
 echo
 [ -n "$SMTP_PASSWORD_INPUT" ] || { echo "Password cannot be empty." >&2; exit 1; }
 
-read -r -p "Send the test message to [${SMTP_USER_INPUT}]: " SMTP_TEST_TO
-SMTP_TEST_TO="${SMTP_TEST_TO:-$SMTP_USER_INPUT}"
+while true; do
+  read -r -p "Send the test message to [${SMTP_USER_INPUT}]: " SMTP_TEST_TO
+  SMTP_TEST_TO="${SMTP_TEST_TO:-$SMTP_USER_INPUT}"
+  if [[ "$SMTP_TEST_TO" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
+    break
+  fi
+  echo "Enter a valid recipient email or press Enter to use ${SMTP_USER_INPUT}." >&2
+done
 
 BACKUP=".env.backup-smtp-$(date -u +%Y%m%dT%H%M%SZ)"
 cp .env "$BACKUP"
