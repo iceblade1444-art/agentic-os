@@ -242,10 +242,10 @@ export const onboarding = new OnboardingStore();
 export const AGENT_PLAYBOOKS = [
   { file: "Agentic OS/Marketing Playbook.md", label: "Marketing and content playbook" },
 ];
-// Consumers clamp the shared context at 6000 characters, so playbooks are added
+// Consumers clamp the shared context at CONTEXT_BUDGET characters, so playbooks are added
 // last and only into what is left: a long playbook can lose its own tail, never
 // the workspace facts or the user profile above it.
-const CONTEXT_BUDGET = 6000;
+export const CONTEXT_BUDGET = 9000;
 const MIN_PLAYBOOK_ROOM = 400;
 
 export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.obsidianVault) {

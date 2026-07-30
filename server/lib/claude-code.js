@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
+import { CONTEXT_BUDGET as AGENT_CONTEXT_LIMIT } from "./onboarding.js";
 
 const MAX_SESSIONS = 80;
 const MAX_MESSAGES = 200;
@@ -498,7 +499,7 @@ export function createClaudeCodeManager(options = {}) {
     const contextHint = context.length
       ? `\n\nThe user attached these files inside the workspace:\n${context.map((item) => `- ${item.path}`).join("\n")}`
       : "";
-    const agentContext = bounded(input.agentContext, 6000);
+    const agentContext = bounded(input.agentContext, AGENT_CONTEXT_LIMIT);
     const systemPrompt = [
       "You are Claude Code inside Agentic OS. Work only inside the selected workspace. Keep changes reviewable, run focused verification, and finish with a concise summary of files changed, checks run, and any remaining risk.",
       agentContext,
@@ -569,7 +570,7 @@ export function createClaudeCodeManager(options = {}) {
       method: "POST",
       body: {
         title,
-        body: `${body}${input.agentContext ? `\n\n${bounded(input.agentContext, 6000)}` : ""}\n\nSource: Claude Workspace session ${session.id}`,
+        body: `${body}${input.agentContext ? `\n\n${bounded(input.agentContext, AGENT_CONTEXT_LIMIT)}` : ""}\n\nSource: Claude Workspace session ${session.id}`,
         assignee: profile,
         priority: Math.max(0, Math.min(3, Number(input.priority) || 1)),
         triage: profile === "default",

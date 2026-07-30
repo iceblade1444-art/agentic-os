@@ -122,6 +122,9 @@ export const MILA_DEFAULT_PREFERENCES = Object.freeze({
 
 export const MILA_VOICE_DIRECTION_LIMIT = 240;
 export const MILA_PERSONA_LIMIT = 1200;
+// Mirrors CONTEXT_BUDGET in server/lib/onboarding.js: the server already trims
+// the shared context to that size, so this only guards against a stale payload.
+const AGENT_CONTEXT_LIMIT = 9000;
 
 const ACTIVE_PHASES = new Set(["connecting", "listening", "thinking", "speaking", "muted"]);
 function initialLanguage() {
@@ -257,7 +260,7 @@ Every state-changing tool uses enforced two-step confirmation. On the first call
 This includes anything that changes settings, files, accounts, money, deployments, external messages or other important state.
 Use delegate_to_hermes for multi-agent work, create_kanban_task when the user only wants a visible card, write_obsidian_note for approved knowledge writes, and ask_claude_code for approved work in the coding workspace. Never claim that Hermes or Claude completed a task when it has only started.
 Current local time: ${currentTime || new Date().toISOString()}.
-${agentContext ? `Workspace context supplied by Agentic OS:\n${String(agentContext).slice(0, 6000)}` : "Workspace context has not been configured yet."}
+${agentContext ? `Workspace context supplied by Agentic OS:\n${String(agentContext).slice(0, AGENT_CONTEXT_LIMIT)}` : "Workspace context has not been configured yet."}
 ${recent ? `Recent conversation:\n${recent}` : ""}`;
 }
 
@@ -315,7 +318,7 @@ class MilaSessionHub {
       api.integrations.milaStatus(),
       api.onboarding.get().catch(() => ({ agentContext: "" })),
     ]).then(([result, onboarding]) => {
-      this.state.agentContext = String(onboarding.agentContext || "").slice(0, 6000);
+      this.state.agentContext = String(onboarding.agentContext || "").slice(0, AGENT_CONTEXT_LIMIT);
       this.state.backendReady = !!result.voiceConfigured;
       this.state.model = result.liveModel || this.state.model;
       this.state.phase = this.state.backendReady ? "idle" : "error";
