@@ -236,7 +236,40 @@ ${bulletList(workspace.constraints)}
 
 export const onboarding = new OnboardingStore();
 
-export function sharedAgentContext(user, state = onboarding.get(user || { id: "system", role: "Viewer" })) {
+// Playbooks are vault notes the team writes by hand and every agent then gets
+// for free. Onboarding fields are one-liners; this is where the depth lives —
+// brand voice, audience segments, channel rules — without touching any code.
+export const AGENT_PLAYBOOKS = [
+  { file: "Agentic OS/Marketing Playbook.md", label: "Marketing and content playbook" },
+];
+// Consumers clamp the shared context at 6000 characters, so playbooks are added
+// last and only into what is left: a long playbook can lose its own tail, never
+// the workspace facts or the user profile above it.
+const CONTEXT_BUDGET = 6000;
+const MIN_PLAYBOOK_ROOM = 400;
+
+export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.obsidianVault) {
+  if (room < MIN_PLAYBOOK_ROOM) return "";
+  try {
+    const root = path.resolve(vault);
+    const file = path.resolve(root, entry.file);
+    // Keep reads inside the vault even if a playbook entry is ever mis-edited.
+    if (file !== root && !file.startsWith(root + path.sep)) return "";
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size > 256 * 1024) return "";
+    // Front matter is bookkeeping for Obsidian, not context for an agent.
+    const body = fs.readFileSync(file, "utf8").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim();
+    return body.slice(0, room);
+  } catch {
+    return "";
+  }
+}
+
+export function sharedAgentContext(
+  user,
+  state = onboarding.get(user || { id: "system", role: "Viewer" }),
+  { vault = config.obsidianVault } = {},
+) {
   const workspace = state.workspace || {};
   const profile = state.profile || {};
   const context = [];
@@ -261,5 +294,12 @@ export function sharedAgentContext(user, state = onboarding.get(user || { id: "s
       `User work focus: ${profile.roleFocus || "Not specified"}`,
     );
   }
-  return context.join("\n").slice(0, 6000);
+  let out = context.join("\n").slice(0, CONTEXT_BUDGET);
+  if (!(workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;
+  for (const entry of AGENT_PLAYBOOKS) {
+    const heading = `\n${entry.label} (authoritative, written by the team):\n`;
+    const playbook = readAgentPlaybook(entry, CONTEXT_BUDGET - out.length - heading.length, vault);
+    if (playbook) out += `${heading}${playbook}`;
+  }
+  return out;
 }
