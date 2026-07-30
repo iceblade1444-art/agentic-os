@@ -328,6 +328,8 @@ async function boot() {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); }
     else if (e.key === "Escape") closeOverlay();
   });
+  const accountAction = new URLSearchParams(location.search);
+  if (accountAction.has("verify") || accountAction.has("reset")) return renderLogin();
   if (api.needsAuth) return renderLogin();
   syncAuthenticatedProfile();
   if (api.on) {
@@ -367,6 +369,12 @@ function renderLogin() {
   const params = new URLSearchParams(location.search);
   const verifyToken = params.get("verify") || "";
   const resetToken = params.get("reset") || "";
+  const clearAccountAction = () => {
+    const url = new URL(location.href);
+    url.searchParams.delete("verify");
+    url.searchParams.delete("reset");
+    history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
   let mfaChallenge = "";
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
     <label class="login-language" aria-label="${tr("login.language")}">${icon("chat")}<select id="loginLocale">
@@ -440,6 +448,7 @@ function renderLogin() {
       }
       if (form.dataset.mode === "reset") {
         await api.auth.resetPassword(resetToken, body.password);
+        clearAccountAction();
         setMode("sent");
         qs("#loginLead").textContent = tr("login.passwordReset");
         return;
@@ -477,11 +486,10 @@ function renderLogin() {
     api.auth.verifyEmail(verifyToken).then(() => {
       qs("#loginLead").textContent = tr("login.emailVerified");
       qs("#authBack").hidden = false;
-      history.replaceState({}, "", location.pathname);
     }).catch((error) => {
       qs("#loginErr").innerHTML = `<div class="field-error">${esc(error.message)}</div>`;
       qs("#authBack").hidden = false;
-    });
+    }).finally(clearAccountAction);
   }
 }
 function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", t); }

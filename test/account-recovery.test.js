@@ -53,5 +53,9 @@ test("email delivery stays disabled without SMTP and public status exposes no cr
   assert.match(server, /\/api\/auth\/password\/forgot/);
   assert.match(server, /\/api\/auth\/email\/verify/);
   assert.match(app, /api\.auth\.resetPassword/);
+  assert.match(app, /accountAction\.has\("verify"\).*renderLogin/);
+  assert.match(app, /accountAction\.has\("reset"\).*renderLogin/);
+  assert.match(app, /url\.searchParams\.delete\("verify"\)/);
+  assert.match(app, /url\.searchParams\.delete\("reset"\)/);
   assert.doesNotMatch(recovery, /SMTP_PASSWORD/);
 });
