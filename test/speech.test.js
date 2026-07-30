@@ -14,12 +14,14 @@ test("speech upload filenames are bounded to a safe basename", () => {
 test("speech proxy sends the internal credential only when one is configured", () => {
   // Passing the secret in keeps this independent of the ambient environment:
   // reading it from process.env made the suite pass locally and fail on the
-  // server, where .env defines SPEECH_INTERNAL_SECRET.
-  for (const missing of ["", undefined, null]) {
+  // server, where .env defines SPEECH_INTERNAL_SECRET. Note that omitting the
+  // argument deliberately falls back to the configured secret — only an
+  // explicit empty value means "none", so those are what this asserts.
+  for (const missing of ["", null, false]) {
     assert.deepEqual(
       speechInternalHeaders({ "Content-Type": "audio/webm" }, missing),
       { "Content-Type": "audio/webm" },
-      "no secret configured means no credential header is invented",
+      "an explicitly empty secret means no credential header is invented",
     );
   }
   assert.deepEqual(speechInternalHeaders({ "Content-Type": "audio/webm" }, "s3cret"), {
