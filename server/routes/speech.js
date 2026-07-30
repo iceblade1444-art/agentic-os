@@ -18,10 +18,11 @@ export function safeSpeechFilename(value = "") {
   return name || "audio.webm";
 }
 
-export function speechInternalHeaders(extra = {}) {
-  return SPEECH_INTERNAL_SECRET
-    ? { ...extra, "X-Internal-Secret": SPEECH_INTERNAL_SECRET }
-    : extra;
+// The secret is a parameter so this is testable without depending on whether a
+// .env happens to sit next to the test run — that made the suite pass on a
+// developer machine and fail on the server.
+export function speechInternalHeaders(extra = {}, secret = SPEECH_INTERNAL_SECRET) {
+  return secret ? { ...extra, "X-Internal-Secret": secret } : extra;
 }
 
 r.get("/health", async (req, res) => {
