@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { AGENT_PLAYBOOKS, readAgentPlaybook, sharedAgentContext } from "../server/lib/onboarding.js";
+import { AGENT_PLAYBOOKS, CONTEXT_BUDGET, readAgentPlaybook, sharedAgentContext } from "../server/lib/onboarding.js";
 
 function vaultWith(t, contents = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-playbook-"));
@@ -22,7 +22,7 @@ test("a playbook is read from the vault without its front matter", (t) => {
   const vault = vaultWith(t, {
     [entry.file]: "---\ntype: agentic-os-playbook\n---\n\n# Marketing\n\n- Tone: warm, no hype\n",
   });
-  const body = readAgentPlaybook(entry, 6000, vault);
+  const body = readAgentPlaybook(entry, CONTEXT_BUDGET, vault);
   assert.match(body, /# Marketing/);
   assert.match(body, /Tone: warm, no hype/);
   assert.doesNotMatch(body, /type: agentic-os-playbook/, "front matter is Obsidian bookkeeping, not context");
@@ -30,11 +30,11 @@ test("a playbook is read from the vault without its front matter", (t) => {
 
 test("a missing, oversized or out-of-vault playbook is simply absent", (t) => {
   const vault = vaultWith(t, { [entry.file]: "x".repeat(300 * 1024) });
-  assert.equal(readAgentPlaybook(entry, 6000, vault), "", "an oversized note is skipped, not truncated in");
-  assert.equal(readAgentPlaybook(entry, 6000, vaultWith(t)), "", "no note means no context");
+  assert.equal(readAgentPlaybook(entry, CONTEXT_BUDGET, vault), "", "an oversized note is skipped, not truncated in");
+  assert.equal(readAgentPlaybook(entry, CONTEXT_BUDGET, vaultWith(t)), "", "no note means no context");
   // A mis-edited entry must not read outside the vault.
-  assert.equal(readAgentPlaybook({ file: "../../../etc/passwd" }, 6000, vault), "");
-  assert.equal(readAgentPlaybook({ file: "../secrets.md" }, 6000, vault), "");
+  assert.equal(readAgentPlaybook({ file: "../../../etc/passwd" }, CONTEXT_BUDGET, vault), "");
+  assert.equal(readAgentPlaybook({ file: "../secrets.md" }, CONTEXT_BUDGET, vault), "");
 });
 
 test("the playbook takes only the room left, never the facts above it", (t) => {
@@ -53,7 +53,7 @@ test("the playbook takes only the room left, never the facts above it", (t) => {
   const withPlaybook = sharedAgentContext(user, state, { vault });
   const withoutPlaybook = sharedAgentContext(user, state, { vault: vaultWith(t) });
 
-  assert.ok(withPlaybook.length <= 6000, "consumers clamp at 6000, so this must fit");
+  assert.ok(withPlaybook.length <= CONTEXT_BUDGET, `consumers clamp at ${CONTEXT_BUDGET}, so this must fit`);
   assert.match(withPlaybook, /Marketing and content playbook \(authoritative/);
   // Everything that was there before the playbook survives it.
   for (const fact of ["Workspace: Milana Premium", "Sleepwear manufacturer", "Current user: Bakhadyr", "User work focus: owner"]) {
