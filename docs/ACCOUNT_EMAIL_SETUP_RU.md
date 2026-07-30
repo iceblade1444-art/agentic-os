@@ -9,7 +9,7 @@ Agentic OS поддерживает подтверждение новых акк
 ### Корпоративная почта Milanapremium
 
 Для production уже доступен `mail.milanapremium.uz` на портах `587` и `465`.
-Если ящик `no-reply@milanapremium.uz` создан, запустите на сервере:
+Если ящик `agent@milanapremium.uz` создан, запустите на сервере:
 
 ```bash
 cd ~/agentic-os

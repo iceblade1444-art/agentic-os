@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 [ -f .env ] || { echo "Missing $(pwd)/.env" >&2; exit 1; }
 [ -t 0 ] || { echo "Run this command from an interactive server terminal." >&2; exit 1; }
 
-DEFAULT_USER="no-reply@milanapremium.uz"
+DEFAULT_USER="agent@milanapremium.uz"
 read -r -p "Corporate mailbox [${DEFAULT_USER}]: " SMTP_USER_INPUT
 SMTP_USER_INPUT="${SMTP_USER_INPUT:-$DEFAULT_USER}"
 case "$SMTP_USER_INPUT" in
