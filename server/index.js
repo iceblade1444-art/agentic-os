@@ -57,6 +57,7 @@ import { memberWorkspaces } from "./lib/member-workspace.js";
 import { sessions } from "./lib/sessions.js";
 import { users } from "./lib/users.js";
 import { googleWorkspace } from "./lib/google-workspace.js";
+import { pushService } from "./lib/push-service.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -146,7 +147,7 @@ app.use("/api", rateLimit({ windowMs: 60000, max: 600 }));
 app.get("/api/health", (req, res) =>
   res.json({
     ok: true, name: "agentic-os", version: "1.0.0",
-    features: { llm: true, mcp: true, integrations: true, operations: true },
+    features: { llm: true, mcp: true, integrations: true, operations: true, push: pushService.configured() },
     providers: {
       openai: !!(config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey),
       anthropic: !!(config.anthropic.key || db.integrations.byProvider("anthropic")?.config?.apiKey),

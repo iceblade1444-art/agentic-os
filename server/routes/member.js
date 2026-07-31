@@ -3,6 +3,8 @@ import { Router } from "express";
 import { authenticatedUser, creatorUser } from "../lib/auth.js";
 import { memberWorkspaces } from "../lib/member-workspace.js";
 import { users } from "../lib/users.js";
+import { pushDevices } from "../lib/push-devices.js";
+import { pushService } from "../lib/push-service.js";
 
 const r = Router();
 let readAdapter = null;
@@ -155,13 +157,36 @@ r.get("/inbox", async (req, res) => {
   } catch (error) { sendError(res, error); }
 });
 
+r.get("/push", (req, res) => {
+  try {
+    res.json(pushService.status(currentUser(req).id));
+  } catch (error) { sendError(res, error); }
+});
+
+r.post("/push/devices", (req, res) => {
+  try {
+    const device = pushDevices.register(currentUser(req).id, req.body);
+    res.status(201).json({ ok: true, device, ...pushService.status(currentUser(req).id) });
+  } catch (error) { sendError(res, error); }
+});
+
+r.delete("/push/devices/:id", (req, res) => {
+  try {
+    const removed = pushDevices.remove(currentUser(req).id, req.params.id);
+    if (!removed) return res.status(404).json({ error: "Push device not found" });
+    res.status(204).end();
+  } catch (error) { sendError(res, error); }
+});
+
 r.post("/inbox", async (req, res) => {
   try {
     const userId = currentUser(req).id;
     const input = { ...req.body, source: "mobile" };
-    res.status(201).json(writeAdapter?.createInboxItem
+    const item = writeAdapter?.createInboxItem
       ? await writeAdapter.createInboxItem(userId, input)
-      : memberWorkspaces.createInboxItem(userId, input));
+      : memberWorkspaces.createInboxItem(userId, input);
+    const push = await pushService.sendInbox(userId, item);
+    res.status(201).json({ ...item, push });
   } catch (error) { sendError(res, error); }
 });
 

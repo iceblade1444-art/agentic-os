@@ -79,6 +79,11 @@ export const config = {
     password: env.SMTP_PASSWORD || "",
     from: env.SMTP_FROM || "",
   },
+  firebase: {
+    projectId: env.FIREBASE_PROJECT_ID || "",
+    serviceAccountFile: env.FIREBASE_SERVICE_ACCOUNT_FILE || "",
+    serviceAccountJson: env.FIREBASE_SERVICE_ACCOUNT_JSON || "",
+  },
   agenticToken: env.AGENTIC_OS_TOKEN || env.AUTH_TOKEN || "",
   allowCustomMcp: env.ALLOW_CUSTOM_MCP === "true",       // gate arbitrary command spawning
   mcpAllowedCommands: (env.MCP_ALLOWED_COMMANDS || "npx,node,uvx,uv,python,python3,deno,bun,docker")
