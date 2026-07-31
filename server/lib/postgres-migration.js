@@ -13,6 +13,8 @@ const empty = {
   sessions: [],
   tasks: [],
   notes: [],
+  chatMessages: [],
+  inboxItems: [],
   onboardingProfiles: [],
   workspaceContexts: [],
   mfaRecords: [],
@@ -78,12 +80,18 @@ export function buildPostgresMigrationPlan(dataDir) {
     const file = workspaceFile(root, userId);
     if (!fs.existsSync(file)) continue;
     matchedFiles.add(path.resolve(file));
-    const workspace = readJson(file, { tasks: [], notes: [] });
+    const workspace = readJson(file, { tasks: [], notes: [], chatMessages: [], inboxItems: [] });
     for (const task of Array.isArray(workspace.tasks) ? workspace.tasks : []) {
       rows.tasks.push({ ...task, userId });
     }
     for (const note of Array.isArray(workspace.notes) ? workspace.notes : []) {
       rows.notes.push({ ...note, userId });
+    }
+    for (const message of Array.isArray(workspace.chatMessages) ? workspace.chatMessages : []) {
+      rows.chatMessages.push({ ...message, userId });
+    }
+    for (const item of Array.isArray(workspace.inboxItems) ? workspace.inboxItems : []) {
+      rows.inboxItems.push({ ...item, userId });
     }
   }
 
@@ -163,6 +171,33 @@ const schemaSql = `
   );
   CREATE INDEX IF NOT EXISTS shadow_member_notes_user_id_idx ON ${SCHEMA}.member_notes(user_id);
 
+  CREATE TABLE IF NOT EXISTS ${SCHEMA}.member_chat_messages (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    role text NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    source text NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (user_id, id)
+  );
+  CREATE INDEX IF NOT EXISTS shadow_member_chat_user_created_idx
+    ON ${SCHEMA}.member_chat_messages(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS ${SCHEMA}.member_inbox_items (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    status text NOT NULL CHECK (status IN ('unread', 'read', 'archived')),
+    type text NOT NULL,
+    priority text NOT NULL CHECK (priority IN ('low', 'normal', 'high')),
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (user_id, id)
+  );
+  CREATE INDEX IF NOT EXISTS shadow_member_inbox_user_status_idx
+    ON ${SCHEMA}.member_inbox_items(user_id, status, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS ${SCHEMA}.onboarding_profiles (
     user_id text PRIMARY KEY,
     payload jsonb NOT NULL,
@@ -204,6 +239,8 @@ const tableByCount = {
   sessions: "sessions",
   tasks: "member_tasks",
   notes: "member_notes",
+  chatMessages: "member_chat_messages",
+  inboxItems: "member_inbox_items",
   onboardingProfiles: "onboarding_profiles",
   workspaceContexts: "workspace_contexts",
   mfaRecords: "mfa_records",
@@ -245,6 +282,24 @@ async function insertRows(client, plan) {
        (id,user_id,title,content,created_at,updated_at,payload)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [note.id, note.userId, note.title, note.content || "", note.createdAt, note.updatedAt, note],
+    );
+  }
+  for (const message of plan.rows.chatMessages) {
+    await client.query(
+      `INSERT INTO ${SCHEMA}.member_chat_messages
+       (id,user_id,role,source,created_at,updated_at,payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [message.id, message.userId, message.role, message.source || "mobile",
+        message.createdAt, message.updatedAt || message.createdAt, message],
+    );
+  }
+  for (const item of plan.rows.inboxItems) {
+    await client.query(
+      `INSERT INTO ${SCHEMA}.member_inbox_items
+       (id,user_id,status,type,priority,created_at,updated_at,payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [item.id, item.userId, item.status || "unread", item.type || "message",
+        item.priority || "normal", item.createdAt, item.updatedAt || item.createdAt, item],
     );
   }
   for (const item of plan.rows.onboardingProfiles) {
@@ -319,6 +374,8 @@ export async function migratePostgresShadow({
         ${SCHEMA}.mfa_records,
         ${SCHEMA}.workspace_contexts,
         ${SCHEMA}.onboarding_profiles,
+        ${SCHEMA}.member_inbox_items,
+        ${SCHEMA}.member_chat_messages,
         ${SCHEMA}.member_notes,
         ${SCHEMA}.member_tasks,
         ${SCHEMA}.sessions,

@@ -58,8 +58,35 @@ test("member dashboard reports only the current personal workspace", (t) => {
   store.createTask("usr_other", { title: "Other user's task" });
 
   const dashboard = store.dashboard("usr_member");
-  assert.deepEqual(dashboard.counts, { open: 2, doing: 1, due: 1, notes: 1 });
+  assert.deepEqual(dashboard.counts, { open: 2, doing: 1, due: 1, notes: 1, unread: 0 });
   assert.equal(dashboard.tasks.some((task) => task.title.includes("Other")), false);
+});
+
+test("member chat and inbox sync are idempotent and isolated", (t) => {
+  const store = temporaryStore(t);
+  const message = {
+    id: "mobile:one",
+    role: "user",
+    text: "Hello MILA",
+    source: "mobile",
+    createdAt: "2026-07-31T10:00:00.000Z",
+    updatedAt: "2026-07-31T10:00:00.000Z",
+  };
+  store.syncChat("usr_alpha", { messages: [message, message] });
+  assert.equal(store.listChat("usr_alpha").length, 1);
+  assert.equal(store.listChat("usr_beta").length, 0);
+
+  const item = store.createInboxItem("usr_alpha", {
+    id: "notice:one",
+    type: "reminder",
+    title: "Review task",
+    body: "The agent is waiting.",
+  });
+  assert.equal(store.unreadInboxCount("usr_alpha"), 1);
+  assert.equal(store.unreadInboxCount("usr_beta"), 0);
+  assert.equal(store.updateInboxItem("usr_beta", item.id, { status: "read" }), null);
+  assert.equal(store.updateInboxItem("usr_alpha", item.id, { status: "read" }).status, "read");
+  assert.equal(store.unreadInboxCount("usr_alpha"), 0);
 });
 
 test("frontend and server expose distinct member and operator surfaces", () => {

@@ -91,10 +91,51 @@ export class PostgresMemberReadAdapter {
     );
   }
 
+  async listChat(userId, options = {}) {
+    return this.#read(
+      () => this.fallbackStore.listChat(userId, options),
+      async () => {
+        const messages = await this.#queryPayloads("member_chat_messages", userId, "created_at ASC");
+        const filtered = options.after ? messages.filter((message) => message.updatedAt > options.after) : messages;
+        const limit = Math.min(Math.max(Number(options.limit) || 100, 1), 200);
+        return filtered.slice(-limit);
+      },
+    );
+  }
+
+  async listInbox(userId, options = {}) {
+    return this.#read(
+      () => this.fallbackStore.listInbox(userId, options),
+      async () => {
+        const items = await this.#queryPayloads("member_inbox_items", userId, "created_at DESC");
+        const limit = Math.min(Math.max(Number(options.limit) || 100, 1), 200);
+        return items.filter((item) => !options.status || item.status === options.status).slice(0, limit);
+      },
+    );
+  }
+
+  async unreadInboxCount(userId) {
+    return this.#read(
+      () => this.fallbackStore.unreadInboxCount(userId),
+      async () => {
+        const result = await this.pool.query(
+          `SELECT COUNT(*)::int AS count FROM agentic_os_shadow.member_inbox_items
+           WHERE user_id = $1 AND status = 'unread'`,
+          [String(userId)],
+        );
+        return Number(result.rows[0]?.count || 0);
+      },
+    );
+  }
+
   async dashboard(userId) {
     const jsonDashboard = this.fallbackStore.dashboard(userId);
     return this.#read(() => jsonDashboard, async () => {
-      const [tasks, notes] = await Promise.all([this.#queryTasks(userId), this.#queryNotes(userId)]);
+      const [tasks, notes, inbox] = await Promise.all([
+        this.#queryTasks(userId),
+        this.#queryNotes(userId),
+        this.#queryPayloads("member_inbox_items", userId, "created_at DESC"),
+      ]);
       const today = new Date().toISOString().slice(0, 10);
       return {
         counts: {
@@ -102,9 +143,11 @@ export class PostgresMemberReadAdapter {
           doing: tasks.filter((task) => task.status === "doing").length,
           due: tasks.filter((task) => task.status !== "done" && task.dueDate && task.dueDate <= today).length,
           notes: notes.length,
+          unread: inbox.filter((item) => item.status === "unread").length,
         },
         tasks: tasks.filter((task) => task.status !== "done").slice(0, 6),
         notes: notes.slice(0, 5),
+        inbox: inbox.slice(0, 5),
         updatedAt: jsonDashboard.updatedAt,
       };
     });
@@ -172,5 +215,15 @@ export class PostgresMemberReadAdapter {
       [String(userId)],
     );
     return result.rows.map((row) => noteFromPayload(row.payload));
+  }
+
+  async #queryPayloads(table, userId, orderBy) {
+    if (!new Set(["member_chat_messages", "member_inbox_items"]).has(table)) throw new Error("Invalid member table");
+    const result = await this.pool.query(
+      `SELECT payload FROM agentic_os_shadow.${table}
+       WHERE user_id = $1 ORDER BY ${orderBy}`,
+      [String(userId)],
+    );
+    return result.rows.map((row) => row.payload);
   }
 }

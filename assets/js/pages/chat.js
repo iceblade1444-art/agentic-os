@@ -120,7 +120,7 @@ export default {
     </div>`;
   },
 
-  mount(root) {
+  async mount(root) {
     const scroll = root.querySelector("#chatScroll");
     const input = root.querySelector("#chatInput");
     const send = root.querySelector("#chatSend");
@@ -128,6 +128,24 @@ export default {
     const session = s.chat.sessions.find((x) => x.id === s.chat.activeSession) || s.chat.sessions[0];
     const agent = activeAgent(s, session);
     const scrollDown = () => (scroll.scrollTop = scroll.scrollHeight);
+    if (!api.auth.canAdmin) {
+      try {
+        const remote = await api.member.chat(200);
+        const localById = new Map(session.messages.filter((message) => message.id).map((message) => [message.id, message]));
+        for (const message of remote) {
+          if (!localById.has(message.id)) localById.set(message.id, {
+            id: message.id,
+            role: message.role === "user" ? "user" : "assistant",
+            content: message.text || "",
+            createdAt: message.createdAt,
+            viaVoice: !!message.viaVoice,
+          });
+        }
+        session.messages = [...localById.values()].sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+        store.persist();
+        scroll.innerHTML = session.messages.map((message) => msgHTML(message, agent)).join("");
+      } catch (error) { toast("error", "Chat sync", error.message); }
+    }
     scrollDown();
 
     input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px"; });
@@ -145,8 +163,9 @@ export default {
     async function submit() {
       const text = input.value.trim(); if (!text) return;
       input.value = ""; input.style.height = "auto"; send.classList.add("disabled");
-      session.messages.push({ role: "user", content: text });
-      scroll.insertAdjacentHTML("beforeend", msgHTML({ role: "user", content: text }, agent));
+      const userMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: new Date().toISOString() };
+      session.messages.push(userMessage);
+      scroll.insertAdjacentHTML("beforeend", msgHTML(userMessage, agent));
       scrollDown();
 
       const bubble = document.createElement("div");
@@ -159,9 +178,21 @@ export default {
       const history = session.messages.map((m) => ({ role: m.role, content: m.content }));
       let acc = "";
       await callLLM([sys, ...history], (tok) => { acc += tok; body.innerHTML = mdToHtml(acc); scrollDown(); });
-      session.messages.push({ role: "assistant", content: acc });
+      session.messages.push({ id: crypto.randomUUID(), role: "assistant", content: acc, createdAt: new Date().toISOString() });
       if (session.title === "New chat") session.title = text.slice(0, 40);
       store.persist();
+      if (!api.auth.canAdmin) {
+        try {
+          await api.member.syncChat(session.messages.map((message) => ({
+            id: message.id || crypto.randomUUID(),
+            role: message.role,
+            text: message.content,
+            source: "web",
+            createdAt: message.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })));
+        } catch (error) { toast("error", "Chat sync", error.message); }
+      }
       send.classList.remove("disabled"); input.focus();
     }
   },

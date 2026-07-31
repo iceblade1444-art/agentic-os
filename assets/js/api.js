@@ -123,6 +123,13 @@ export const api = {
     createNote: (body) => j("/api/member/notes", { method: "POST", body }),
     updateNote: (id, body) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "PATCH", body }),
     deleteNote: (id) => j(`/api/member/notes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    chat: (limit = 100) => j(`/api/member/chat?limit=${encodeURIComponent(limit)}`),
+    syncChat: (messages) => j("/api/member/chat/sync", { method: "POST", body: { messages } }),
+    clearChat: () => j("/api/member/chat", { method: "DELETE" }),
+    inbox: (status = "", limit = 100) => j(`/api/member/inbox?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}`),
+    createInboxItem: (body) => j("/api/member/inbox", { method: "POST", body }),
+    publishInboxItem: (body) => j("/api/member/inbox/publish", { method: "POST", body }),
+    updateInboxItem: (id, body) => j(`/api/member/inbox/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },
   personal: {
     dashboard: () => j("/api/personal"),

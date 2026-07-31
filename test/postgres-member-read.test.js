@@ -21,14 +21,15 @@ const note = {
   updatedAt: "2026-07-28T00:00:00.000Z",
 };
 
-function fallbackStore({ tasks = [task], notes = [note] } = {}) {
+function fallbackStore({ tasks = [task], notes = [note], inbox = [] } = {}) {
   return {
     listTasks: () => structuredClone(tasks),
     listNotes: () => structuredClone(notes),
     dashboard: () => ({
-      counts: { open: tasks.filter((item) => item.status !== "done").length, doing: 1, due: 0, notes: notes.length },
+      counts: { open: tasks.filter((item) => item.status !== "done").length, doing: 1, due: 0, notes: notes.length, unread: 0 },
       tasks: structuredClone(tasks.filter((item) => item.status !== "done")),
       notes: structuredClone(notes),
+      inbox: structuredClone(inbox),
       updatedAt: "2026-07-28T00:00:00.000Z",
     }),
   };
@@ -43,14 +44,15 @@ function readyStatus(overrides = {}) {
   };
 }
 
-function fakePool({ tasks = [task], notes = [note], error = null } = {}) {
+function fakePool({ tasks = [task], notes = [note], inbox = [], error = null } = {}) {
   const calls = [];
   return {
     calls,
     async query(sql, params) {
       calls.push({ sql, params });
       if (error) throw error;
-      return { rows: (sql.includes("member_tasks") ? tasks : notes).map((payload) => ({ payload })) };
+      const payloads = sql.includes("member_tasks") ? tasks : sql.includes("member_inbox_items") ? inbox : notes;
+      return { rows: payloads.map((payload) => ({ payload })) };
     },
   };
 }
@@ -67,9 +69,10 @@ test("member canary serves PostgreSQL only when it matches the JSON snapshot", a
   assert.deepEqual(await adapter.listTasks("usr_alpha"), [task]);
   assert.deepEqual(await adapter.listNotes("usr_alpha"), [note]);
   assert.deepEqual(await adapter.dashboard("usr_alpha"), {
-    counts: { open: 1, doing: 1, due: 0, notes: 1 },
+    counts: { open: 1, doing: 1, due: 0, notes: 1, unread: 0 },
     tasks: [task],
     notes: [note],
+    inbox: [],
     updatedAt: "2026-07-28T00:00:00.000Z",
   });
   assert.equal(adapter.status().postgresReads, 3);

@@ -83,6 +83,15 @@ test("PostgreSQL migration plan preserves account and personal workspace ownersh
       createdAt: "2026-07-28T00:00:00.000Z",
       updatedAt: "2026-07-28T00:00:00.000Z",
     }],
+    chatMessages: [{
+      id: "msg_one", role: "user", text: "Hello", source: "mobile",
+      createdAt: "2026-07-28T00:00:00.000Z", updatedAt: "2026-07-28T00:00:00.000Z",
+    }],
+    inboxItems: [{
+      id: "inb_one", type: "reminder", title: "Reminder", body: "Review",
+      status: "unread", priority: "normal", source: "system",
+      createdAt: "2026-07-28T00:00:00.000Z", updatedAt: "2026-07-28T00:00:00.000Z",
+    }],
   });
 
   const plan = buildPostgresMigrationPlan(root);
@@ -91,6 +100,8 @@ test("PostgreSQL migration plan preserves account and personal workspace ownersh
     sessions: 1,
     tasks: 1,
     notes: 1,
+    chatMessages: 1,
+    inboxItems: 1,
     onboardingProfiles: 1,
     workspaceContexts: 1,
     mfaRecords: 1,
@@ -98,6 +109,8 @@ test("PostgreSQL migration plan preserves account and personal workspace ownersh
   });
   assert.equal(plan.rows.tasks[0].userId, userId);
   assert.equal(plan.rows.notes[0].userId, userId);
+  assert.equal(plan.rows.chatMessages[0].userId, userId);
+  assert.equal(plan.rows.inboxItems[0].userId, userId);
   assert.equal(plan.rows.users[0].passwordHash, "password-hash");
   assert.equal(plan.rows.mfaRecords[0].record.secret.ciphertext, "encrypted");
   assert.deepEqual(plan.orphanWorkspaceFiles, []);

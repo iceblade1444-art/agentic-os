@@ -1,7 +1,8 @@
 import { Router } from "express";
 
-import { authenticatedUser } from "../lib/auth.js";
+import { authenticatedUser, creatorUser } from "../lib/auth.js";
 import { memberWorkspaces } from "../lib/member-workspace.js";
+import { users } from "../lib/users.js";
 
 const r = Router();
 let readAdapter = null;
@@ -109,6 +110,86 @@ r.delete("/notes/:id", async (req, res) => {
       : memberWorkspaces.deleteNote(userId, req.params.id);
     if (!deleted) return res.status(404).json({ error: "Note not found" });
     res.status(204).end();
+  } catch (error) { sendError(res, error); }
+});
+
+r.get("/chat", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    const options = { after: req.query.after || "", limit: req.query.limit };
+    res.json(readAdapter?.listChat
+      ? await readAdapter.listChat(userId, options)
+      : memberWorkspaces.listChat(userId, options));
+  } catch (error) { sendError(res, error); }
+});
+
+r.post("/chat/sync", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    res.json(writeAdapter?.syncChat
+      ? await writeAdapter.syncChat(userId, req.body)
+      : memberWorkspaces.syncChat(userId, req.body));
+  } catch (error) { sendError(res, error); }
+});
+
+r.delete("/chat", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    if (writeAdapter?.clearChat) await writeAdapter.clearChat(userId);
+    else memberWorkspaces.clearChat(userId);
+    res.status(204).end();
+  } catch (error) { sendError(res, error); }
+});
+
+r.get("/inbox", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    const options = { status: req.query.status || "", limit: req.query.limit };
+    const items = readAdapter?.listInbox
+      ? await readAdapter.listInbox(userId, options)
+      : memberWorkspaces.listInbox(userId, options);
+    const unread = readAdapter?.unreadInboxCount
+      ? await readAdapter.unreadInboxCount(userId)
+      : memberWorkspaces.unreadInboxCount(userId);
+    res.json({ items, unread });
+  } catch (error) { sendError(res, error); }
+});
+
+r.post("/inbox", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    const input = { ...req.body, source: "mobile" };
+    res.status(201).json(writeAdapter?.createInboxItem
+      ? await writeAdapter.createInboxItem(userId, input)
+      : memberWorkspaces.createInboxItem(userId, input));
+  } catch (error) { sendError(res, error); }
+});
+
+r.post("/inbox/publish", async (req, res) => {
+  try {
+    const actor = currentUser(req);
+    if (!new Set(["Creator", "Admin"]).has(actor.role)) {
+      return res.status(403).json({ error: "Operator access required" });
+    }
+    const userId = String(req.body?.userId || "").trim();
+    const target = userId === creatorUser().id ? creatorUser() : users.get(userId);
+    if (!target || target.disabled) return res.status(404).json({ error: "User not found" });
+    const input = { ...req.body, source: "hermes" };
+    delete input.userId;
+    res.status(201).json(writeAdapter?.createInboxItem
+      ? await writeAdapter.createInboxItem(userId, input)
+      : memberWorkspaces.createInboxItem(userId, input));
+  } catch (error) { sendError(res, error); }
+});
+
+r.patch("/inbox/:id", async (req, res) => {
+  try {
+    const userId = currentUser(req).id;
+    const item = writeAdapter?.updateInboxItem
+      ? await writeAdapter.updateInboxItem(userId, req.params.id, req.body)
+      : memberWorkspaces.updateInboxItem(userId, req.params.id, req.body);
+    if (!item) return res.status(404).json({ error: "Inbox item not found" });
+    res.json(item);
   } catch (error) { sendError(res, error); }
 });
 

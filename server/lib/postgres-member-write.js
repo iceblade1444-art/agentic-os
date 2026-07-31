@@ -99,6 +99,22 @@ export class PostgresMemberWriteAdapter {
     return this.#mutate(userId, () => this.fallbackStore.deleteNote(userId, noteId));
   }
 
+  syncChat(userId, input) {
+    return this.#mutate(userId, () => this.fallbackStore.syncChat(userId, input));
+  }
+
+  clearChat(userId) {
+    return this.#mutate(userId, () => this.fallbackStore.clearChat(userId));
+  }
+
+  createInboxItem(userId, input) {
+    return this.#mutate(userId, () => this.fallbackStore.createInboxItem(userId, input));
+  }
+
+  updateInboxItem(userId, itemId, input) {
+    return this.#mutate(userId, () => this.fallbackStore.updateInboxItem(userId, itemId, input));
+  }
+
   remove(userId) {
     return this.#mutate(userId, () => this.fallbackStore.remove(userId), { syncOnNoop: true });
   }
@@ -177,6 +193,8 @@ export class PostgresMemberWriteAdapter {
       await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK]);
       await client.query(`DELETE FROM ${SCHEMA}.member_tasks WHERE user_id = $1`, [userId]);
       await client.query(`DELETE FROM ${SCHEMA}.member_notes WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM ${SCHEMA}.member_chat_messages WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM ${SCHEMA}.member_inbox_items WHERE user_id = $1`, [userId]);
       for (const task of workspace.tasks) {
         await client.query(
           `INSERT INTO ${SCHEMA}.member_tasks
@@ -193,6 +211,24 @@ export class PostgresMemberWriteAdapter {
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [note.id, userId, note.title, note.content || "", note.createdAt,
             note.updatedAt, { ...note, userId }],
+        );
+      }
+      for (const message of workspace.chatMessages || []) {
+        await client.query(
+          `INSERT INTO ${SCHEMA}.member_chat_messages
+           (id,user_id,role,source,created_at,updated_at,payload)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [message.id, userId, message.role, message.source, message.createdAt,
+            message.updatedAt, { ...message, userId }],
+        );
+      }
+      for (const item of workspace.inboxItems || []) {
+        await client.query(
+          `INSERT INTO ${SCHEMA}.member_inbox_items
+           (id,user_id,status,type,priority,created_at,updated_at,payload)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [item.id, userId, item.status, item.type, item.priority, item.createdAt,
+            item.updatedAt, { ...item, userId }],
         );
       }
       await client.query("COMMIT");
