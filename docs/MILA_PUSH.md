@@ -7,9 +7,12 @@ as a delivery signal. A failed push never removes or loses an Inbox item.
 
 1. Create or select a Firebase project.
 2. Register Android app `app.milaai.mila`.
-3. Enable Firebase Cloud Messaging API.
-4. Create a service account with the Firebase Cloud Messaging API Admin role.
-5. Save its JSON key outside Git as
+3. Register iOS app with bundle ID `app.milaai.mila`.
+4. In Firebase Cloud Messaging settings, upload the Apple APNs authentication
+   key (`.p8`) with its Key ID and Apple Team ID.
+5. Enable Firebase Cloud Messaging API.
+6. Create a service account with the Firebase Cloud Messaging API Admin role.
+7. Save its JSON key outside Git as
    `/home/admilana/agentic-os/data/firebase-service-account.json`.
 
 Server `.env`:
@@ -35,6 +38,24 @@ flutter build apk --release `
 
 These app identifiers are not server credentials. The private service-account
 key remains on Agentic OS only.
+
+## iOS build
+
+Build and sign on macOS with Xcode. The Flutter project includes the Push
+Notifications entitlement and the `remote-notification` background mode.
+
+```bash
+flutter build ipa --release \
+  --dart-define=MILA_FIREBASE_API_KEY=... \
+  --dart-define=MILA_FIREBASE_PROJECT_ID=... \
+  --dart-define=MILA_FIREBASE_MESSAGING_SENDER_ID=... \
+  --dart-define=MILA_FIREBASE_IOS_APP_ID=... \
+  --dart-define=MILA_FIREBASE_IOS_BUNDLE_ID=app.milaai.mila
+```
+
+The Apple Developer provisioning profile must allow Push Notifications. The
+same server service account sends both Android FCM and iOS/APNs notifications;
+users do not configure Firebase or Apple credentials themselves.
 
 ## Runtime flow
 
