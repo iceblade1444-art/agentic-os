@@ -6,7 +6,7 @@ import { getLocale, localizedDate, setLocale, t } from "../assets/js/i18n.js";
 import { timeAgo } from "../assets/js/store.js";
 
 const sourceKeys = (source, fn) => [
-  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations|member|settings|kanban|operations|mcp|integrations)\\.[^"]+)"`, "g")),
+  ...source.matchAll(new RegExp(`\\b${fn}\\(\\s*"((?:personal|shell|login|nav|system|memory|guardrails|secrets|evaluations|member|settings|kanban|operations|mcp|integrations|studio)\\.[^"]+)"`, "g")),
 ].map((match) => match[1]);
 
 test("interface dictionary provides RU, EN and UZ copy for localized product surfaces", () => {
@@ -16,6 +16,7 @@ test("interface dictionary provides RU, EN and UZ copy for localized product sur
   const member = fs.readFileSync(new URL("../assets/js/pages/member.js", import.meta.url), "utf8");
   const settings = fs.readFileSync(new URL("../assets/js/pages/settings.js", import.meta.url), "utf8");
   const kanban = fs.readFileSync(new URL("../assets/js/pages/workflows.js", import.meta.url), "utf8");
+  const studio = fs.readFileSync(new URL("../assets/js/pages/studio.js", import.meta.url), "utf8");
   const dynamicKeys = [
     "personal.tab.today", "personal.tab.soul", "personal.tab.memory", "personal.tab.approvals",
     "personal.tab.account", "personal.greeting.night", "personal.greeting.morning",
@@ -30,10 +31,17 @@ test("interface dictionary provides RU, EN and UZ copy for localized product sur
     ...["orchestrator", "research", "writing", "growth", "engineering", "specialist"].map((value) => `kanban.role.${value}`),
     ...["working", "waiting", "queued"].map((value) => `kanban.agent.${value}`),
     ...["healthy", "degraded", "critical", "success", "running", "error", "unknown"].map((value) => `operations.status.${value}`),
+    ...["planning", "research", "design", "sampling", "approved", "production", "released", "archived"].map((value) => `studio.collection.status.${value}`),
+    ...["idea", "research", "sketch", "technical", "sample", "review", "approved", "production", "released", "rejected"].map((value) => `studio.model.status.${value}`),
+    ...["brief", "concept", "production", "review", "scheduled", "live", "measuring", "complete", "cancelled"].map((value) => `studio.campaign.status.${value}`),
+    ...["draft", "queued", "running", "review", "complete", "failed", "cancelled"].map((value) => `studio.job.status.${value}`),
+    ...["trend", "competitor", "mass_market", "sales", "customer"].flatMap((value) => [`studio.analytics.type.${value}`, `studio.analytics.type.${value}.hint`]),
+    ...["increase", "maintain", "reduce", "stop", "validate"].map((value) => `studio.analytics.action.${value}`),
   ];
   const keys = new Set([
     ...sourceKeys(personal, "t"), ...sourceKeys(app, "tr"), ...sourceKeys(misc, "t"),
-    ...sourceKeys(member, "t"), ...sourceKeys(settings, "t"), ...sourceKeys(kanban, "t"), ...dynamicKeys,
+    ...sourceKeys(member, "t"), ...sourceKeys(settings, "t"), ...sourceKeys(kanban, "t"),
+    ...sourceKeys(studio, "t"), ...dynamicKeys,
   ]);
 
   for (const locale of ["ru-RU", "en-US", "uz-UZ"]) {

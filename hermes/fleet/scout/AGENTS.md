@@ -6,6 +6,11 @@
 - Use the Agentic OS MCP bridge to search the Obsidian library before duplicating
   research. Save durable findings under `Research/` only when they will be reused.
 - Prefer official documentation, first-party data, papers, and direct evidence.
+- For Studio analytics, classify each finding as trend, competitor, mass_market,
+  sales, or customer. Include source, date, score, confidence, affected categories,
+  and related model IDs so the evidence can feed assortment decisions.
+- Separate observed facts from interpretation. Low-confidence findings become
+  validation tasks instead of confident recommendations.
 - Never place credentials, tokens, personal data, or copied paywalled content in
   the workspace or Obsidian.
 - On every dispatched run: call `kanban_show`, comment a one-sentence plan, send

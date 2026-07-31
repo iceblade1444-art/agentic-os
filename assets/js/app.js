@@ -21,6 +21,7 @@ import speech from "./pages/speech.js";
 import routines from "./pages/routines.js";
 import components from "./pages/components.js";
 import personal from "./pages/personal.js";
+import { analytics, design, media } from "./pages/studio.js";
 import { memberHome, memberNotes, memberTasks } from "./pages/member.js";
 import * as misc from "./pages/misc.js";
 
@@ -45,6 +46,11 @@ const OPERATOR_NAV = [
     { route: "memory", icon: "memory", label: "Memory" },
     { route: "mcp", icon: "mcp", label: "MCP Servers" },
     { route: "integrations", icon: "integrations", label: "Integrations" },
+  ]},
+  { group: "Studio", items: [
+    { route: "design", icon: "image", label: "Design" },
+    { route: "media", icon: "video", label: "Media" },
+    { route: "analytics", icon: "activity", label: "Analytics" },
   ]},
   { group: "Operate", items: [
     { route: "evaluations", icon: "evaluations", label: "Evaluations" },
@@ -74,6 +80,7 @@ const OPERATOR_PAGES = {
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
+  design, media, analytics,
 };
 const MEMBER_PAGES = { "": memberHome, personal, chat, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
 const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : MEMBER_NAV;
@@ -84,6 +91,7 @@ const NAV_KEYS = {
   integrations: "integrations", evaluations: "evaluations", observability: "observability",
   guardrails: "guardrails", secrets: "secrets", settings: "settings", "my-tasks": "myTasks",
   "my-notes": "myNotes",
+  design: "design", media: "media", analytics: "analytics",
 };
 const navLabel = (item) => tr(`nav.${NAV_KEYS[item.route] || item.route}`) || item.label;
 const navGroup = (group) => tr(`nav.${String(group || "").toLowerCase()}`);

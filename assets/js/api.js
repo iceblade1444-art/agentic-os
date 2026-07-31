@@ -242,6 +242,14 @@ export const api = {
     },
     deleteAttachment: (id) => j(`/api/kanban/attachments/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
+  studio: {
+    snapshot: () => j("/api/studio"),
+    create: (bucket, body) => j(`/api/studio/${encodeURIComponent(bucket)}`, { method: "POST", body }),
+    update: (bucket, id, body) => j(`/api/studio/${encodeURIComponent(bucket)}/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    remove: (bucket, id) => j(`/api/studio/${encodeURIComponent(bucket)}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    queueGeneration: (id, priority = 1) => j(`/api/studio/generations/${encodeURIComponent(id)}/queue`, { method: "POST", body: { priority } }),
+    syncGeneration: (id) => j(`/api/studio/generations/${encodeURIComponent(id)}/sync`, { method: "POST" }),
+  },
   claude: {
     status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),
     projects: () => j("/api/claude-code/projects"),
