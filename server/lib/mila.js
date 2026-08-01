@@ -113,7 +113,10 @@ export async function milaVoiceToken(cfg, label = "Agentic OS dashboard", option
       ...options,
       method: "POST",
       bearer: sessionToken,
-      body: { language: options.language || "auto" },
+      body: {
+        language: options.language || "auto",
+        ...(options.profile && typeof options.profile === "object" ? { profile: options.profile } : {}),
+      },
     });
   } catch (error) {
     // Re-authorize once when the MILA backend revoked or lost its session.

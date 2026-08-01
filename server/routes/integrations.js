@@ -79,7 +79,7 @@ r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
 r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
 r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));
 r.post("/mila/voice-token", milaAction((cfg, body) => milaVoiceToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
-r.post("/mila/livekit-token", milaAction((cfg, body) => milaLiveKitToken(cfg, "Agentic OS dashboard", { language: body.language || "auto" })));
+r.post("/mila/livekit-token", milaAction((cfg, body) => milaLiveKitToken(cfg, "Agentic OS dashboard", { language: body.language || "auto", profile: body.profile })));
 r.post("/mila/chat", milaAction((cfg, body) => milaGeminiChat(cfg, "Agentic OS dashboard", {
   messages: chatMessages(body?.messages),
   systemPrompt: String(body?.systemPrompt || "").slice(0, 30000),
