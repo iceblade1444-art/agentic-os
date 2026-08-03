@@ -19,6 +19,7 @@ function run(command, params = {}) {
     maxBuffer: 1024 * 1024,
     windowsHide: true,
   });
+  if (child.error) throw new Error(child.error.message);
   const raw = String(child.stdout || "").trim().split(/\r?\n/).pop() || "{}";
   let data = {};
   try { data = JSON.parse(raw); } catch { data = { ok: false, error: raw || child.error?.message || child.stderr || "Desktop bridge returned invalid JSON" }; }
