@@ -111,7 +111,7 @@ test("MILA writes Obsidian and starts Claude only after explicit confirmation", 
 test("MILA tool declarations expose all four Agentic OS control surfaces", async () => {
   const source = await import("../assets/js/mila-tools.js");
   const names = source.MILA_TOOLS.map((tool) => tool.name);
-  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code"]) {
+  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code", "list_mcp_tools", "call_mcp_tool"]) {
     assert.ok(names.includes(name), `${name} must be available to Gemini Live`);
   }
 });

@@ -68,6 +68,21 @@ export const MILA_TOOLS = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "list_mcp_tools",
+    description: "List all active MCP servers and tools connected to Agentic OS, including Obsidian, GitHub, Higgsfield, filesystem and desktop bridges when configured.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "call_mcp_tool",
+    description: "Stage or confirm a call to any connected Agentic OS MCP tool. This always uses two-step confirmation because MCP tools can read, write or control external systems.",
+    parameters: { type: "object", properties: {
+      server: { type: "string", description: "MCP server id or name, for example mcp_obsidian or obsidian" },
+      tool: { type: "string", description: "Tool name exposed by that MCP server" },
+      args: { type: "object", description: "JSON arguments for the selected tool" },
+      confirmationToken,
+    }, required: ["server", "tool"] },
+  },
+  {
     name: "ask_claude_code",
     description: "Stage or confirm a real Claude Workspace task. Plan mode is read-only; edit mode may change project files. Both require confirmation.",
     parameters: { type: "object", properties: {

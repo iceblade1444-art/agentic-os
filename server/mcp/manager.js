@@ -8,6 +8,7 @@ import { config } from "../config.js";
 const SAMPLE = fileURLToPath(new URL("./sample-server.js", import.meta.url));
 const AGENTIC = fileURLToPath(new URL("./agentic-os-server.js", import.meta.url));
 const OBSIDIAN = fileURLToPath(new URL("./obsidian-server.js", import.meta.url));
+const DESKTOP = fileURLToPath(new URL("./desktop-server.js", import.meta.url));
 
 // id -> { client, transport, tools }
 const live = new Map();
@@ -26,6 +27,8 @@ export function resolveSpawn(server) {
       return { command: process.execPath, args: [AGENTIC], env: { AGENTIC_OS_URL: process.env.AGENTIC_OS_URL || `http://127.0.0.1:${config.port}`, AGENTIC_OS_TOKEN: config.agenticToken } };
     case "obsidian":
       return { command: process.execPath, args: [OBSIDIAN], env: { OBSIDIAN_VAULT: process.env.OBSIDIAN_VAULT || config.obsidianVault } };
+    case "desktop":
+      return { command: process.execPath, args: [DESKTOP], env: { NOVA_VOICE_HOME: process.env.NOVA_VOICE_HOME || "C:\\NOVA VOICE", DESKTOP_BRIDGE_PYTHON: process.env.DESKTOP_BRIDGE_PYTHON || "python" } };
     default: // custom
       return { command: server.command, args: server.args || [], env: server.env || {} };
   }

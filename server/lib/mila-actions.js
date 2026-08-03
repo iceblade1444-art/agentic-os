@@ -1,14 +1,16 @@
 import crypto from "node:crypto";
 
 import { config } from "../config.js";
+import { db } from "../store.js";
 import { claudeCode } from "./claude-code.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { knowledge } from "./knowledge.js";
+import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const WRITE_ACTIONS = new Set([
-  "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code",
+  "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool",
 ]);
 const STATUSES = new Set(["triage", "todo", "ready"]);
 const PROFILES = new Set(["default", "scout", "scribe", "reach", "dev"]);
@@ -28,11 +30,24 @@ function publicTask(task = {}) {
   };
 }
 
+function publicMcpTool(server, tool = {}) {
+  return {
+    serverId: server.id,
+    server: server.name,
+    kind: server.kind,
+    status: mcpManager.isLive(server.id) ? "active" : (server.status === "error" ? "error" : "stopped"),
+    name: tool.name,
+    description: bounded(tool.description, 600),
+    inputSchema: tool.inputSchema || null,
+  };
+}
+
 function actionSummary(name, args) {
   if (name === "create_kanban_task") return `Create Kanban task “${bounded(args.title, 120)}”`;
   if (name === "delegate_to_hermes") return `Send “${bounded(args.title || args.goal, 120)}” to Hermes`;
   if (name === "write_obsidian_note") return `${args.mode === "append" ? "Append to" : "Create"} Obsidian note “${bounded(args.path, 160)}”`;
   if (name === "ask_claude_code") return `Start Claude Workspace task “${bounded(args.title || args.request, 120)}”`;
+  if (name === "call_mcp_tool") return `Call MCP tool “${bounded(args.tool, 120)}” on “${bounded(args.server, 120)}”`;
   return "Run Agentic OS action";
 }
 
@@ -55,6 +70,11 @@ function cleanMutationArgs(name, args = {}) {
     title: bounded(args.title || args.request, 120), request: bounded(args.request, 30000),
     sessionId: bounded(args.sessionId, 160), mode: args.mode === "edit" ? "edit" : "plan",
   };
+  if (name === "call_mcp_tool") return {
+    server: bounded(args.server || args.serverId, 160),
+    tool: bounded(args.tool || args.name, 160),
+    args: args.args && typeof args.args === "object" && !Array.isArray(args.args) ? args.args : {},
+  };
   return {};
 }
 
@@ -63,6 +83,7 @@ function requireFields(name, args) {
   if (name === "delegate_to_hermes" && !args.goal) throw Object.assign(new Error("Hermes task goal is required"), { status: 400 });
   if (name === "write_obsidian_note" && (!args.path || !args.content)) throw Object.assign(new Error("Note path and content are required"), { status: 400 });
   if (name === "ask_claude_code" && !args.request) throw Object.assign(new Error("Claude request is required"), { status: 400 });
+  if (name === "call_mcp_tool" && (!args.server || !args.tool)) throw Object.assign(new Error("MCP server and tool are required"), { status: 400 });
 }
 
 export function createMilaActions(options = {}) {
@@ -145,10 +166,41 @@ export function createMilaActions(options = {}) {
       Promise.resolve(run).catch((error) => console.error(`[mila] Claude task ${session.id} failed:`, error.message));
       return { ok: true, action: name, status: "started", sessionId: session.id, title: session.title, mode: args.mode };
     }
+    if (name === "call_mcp_tool") {
+      const server = db.mcp.list().find((item) => item.id === args.server || item.name === args.server);
+      if (!server) throw Object.assign(new Error(`MCP server not found: ${args.server}`), { status: 404 });
+      if (!mcpManager.isLive(server.id)) {
+        const connected = await mcpManager.connect(server);
+        db.mcp.update(server.id, { status: "active", tools: connected.tools });
+      }
+      const result = await mcpManager.callTool(server.id, args.tool, args.args || {});
+      return {
+        ok: true,
+        action: name,
+        server: { id: server.id, name: server.name, kind: server.kind },
+        tool: args.tool,
+        result,
+      };
+    }
     throw Object.assign(new Error("Unsupported MILA write action"), { status: 400 });
   }
 
   async function executeRead(name, args, context) {
+    if (name === "list_mcp_tools") {
+      const servers = db.mcp.list();
+      return {
+        servers: servers.map((server) => ({
+          id: server.id,
+          name: server.name,
+          kind: server.kind,
+          desc: server.desc || "",
+          status: mcpManager.isLive(server.id) ? "active" : (server.status === "error" ? "error" : "stopped"),
+          tools: mcpManager.isLive(server.id) ? mcpManager.getTools(server.id).map((tool) => publicMcpTool(server, tool)) : [],
+        })),
+        tools: servers.flatMap((server) => (mcpManager.isLive(server.id) ? mcpManager.getTools(server.id) : [])
+          .map((tool) => publicMcpTool(server, tool))),
+      };
+    }
     if (name === "get_system_status") {
       const [board, vault, claudeState, hermes] = await Promise.all([
         kanbanRequest(kanbanPath("/board", boardName)), library.status(), claude.status({ probe: false }), hermesStatus(),
