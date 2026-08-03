@@ -21,7 +21,7 @@ function run(command, params = {}) {
   });
   const raw = String(child.stdout || "").trim().split(/\r?\n/).pop() || "{}";
   let data = {};
-  try { data = JSON.parse(raw); } catch { data = { ok: false, error: raw || child.stderr || "Desktop bridge returned invalid JSON" }; }
+  try { data = JSON.parse(raw); } catch { data = { ok: false, error: raw || child.error?.message || child.stderr || "Desktop bridge returned invalid JSON" }; }
   if (!data.ok) throw new Error(data.error || child.stderr || `Desktop bridge failed (${child.status})`);
   return data;
 }
@@ -35,7 +35,19 @@ const server = new McpServer({ name: "desktop", version: "1.0.0" });
 server.registerTool(
   "desktop_status",
   { description: "Check whether the local NOVA VOICE desktop bridge is available on this machine.", inputSchema: {} },
-  async () => text(run("status"))
+  async () => {
+    try {
+      return text(run("status"));
+    } catch (error) {
+      return text({
+        ok: false,
+        available: false,
+        error: error.message,
+        python: PYTHON,
+        novaVoiceHome: process.env.NOVA_VOICE_HOME || "C:\\NOVA VOICE",
+      });
+    }
+  }
 );
 
 server.registerTool(
