@@ -233,9 +233,12 @@ function erpHTML() {
   const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
   const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems) || numeric(production, ["active_work_orders", "activeWorkOrders"], 0);
   const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
-  const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput", "cutting_output", "cuttingOutput"], 0);
+  const cuttingOutput = numeric(production, ["cutting_output", "cuttingOutput"], 0);
+  const printingOutput = numeric(production, ["printing_output", "printingOutput"], 0);
   const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"], 0);
   const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"], 0);
+  const stagedProductionOutput = cuttingOutput + printingOutput + sewingOutput + packagingOutput;
+  const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput"], stagedProductionOutput);
   const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
 
   return `<div class="page erp-page">
