@@ -74,7 +74,7 @@ services:
       - LLM_COMPLETE_URL=http://agentic-os:8787/api/llm/complete
       - LLM_INTERNAL_SECRET=${INTERNAL_SECRET:-}
       - SPEECH_CPU_THREADS=${SPEECH_CPU_THREADS:-6}
-      - STT_MODEL_UZ=/app/models/whisper-uz-medium-ct2
+      - STT_MODEL_UZ=/app/models/nova-uz-v1
     volumes:
       - ${SPEECH_MODELS_DIR:-./speech-models}:/app/models
       - ${QWEN_TTS_MODELS_DIR:-./speech-qwen-models}:/app/models-qwen:ro
