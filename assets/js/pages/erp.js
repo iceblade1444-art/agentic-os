@@ -130,6 +130,26 @@ function inventoryTable(inventory) {
 
 function productionTable(production) {
   const rows = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
+  const data = unwrap(production) || {};
+  if (!rows.length && data && typeof data === "object") {
+    const stages = [
+      [t("erp.cutting"), first(data, ["cutting_output", "cuttingOutput"], 0)],
+      [t("erp.printing"), first(data, ["printing_output", "printingOutput"], 0)],
+      [t("erp.sewing"), first(data, ["sewing_output", "sewingOutput"], 0)],
+      [t("erp.packaging"), first(data, ["packaging_output", "packagingOutput"], 0)],
+      [t("erp.rework"), first(data, ["rework_qty", "reworkQty"], 0)],
+    ].filter(([, value]) => Number(value) || value === 0);
+    if (stages.length) {
+      return table(
+        [t("erp.stage"), t("erp.output"), t("erp.status")],
+        stages.map(([label, value]) => `<tr>
+          <td><strong>${esc(label)}</strong></td>
+          <td>${esc(pretty(value))}</td>
+          <td>${statusBadge(Number(value) > 0 ? "active" : "idle")}</td>
+        </tr>`)
+      );
+    }
+  }
   return table(
     [t("erp.order"), t("erp.stage"), t("erp.deadline"), t("erp.owner"), t("erp.status")],
     rows.slice(0, 12).map((item) => `<tr>
@@ -211,8 +231,12 @@ function erpHTML() {
   const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
   const revenue = numeric(summary, ["revenue_total", "revenue", "sales", "totalSales"], numeric(finance, ["revenue_total", "revenue"]));
   const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
-  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems);
+  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems) || numeric(production, ["active_work_orders", "activeWorkOrders"], 0);
   const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
+  const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput", "cutting_output", "cuttingOutput"], 0);
+  const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"], 0);
+  const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"], 0);
+  const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
 
   return `<div class="page erp-page">
     ${head()}
@@ -221,19 +245,28 @@ function erpHTML() {
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.connection"), snapshot.server?.status || "stopped", snapshot.baseUrl, "ok")}
       ${metric(t("erp.revenue"), revenue ? money.format(revenue) : 0, t("erp.sales"), revenue ? "ok" : "")}
-      ${metric(t("erp.activeOrders"), activeOrders, t("erp.production"), activeOrders ? "ok" : "")}
+      ${metric(t("erp.productionOutput"), productionOutput, t("erp.production"), productionOutput ? "ok" : "")}
       ${metric(t("erp.lateOrders"), lateOrders, t("erp.needsAttention"), lateOrders ? "risk" : "ok")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.inventoryItems"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
+      ${metric(t("erp.activeOrders"), activeOrders, t("erp.production"), activeOrders ? "ok" : "")}
+      ${metric(t("erp.sewing"), sewingOutput, t("erp.production"), sewingOutput ? "ok" : "")}
+      ${metric(t("erp.packaging"), packagingOutput, t("erp.production"), packagingOutput ? "ok" : "")}
+    </div>
+    <div class="grid cols-4 mb-4">
       ${metric(t("erp.stockValue"), stockValue ? money.format(stockValue) : 0, t("erp.finance"), stockValue ? "ok" : "")}
       ${metric(t("erp.employeeTasks"), taskItems.length, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
+      ${metric(t("erp.rework"), reworkQty, t("erp.needsAttention"), reworkQty ? "risk" : "ok")}
       ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP", "ok")}
     </div>
     ${card(t("erp.quickActions"), t("erp.quickActionsHint"), quickActions(), "zap", "mb-4")}
     <div class="grid cols-2 mb-4">
       ${card(t("erp.gmSummary"), t("erp.gmSummaryHint"), kv(summary, [
         [t("erp.activeOrders"), activeOrders],
+        [t("erp.productionOutput"), productionOutput],
+        [t("erp.sewing"), sewingOutput],
+        [t("erp.packaging"), packagingOutput],
         [t("erp.lateOrders"), lateOrders],
         [t("erp.defects"), first(summary, ["todays_defects", "defects"], 0)],
         [t("erp.waste"), first(summary, ["todays_waste", "waste"], 0)],
