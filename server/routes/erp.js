@@ -9,6 +9,7 @@ const READ_TOOLS = [
   ["erp_me", {}],
   ["erp_gm_summary", {}],
   ["erp_active_production", {}],
+  ["erp_business_control", { limit: 25 }],
   ["erp_late_orders", { limit: 12 }],
   ["erp_inventory_status", {}],
   ["erp_finance_summary", {}],

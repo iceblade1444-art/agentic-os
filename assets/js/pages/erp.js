@@ -175,6 +175,47 @@ function lateOrdersTable(late) {
   );
 }
 
+function flowLoadTable(control) {
+  const rows = asArray(first(control, ["busiest_sewing_flows"], []));
+  return table(
+    [t("erp.flow"), t("erp.orders"), t("erp.plannedQty"), t("erp.inProgress"), t("erp.blocked")],
+    rows.slice(0, 10).map((item) => `<tr>
+      <td><strong>${esc(first(item, ["flow", "name", "code"]))}</strong></td>
+      <td>${esc(pretty(first(item, ["orders"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["in_progress", "inProgress"], 0)))}</td>
+      <td>${statusBadge(first(item, ["blocked"], 0))}</td>
+    </tr>`)
+  );
+}
+
+function warehouseEtaTable(control) {
+  const rows = asArray(first(control, ["warehouse_eta", "warehouseEta"], []));
+  return table(
+    [t("erp.order"), t("erp.model"), t("erp.qty"), t("erp.warehouseEta"), t("erp.status")],
+    rows.slice(0, 12).map((item) => `<tr class="${item.warehouse_overdue ? "risk" : ""}">
+      <td><strong>${esc(first(item, ["production_no", "productionNo", "order_no", "orderNo"]))}</strong><small>${esc(first(item, ["order_no", "orderNo"], ""))}</small></td>
+      <td>${esc(first(item, ["model_code", "modelCode"], "-"))}<small>${esc(first(item, ["model_name", "modelName"], ""))}</small></td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
+      <td>${esc(first(item, ["warehouse_eta", "warehouseEta"], "-"))}</td>
+      <td>${statusBadge(first(item, ["warehouse_status", "warehouseStatus"], "-"))}</td>
+    </tr>`)
+  );
+}
+
+function stageLoadTable(control) {
+  const rows = asArray(first(control, ["stage_summary", "stageSummary"], []));
+  return table(
+    [t("erp.stage"), t("erp.orders"), t("erp.plannedQty"), t("erp.actualQty")],
+    rows.slice(0, 10).map((item) => `<tr>
+      <td><strong>${esc(first(item, ["stage"], "-"))}</strong></td>
+      <td>${esc(pretty(first(item, ["orders"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["actual_quantity", "actualQuantity"], 0)))}</td>
+    </tr>`)
+  );
+}
+
 function tasksTable(tasks) {
   const rows = asArray(tasks, ["items", "tasks", "rows", "data"]);
   return table(
@@ -204,10 +245,12 @@ function searchResults(value) {
 function quickActions() {
   const prompts = [
     ["summary", t("erp.actionSummary"), "Мила, сделай короткую бизнес-сводку ERP: продажи, производство, склад, риски и следующий шаг."],
+    ["flow", t("erp.actionFlow"), "Мила, какой швейный поток сейчас самый загруженный? Назови поток, количество заказов, плановое количество и риск."],
+    ["warehouse", t("erp.actionWarehouse"), "Мила, какие заказы быстрее всего дойдут до склада и где есть риск задержки?"],
     ["inventory", t("erp.actionInventory"), "Мила, проанализируй склад ERP: что в риске, какие позиции проверить, что нужно докупить или зарезервировать."],
     ["late", t("erp.actionLate"), "Мила, проверь просроченные ERP-заказы и предложи план действий для Hermes Kanban."],
   ];
-  return `<div class="erp-actions">${prompts.map(([key, label, prompt]) => `<button class="btn btn-secondary" data-erp-prompt="${esc(prompt)}">${icon(key === "late" ? "warn" : key === "inventory" ? "knowledge" : "mic")}${esc(label)}</button>`).join("")}</div>`;
+  return `<div class="erp-actions">${prompts.map(([key, label, prompt]) => `<button class="btn btn-secondary" data-erp-prompt="${esc(prompt)}">${icon(key === "late" ? "warn" : key === "inventory" ? "knowledge" : key === "warehouse" ? "workflow" : "mic")}${esc(label)}</button>`).join("")}</div>`;
 }
 
 function erpHTML() {
@@ -219,6 +262,7 @@ function erpHTML() {
   const errors = snapshot.errors || {};
   const summary = unwrap(cards.erp_gm_summary) || {};
   const production = unwrap(cards.erp_active_production) || {};
+  const control = unwrap(cards.erp_business_control) || {};
   const late = unwrap(cards.erp_late_orders);
   const inventory = unwrap(cards.erp_inventory_status) || {};
   const finance = unwrap(cards.erp_finance_summary) || {};
@@ -240,6 +284,10 @@ function erpHTML() {
   const stagedProductionOutput = cuttingOutput + printingOutput + sewingOutput + packagingOutput;
   const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput"], stagedProductionOutput);
   const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
+  const totalTrackedOrders = numeric(control, ["total_orders", "totalOrders"], 0);
+  const blockedOrders = asArray(first(control, ["blocked_orders", "blockedOrders"], []));
+  const busiestFlow = first(first(control, ["answer_hints", "answerHints"], {}), ["busiest_sewing_flow", "busiestSewingFlow"], null);
+  const nextWarehouse = first(first(control, ["answer_hints", "answerHints"], {}), ["next_warehouse_order", "nextWarehouseOrder"], null);
 
   return `<div class="page erp-page">
     ${head()}
@@ -262,6 +310,12 @@ function erpHTML() {
       ${metric(t("erp.employeeTasks"), taskItems.length, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
       ${metric(t("erp.rework"), reworkQty, t("erp.needsAttention"), reworkQty ? "risk" : "ok")}
       ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP", "ok")}
+    </div>
+    <div class="grid cols-4 mb-4">
+      ${metric(t("erp.trackedOrders"), totalTrackedOrders, t("erp.processTracking"), totalTrackedOrders ? "ok" : "")}
+      ${metric(t("erp.busiestFlow"), busiestFlow ? first(busiestFlow, ["flow"]) : "-", busiestFlow ? `${pretty(first(busiestFlow, ["planned_quantity"], 0))} ${t("erp.qtyShort")}` : t("erp.noData"), busiestFlow ? "warning" : "")}
+      ${metric(t("erp.nextWarehouse"), nextWarehouse ? first(nextWarehouse, ["production_no", "order_no"], "-") : "-", nextWarehouse ? first(nextWarehouse, ["warehouse_eta"], "-") : t("erp.noData"), nextWarehouse ? "ok" : "")}
+      ${metric(t("erp.blockedOrders"), blockedOrders.length, t("erp.needsAttention"), blockedOrders.length ? "risk" : "ok")}
     </div>
     ${card(t("erp.quickActions"), t("erp.quickActionsHint"), quickActions(), "zap", "mb-4")}
     <div class="grid cols-2 mb-4">
@@ -286,6 +340,9 @@ function erpHTML() {
       ]), "database")}
       ${card(t("erp.productionStatus"), t("erp.productionHint"), productionTable(production), "workflow")}
       ${card(t("erp.lateOrders"), t("erp.lateOrdersHint"), lateOrdersTable(late), "warn")}
+      ${card(t("erp.flowLoad"), t("erp.flowLoadHint"), flowLoadTable(control), "agents")}
+      ${card(t("erp.warehouseEta"), t("erp.warehouseEtaHint"), warehouseEtaTable(control), "workflow")}
+      ${card(t("erp.stageLoad"), t("erp.stageLoadHint"), stageLoadTable(control), "activity")}
       ${card(t("erp.inventory"), t("erp.inventoryHint"), inventoryTable(inventory), "knowledge")}
       ${card(t("erp.employeeTasks"), t("erp.employeeTasksHint"), tasksTable(tasks), "agents")}
     </div>
