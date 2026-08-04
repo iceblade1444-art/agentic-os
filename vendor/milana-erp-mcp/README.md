@@ -165,7 +165,7 @@ Read-only:
 - `erp_me`: current ERP user, role, department, and permissions from `/api/auth/me`.
 - `erp_gm_summary`: management dashboard from `/api/dashboard/management`.
 - `erp_search`: global search from `/api/search`, with MCP-side field redaction.
-- `erp_active_production`: active production dashboard from `/api/dashboard/active-production`.
+- `erp_active_production`: production KPI dashboard from `/api/dashboard/production`.
 - `erp_late_orders`: late active orders derived from active production dashboard deadlines.
 - `erp_inventory_status`: inventory dashboard from `/api/dashboard/inventory`.
 - `erp_finance_summary`: finance dashboard from `/api/dashboard/finance` if ERP permissions allow it.
