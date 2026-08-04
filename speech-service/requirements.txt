@@ -10,3 +10,4 @@ torch
 transformers
 ctranslate2
 httpx>=0.27
+voxcpm

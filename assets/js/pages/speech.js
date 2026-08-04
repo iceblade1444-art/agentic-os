@@ -117,6 +117,7 @@ export default {
             <option value="fast">Быстрый — для диалога</option>
             <option value="quality">Качественный — ~30 сек</option>
             <option value="emotion">Эмоциональный — по описанию</option>
+            <option value="premium">Премиум (узбекский) — наш голос</option>
             <option value="clone">Клон голоса — по образцу</option>
           </select>
         </div>

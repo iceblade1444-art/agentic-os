@@ -223,62 +223,6 @@ def clone(text: str, language: str | None, ref_audio_path: str,
     return buf.getvalue()
 
 
-
-# --- premium Uzbek voice: our own trained VoxCPM --------------------------
-# Measured on this CPU: ~9x slower than realtime, and the diffusion-step count
-# does not change intelligibility (CER 0.024 at 10, 15 and 30 steps) — so we
-# run 10 steps and rely on the phrase cache. Live dialogue stays on piper.
-VOX_DIR = os.getenv("VOXCPM_DIR", "/app/models/voxcpm")
-VOX_CKPT = os.getenv("VOXCPM_CKPT", f"{VOX_DIR}/stageb")
-VOX_STEPS = int(os.getenv("VOXCPM_STEPS", "10"))
-VOX_CFG = float(os.getenv("VOXCPM_CFG", "2.0"))
-VOX_REF_TEXT = ("Tabiiyki, bunday ko'nikmalar bilan taraqqiyotga "
-                "erishish mumkin emas.")
-
-_vox_model = None
-
-
-def _voxcpm(text: str) -> bytes:
-    global _vox_model
-    import io
-    import json as _json
-
-    import numpy as np
-    import soundfile as _sf
-    import torch
-    import torchaudio
-
-    with _lock:
-        if _vox_model is None:
-            def _ld(p, *a, **k):
-                d, sr = _sf.read(str(p), dtype="float32", always_2d=True)
-                return torch.from_numpy(d.T.copy()), sr
-
-            def _sv(p, t, sr, *a, **k):
-                x = t.detach().cpu().numpy()
-                _sf.write(str(p), x.T if x.ndim == 2 else x, sr)
-
-            torchaudio.load, torchaudio.save = _ld, _sv
-            from voxcpm import VoxCPM
-            from voxcpm.model.voxcpm import LoRAConfig
-            torch.set_num_threads(config.CPU_THREADS)
-            cfg = _json.load(open(f"{VOX_CKPT}/lora_config.json"))["lora_config"]
-            log.info("loading premium uz voice ...")
-            _vox_model = VoxCPM.from_pretrained(
-                f"{VOX_DIR}/VoxCPM1.5", lora_config=LoRAConfig(**cfg),
-                lora_weights_path=VOX_CKPT, load_denoiser=False,
-                local_files_only=True, device="cpu")
-            log.info("premium uz voice ready")
-
-    wav = np.asarray(_vox_model.generate(
-        text=text, prompt_wav_path=f"{VOX_CKPT}/REFERENCE_VOICE.wav",
-        prompt_text=VOX_REF_TEXT, inference_timesteps=VOX_STEPS,
-        cfg_value=VOX_CFG)).squeeze()
-    buf = io.BytesIO()
-    _sf.write(buf, wav, 44100, format="WAV")
-    return buf.getvalue()
-
-
 def synthesize(text: str, language: str | None = None, speaker: str | None = None,
                instruct: str | None = None, engine: str | None = None,
                speed: float | None = None, verify: bool | None = None) -> bytes:
@@ -289,20 +233,6 @@ def synthesize(text: str, language: str | None = None, speaker: str | None = Non
     if not eng:
         eng = "emotion" if instruct else "fast"
     log.info("tts engine=%s lang=%s chars=%d", eng, lang, len(text))
-
-    # Slow engines repeat themselves all day (greetings, holds, closings) —
-    # serve those from disk instead of regenerating.
-    ck = {"engine": eng, "language": lang, "speaker": speaker or "",
-          "instruct": instruct or "", "speed": speed or 1.0}
-    hit = cache.get(text, **ck)
-    if hit:
-        return hit
-
-    if eng == "premium" and lang == "Uzbek":
-        wav = _voxcpm(text)
-        cache.put(text, wav, **ck)
-        return wav
-
     # Qwen engines cover 10 languages (ru/en among them) but NOT uz/kk/ky —
     # for those the piper voice file is the only backend, so a missing file
     # must produce a clear message instead of a broken fallback.

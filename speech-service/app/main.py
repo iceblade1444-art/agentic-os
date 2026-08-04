@@ -10,7 +10,7 @@ import tempfile
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from . import config, correct, stt, tts
+from . import cache, config, correct, stt, tts
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s %(message)s")
 
@@ -92,3 +92,35 @@ async def clone_endpoint(
     finally:
         os.unlink(path)
     return Response(content=wav, media_type="audio/wav")
+
+
+# Stock lines an assistant repeats all day. Warmed once, they are served from
+# disk in milliseconds even by the slow premium voice.
+DEFAULT_PHRASES_UZ = [
+    "Assalomu alaykum! Men Milana, sizning yordamchingizman.",
+    "Eshitaman sizni.",
+    "Ha, albatta. Bir daqiqa, hozir tekshirib ko'raman.",
+    "Kechirasiz, buyurtma raqamingizni ayta olasizmi?",
+    "Bir daqiqa kuting, hozir aniqlab beraman.",
+    "Rahmat! Yaxshi kun tilayman, xayr!",
+    "Boshqa savolingiz bormi?",
+    "Kechirasiz, sizni tushunmadim. Yana bir bor takrorlaysizmi?",
+]
+
+
+@app.post("/cache/warm")
+def warm_endpoint(
+    language: str = Form(default="Uzbek"),
+    engine: str = Form(default="quality"),
+    phrases: str | None = Form(default=None),
+    x_internal_secret: str | None = Header(default=None),
+):
+    """Pre-generate phrases (newline-separated) or the built-in stock list."""
+    _check_secret(x_internal_secret)
+    lines = [p.strip() for p in (phrases or "").splitlines() if p.strip()] or DEFAULT_PHRASES_UZ
+    params = {"engine": engine, "language": language, "speaker": "",
+              "instruct": "", "speed": 1.0}
+    stats = cache.warm(
+        lambda text, **_: tts.synthesize(text, language, engine=engine),
+        lines, **params)
+    return {"phrases": len(lines), **stats}
