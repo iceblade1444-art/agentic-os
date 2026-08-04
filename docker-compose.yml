@@ -26,6 +26,15 @@ services:
       - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
       - HERMES_CHAT_SOCKET=/run/agentic-os/hermes-chat.sock
       - LIVEKIT_URL=${LIVEKIT_URL:-http://host.docker.internal:7880}
+      - ERP_API_BASE_URL=${ERP_API_BASE_URL:-https://erp.milanapremium.uz}
+      - ERP_MCP_AUTH_MODE=${ERP_MCP_AUTH_MODE:-bearer}
+      - ERP_MCP_BEARER_TOKEN=${ERP_MCP_BEARER_TOKEN:-}
+      - ERP_MCP_REQUIRE_CONFIRMATION=${ERP_MCP_REQUIRE_CONFIRMATION:-true}
+      - ERP_MCP_MAX_BULK_RECIPIENTS=${ERP_MCP_MAX_BULK_RECIPIENTS:-25}
+      - ERP_MCP_PYTHON_MODULE=${ERP_MCP_PYTHON_MODULE:-milana_erp_mcp.server}
+      - ERP_MCP_COMMAND=${ERP_MCP_COMMAND:-python3}
+      - ERP_MCP_ARGS=${ERP_MCP_ARGS:-}
+      - PYTHONPATH=${PYTHONPATH:-/app/vendor/milana-erp-mcp/src}
       - OPS_STATE_FILE=/run/agentic-os/operations.json
       - OPS_BACKUP_REQUEST_FILE=/run/agentic-os/backup.request
     ports:

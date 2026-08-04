@@ -1,11 +1,15 @@
 node_modules/
 data/
+.venv-erp-mcp/
+.tmp-erp-mcp-handoff/
 .env
+agentos-runtime/.env
 *.log
 .DS_Store
 .claude/
 __pycache__/
 *.pyc
+*.egg-info/
 *.bak
 speech-models/
 speech-qwen-models/

@@ -186,6 +186,10 @@ export const api = {
   mila: {
     action: (name, args = {}) => j("/api/mila/actions", { method: "POST", body: { name, args } }),
   },
+  erp: {
+    snapshot: () => j("/api/erp"),
+    tool: (tool, args = {}) => j("/api/erp/tool", { method: "POST", body: { tool, args } }),
+  },
   missions: {
     list: () => j("/api/missions"),
     create: (body) => j("/api/missions", { method: "POST", body }),

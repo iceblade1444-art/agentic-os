@@ -1,5 +1,8 @@
 node_modules
 data
+.venv-erp-mcp
+.tmp-erp-mcp-handoff
+agentic-os-erp-mcp-handoff-*.zip
 .env
 *.log
 .git
