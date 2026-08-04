@@ -1366,6 +1366,14 @@ Object.assign(COPY["ru-RU"], {
   "erp.revenue": "Выручка", "erp.orders": "Заказы", "erp.margin": "Маржа", "erp.alerts": "Алерты", "erp.activeOrders": "Активные заказы",
   "erp.blockers": "Блокеры", "erp.onTime": "В срок", "erp.load": "Загрузка", "erp.stockRisk": "Риск склада", "erp.lowStock": "Низкие остатки",
   "erp.fastMoving": "Быстрые позиции", "erp.totalSku": "SKU", "erp.expense": "Расход", "erp.profit": "Прибыль", "erp.cashflow": "Cashflow",
+  "erp.raw": "Сырой ответ", "erp.sku": "SKU", "erp.item": "Позиция", "erp.category": "Категория", "erp.available": "Доступно", "erp.reserved": "Резерв",
+  "erp.order": "Заказ", "erp.stage": "Этап", "erp.deadline": "Срок", "erp.owner": "Ответственный", "erp.status": "Статус",
+  "erp.daysLate": "Дней", "erp.reason": "Причина", "erp.task": "Задача", "erp.result": "Результат", "erp.type": "Тип",
+  "erp.needsAttention": "Требует внимания", "erp.inventoryItems": "Позиции склада", "erp.stockValue": "Стоимость склада", "erp.tasks": "Задачи",
+  "erp.defects": "Дефекты", "erp.waste": "Отходы", "erp.payments": "Оплаты", "erp.wasteCost": "Стоимость отходов", "erp.wasteIncome": "Доход отходов",
+  "erp.quickActions": "Быстрые действия", "erp.quickActionsHint": "Готовые запросы для MILA и Hermes.", "erp.actionSummary": "Сводка для MILA",
+  "erp.actionInventory": "Разбор склада", "erp.actionLate": "План по просрочкам", "erp.promptCopied": "Запрос скопирован",
+  "erp.promptCopiedHint": "Откройте MILA и отправьте его.", "erp.promptReady": "Запрос для MILA", "erp.currentUser": "ERP пользователь",
 });
 
 Object.assign(COPY["en-US"], {
@@ -1383,6 +1391,14 @@ Object.assign(COPY["en-US"], {
   "erp.revenue": "Revenue", "erp.orders": "Orders", "erp.margin": "Margin", "erp.alerts": "Alerts", "erp.activeOrders": "Active orders",
   "erp.blockers": "Blockers", "erp.onTime": "On time", "erp.load": "Load", "erp.stockRisk": "Stock risk", "erp.lowStock": "Low stock",
   "erp.fastMoving": "Fast moving", "erp.totalSku": "SKU", "erp.expense": "Expense", "erp.profit": "Profit", "erp.cashflow": "Cashflow",
+  "erp.raw": "Raw response", "erp.sku": "SKU", "erp.item": "Item", "erp.category": "Category", "erp.available": "Available", "erp.reserved": "Reserved",
+  "erp.order": "Order", "erp.stage": "Stage", "erp.deadline": "Deadline", "erp.owner": "Owner", "erp.status": "Status",
+  "erp.daysLate": "Days", "erp.reason": "Reason", "erp.task": "Task", "erp.result": "Result", "erp.type": "Type",
+  "erp.needsAttention": "Needs attention", "erp.inventoryItems": "Inventory items", "erp.stockValue": "Stock value", "erp.tasks": "Tasks",
+  "erp.defects": "Defects", "erp.waste": "Waste", "erp.payments": "Payments", "erp.wasteCost": "Waste cost", "erp.wasteIncome": "Waste income",
+  "erp.quickActions": "Quick actions", "erp.quickActionsHint": "Prepared prompts for MILA and Hermes.", "erp.actionSummary": "MILA summary",
+  "erp.actionInventory": "Inventory review", "erp.actionLate": "Late-order plan", "erp.promptCopied": "Prompt copied",
+  "erp.promptCopiedHint": "Open MILA and send it.", "erp.promptReady": "Prompt for MILA", "erp.currentUser": "ERP user",
 });
 
 Object.assign(COPY["uz-UZ"], {
@@ -1400,6 +1416,14 @@ Object.assign(COPY["uz-UZ"], {
   "erp.revenue": "Tushum", "erp.orders": "Buyurtmalar", "erp.margin": "Marja", "erp.alerts": "Ogohlantirishlar", "erp.activeOrders": "Faol buyurtmalar",
   "erp.blockers": "To'siqlar", "erp.onTime": "Vaqtida", "erp.load": "Yuklama", "erp.stockRisk": "Ombor xavfi", "erp.lowStock": "Kam qoldiq",
   "erp.fastMoving": "Tez sotiladigan", "erp.totalSku": "SKU", "erp.expense": "Xarajat", "erp.profit": "Foyda", "erp.cashflow": "Cashflow",
+  "erp.raw": "Xom javob", "erp.sku": "SKU", "erp.item": "Mahsulot", "erp.category": "Kategoriya", "erp.available": "Mavjud", "erp.reserved": "Band",
+  "erp.order": "Buyurtma", "erp.stage": "Bosqich", "erp.deadline": "Muddat", "erp.owner": "Mas'ul", "erp.status": "Holat",
+  "erp.daysLate": "Kun", "erp.reason": "Sabab", "erp.task": "Vazifa", "erp.result": "Natija", "erp.type": "Turi",
+  "erp.needsAttention": "E'tibor kerak", "erp.inventoryItems": "Ombor pozitsiyalari", "erp.stockValue": "Ombor qiymati", "erp.tasks": "Vazifalar",
+  "erp.defects": "Nuqsonlar", "erp.waste": "Chiqindi", "erp.payments": "To'lovlar", "erp.wasteCost": "Chiqindi tannarxi", "erp.wasteIncome": "Chiqindi daromadi",
+  "erp.quickActions": "Tezkor harakatlar", "erp.quickActionsHint": "MILA va Hermes uchun tayyor so'rovlar.", "erp.actionSummary": "MILA xulosasi",
+  "erp.actionInventory": "Ombor tahlili", "erp.actionLate": "Kechikish rejasi", "erp.promptCopied": "So'rov nusxalandi",
+  "erp.promptCopiedHint": "MILA'ni ochib yuboring.", "erp.promptReady": "MILA uchun so'rov", "erp.currentUser": "ERP foydalanuvchi",
 });
 
 const normalize = (value) => SUPPORTED_LOCALES.some(([code]) => code === value) ? value : "ru-RU";

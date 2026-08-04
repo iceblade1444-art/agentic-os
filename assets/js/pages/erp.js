@@ -7,22 +7,61 @@ let snapshot = null;
 let loading = true;
 let error = "";
 
-const pretty = (value) => {
-  if (value === undefined || value === null || value === "") return "-";
-  if (typeof value === "number") return new Intl.NumberFormat().format(value);
+const nf = new Intl.NumberFormat();
+const money = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+
+const pretty = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return nf.format(value);
   return String(value);
 };
+
 const objectText = (value) => {
   if (value === undefined || value === null) return "-";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value, null, 2);
 };
-const first = (obj, keys, fallback = "-") => {
+
+const unwrap = (value) => {
+  if (!value || typeof value !== "object") return value;
+  if ("data" in value && Object.keys(value).length <= 3) return unwrap(value.data);
+  return value;
+};
+
+const asArray = (value, keys = ["items", "orders", "tasks", "rows", "results", "data"]) => {
+  const data = unwrap(value);
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
   for (const key of keys) {
-    const value = obj?.[key];
+    const next = data[key];
+    if (Array.isArray(next)) return next;
+    if (next && typeof next === "object" && Array.isArray(next.items)) return next.items;
+  }
+  return [];
+};
+
+const first = (obj, keys, fallback = "-") => {
+  const data = unwrap(obj);
+  for (const key of keys) {
+    const value = data?.[key];
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+const numeric = (obj, keys, fallback = 0) => {
+  const value = first(obj, keys, null);
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const countish = (obj, keys, arrayFallback = []) => {
+  const found = first(obj, keys, null);
+  if (found !== null) {
+    const n = Number(found);
+    if (Number.isFinite(n)) return n;
+  }
+  return arrayFallback.length;
 };
 
 function head() {
@@ -33,35 +72,29 @@ function head() {
   </div>`;
 }
 
-function metric(label, value, hint = "") {
-  return `<div class="studio-metric"><span>${esc(label)}</span><strong>${esc(pretty(value))}</strong>${hint ? `<small>${esc(hint)}</small>` : ""}</div>`;
+function metric(label, value, hint = "", tone = "") {
+  return `<div class="studio-metric erp-metric ${tone}"><span>${esc(label)}</span><strong>${esc(pretty(value))}</strong>${hint ? `<small>${esc(hint)}</small>` : ""}</div>`;
 }
 
-function card(title, subtitle, body, iconName = "activity") {
-  return `<section class="card">
+function card(title, subtitle, body, iconName = "activity", extra = "") {
+  return `<section class="card ${extra}">
     <div class="row gap-2 mb-3"><span class="aico">${icon(iconName)}</span><div><h3>${esc(title)}</h3>${subtitle ? `<p class="muted">${esc(subtitle)}</p>` : ""}</div></div>
     ${body}
   </section>`;
 }
 
-function list(items, empty = t("erp.empty")) {
-  if (!Array.isArray(items) || !items.length) return `<div class="empty compact"><p>${esc(empty)}</p></div>`;
-  return `<div class="list compact">${items.slice(0, 8).map((item) => {
-    const title = first(item, ["title", "name", "order", "orderNumber", "employee", "sku", "id"]);
-    const hint = first(item, ["status", "stage", "dueDate", "deadline", "department", "summary"], "");
-    const value = first(item, ["amount", "total", "qty", "quantity", "daysLate"], "");
-    return `<div class="list-item"><div><strong>${esc(title)}</strong>${hint ? `<p class="muted">${esc(hint)}</p>` : ""}</div>${value ? `<span class="badge neutral">${esc(pretty(value))}</span>` : ""}</div>`;
-  }).join("")}</div>`;
+function empty(label = t("erp.empty")) {
+  return `<div class="empty compact"><p>${esc(label)}</p></div>`;
 }
 
-function dataPanel(data, preferredKeys = []) {
-  if (Array.isArray(data)) return list(data);
-  if (!data || typeof data !== "object") return `<pre class="codebox">${esc(objectText(data))}</pre>`;
-  const rows = preferredKeys
-    .map(([label, key]) => [label, data[key]])
-    .filter(([, value]) => value !== undefined && value !== null && value !== "");
-  if (!rows.length) return `<pre class="codebox">${esc(objectText(data))}</pre>`;
-  return `<div class="kv-grid">${rows.map(([label, value]) => `<div><span>${esc(label)}</span><strong>${esc(pretty(value))}</strong></div>`).join("")}</div>`;
+function kv(data, rows) {
+  const body = rows.map(([label, value, tone = ""]) => `<div class="${tone}"><span>${esc(label)}</span><strong>${esc(pretty(value))}</strong></div>`).join("");
+  return `<div class="kv-grid">${body}</div>${data ? `<details class="erp-raw"><summary>${esc(t("erp.raw"))}</summary><pre class="codebox">${esc(objectText(data))}</pre></details>` : ""}`;
+}
+
+function table(headers, rows, emptyLabel = t("erp.empty")) {
+  if (!rows.length) return empty(emptyLabel);
+  return `<div class="table-wrap erp-table"><table class="tbl"><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
 }
 
 function toolsHTML() {
@@ -75,6 +108,88 @@ function statusBadge(value) {
   return `<span class="badge ${cls}"><span class="dot"></span>${esc(pretty(value))}</span>`;
 }
 
+function inventoryTable(inventory) {
+  const items = asArray(inventory);
+  const sorted = [...items].sort((a, b) => numeric(a, ["available_quantity", "available", "quantity", "qty"]) - numeric(b, ["available_quantity", "available", "quantity", "qty"]));
+  return table(
+    [t("erp.sku"), t("erp.item"), t("erp.category"), t("erp.available"), t("erp.reserved")],
+    sorted.slice(0, 14).map((item) => {
+      const available = numeric(item, ["available_quantity", "available", "quantity", "qty"]);
+      const reserved = numeric(item, ["reserved_quantity", "reserved"], 0);
+      const low = available > 0 && available < 20;
+      return `<tr class="${low ? "risk" : ""}">
+        <td><strong>${esc(first(item, ["sku", "code", "item_id", "id"]))}</strong></td>
+        <td><strong>${esc(first(item, ["name", "title"]))}</strong><small>${esc(first(item, ["unit"], ""))}</small></td>
+        <td>${esc(first(item, ["category", "group"], "-"))}</td>
+        <td><span class="badge ${low ? "warning" : "success"}">${esc(pretty(available))}</span></td>
+        <td>${esc(pretty(reserved))}</td>
+      </tr>`;
+    })
+  );
+}
+
+function productionTable(production) {
+  const rows = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
+  return table(
+    [t("erp.order"), t("erp.stage"), t("erp.deadline"), t("erp.owner"), t("erp.status")],
+    rows.slice(0, 12).map((item) => `<tr>
+      <td><strong>${esc(first(item, ["order", "order_number", "orderNumber", "id", "title"]))}</strong><small>${esc(first(item, ["model", "style", "sku"], ""))}</small></td>
+      <td>${esc(first(item, ["stage", "step", "phase"], "-"))}</td>
+      <td>${esc(first(item, ["deadline", "due_date", "dueDate"], "-"))}</td>
+      <td>${esc(first(item, ["owner", "responsible", "employee"], "-"))}</td>
+      <td>${statusBadge(first(item, ["status", "state"], "active"))}</td>
+    </tr>`)
+  );
+}
+
+function lateOrdersTable(late) {
+  const rows = asArray(late, ["items", "orders", "late_orders", "data"]);
+  return table(
+    [t("erp.order"), t("erp.deadline"), t("erp.daysLate"), t("erp.reason")],
+    rows.slice(0, 12).map((item) => `<tr class="risk">
+      <td><strong>${esc(first(item, ["order", "order_number", "orderNumber", "id", "title"]))}</strong></td>
+      <td>${esc(first(item, ["deadline", "due_date", "dueDate"], "-"))}</td>
+      <td><span class="badge error">${esc(pretty(first(item, ["days_late", "daysLate", "late_days"], "-")))}</span></td>
+      <td>${esc(first(item, ["reason", "blocker", "status", "stage"], "-"))}</td>
+    </tr>`)
+  );
+}
+
+function tasksTable(tasks) {
+  const rows = asArray(tasks, ["items", "tasks", "rows", "data"]);
+  return table(
+    [t("erp.task"), t("erp.owner"), t("erp.deadline"), t("erp.status")],
+    rows.slice(0, 12).map((item) => `<tr>
+      <td><strong>${esc(first(item, ["title", "name", "task", "id"]))}</strong><small>${esc(first(item, ["summary", "description"], ""))}</small></td>
+      <td>${esc(first(item, ["employee", "owner", "assignee"], "-"))}</td>
+      <td>${esc(first(item, ["deadline", "due_date", "dueDate"], "-"))}</td>
+      <td>${statusBadge(first(item, ["status", "state"], "-"))}</td>
+    </tr>`)
+  );
+}
+
+function searchResults(value) {
+  const data = unwrap(value);
+  const rows = asArray(data, ["items", "results", "rows", "data"]);
+  if (rows.length) {
+    return table([t("erp.result"), t("erp.type"), t("erp.status")], rows.slice(0, 12).map((item) => `<tr>
+      <td><strong>${esc(first(item, ["title", "name", "order", "sku", "id"]))}</strong><small>${esc(first(item, ["summary", "description"], ""))}</small></td>
+      <td>${esc(first(item, ["type", "category", "entity"], "-"))}</td>
+      <td>${esc(first(item, ["status", "state"], "-"))}</td>
+    </tr>`));
+  }
+  return `<pre class="codebox">${esc(objectText(data))}</pre>`;
+}
+
+function quickActions() {
+  const prompts = [
+    ["summary", t("erp.actionSummary"), "Мила, сделай короткую бизнес-сводку ERP: продажи, производство, склад, риски и следующий шаг."],
+    ["inventory", t("erp.actionInventory"), "Мила, проанализируй склад ERP: что в риске, какие позиции проверить, что нужно докупить или зарезервировать."],
+    ["late", t("erp.actionLate"), "Мила, проверь просроченные ERP-заказы и предложи план действий для Hermes Kanban."],
+  ];
+  return `<div class="erp-actions">${prompts.map(([key, label, prompt]) => `<button class="btn btn-secondary" data-erp-prompt="${esc(prompt)}">${icon(key === "late" ? "warn" : key === "inventory" ? "knowledge" : "mic")}${esc(label)}</button>`).join("")}</div>`;
+}
+
 function erpHTML() {
   if (!api.on) return `<div class="page">${head()}<div class="card">${t("erp.demo")}</div></div>`;
   if (loading) return `<div class="page">${head()}<div class="card">${t("erp.loading")}</div></div>`;
@@ -82,35 +197,65 @@ function erpHTML() {
 
   const cards = snapshot.cards || {};
   const errors = snapshot.errors || {};
-  const summary = cards.erp_gm_summary || {};
-  const production = cards.erp_active_production || {};
-  const late = cards.erp_late_orders;
-  const inventory = cards.erp_inventory_status || {};
-  const finance = cards.erp_finance_summary || {};
-  const tasks = cards.erp_list_employee_tasks;
-  const me = cards.erp_me || {};
+  const summary = unwrap(cards.erp_gm_summary) || {};
+  const production = unwrap(cards.erp_active_production) || {};
+  const late = unwrap(cards.erp_late_orders);
+  const inventory = unwrap(cards.erp_inventory_status) || {};
+  const finance = unwrap(cards.erp_finance_summary) || {};
+  const tasks = unwrap(cards.erp_list_employee_tasks);
+  const me = unwrap(cards.erp_me) || {};
+
+  const invItems = asArray(inventory);
+  const lateItems = asArray(late);
+  const taskItems = asArray(tasks);
+  const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
+  const revenue = numeric(summary, ["revenue_total", "revenue", "sales", "totalSales"], numeric(finance, ["revenue_total", "revenue"]));
+  const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
+  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems);
+  const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
 
   return `<div class="page erp-page">
     ${head()}
     ${!snapshot.configured ? `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("erp.tokenMissing")}</div><div class="a-text">${t("erp.tokenMissingText")}</div></div></div>` : ""}
     ${Object.keys(errors).length ? `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("erp.partial")}</div><div class="a-text">${esc(Object.entries(errors).map(([key, value]) => `${key}: ${value}`).join(" | "))}</div></div></div>` : ""}
     <div class="grid cols-4 mb-4">
-      ${metric(t("erp.connection"), snapshot.server?.status || "stopped", snapshot.baseUrl)}
-      ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP")}
-      ${metric(t("erp.sales"), first(summary, ["sales", "revenue", "totalSales"]))}
-      ${metric(t("erp.production"), first(production, ["active", "activeOrders", "orders", "count"]))}
+      ${metric(t("erp.connection"), snapshot.server?.status || "stopped", snapshot.baseUrl, "ok")}
+      ${metric(t("erp.revenue"), revenue ? money.format(revenue) : 0, t("erp.sales"), revenue ? "ok" : "")}
+      ${metric(t("erp.activeOrders"), activeOrders, t("erp.production"), activeOrders ? "ok" : "")}
+      ${metric(t("erp.lateOrders"), lateOrders, t("erp.needsAttention"), lateOrders ? "risk" : "ok")}
     </div>
+    <div class="grid cols-4 mb-4">
+      ${metric(t("erp.inventoryItems"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
+      ${metric(t("erp.stockValue"), stockValue ? money.format(stockValue) : 0, t("erp.finance"), stockValue ? "ok" : "")}
+      ${metric(t("erp.employeeTasks"), taskItems.length, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
+      ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP", "ok")}
+    </div>
+    ${card(t("erp.quickActions"), t("erp.quickActionsHint"), quickActions(), "zap", "mb-4")}
     <div class="grid cols-2 mb-4">
-      ${card(t("erp.gmSummary"), t("erp.gmSummaryHint"), dataPanel(summary, [[t("erp.revenue"), "revenue"], [t("erp.orders"), "orders"], [t("erp.margin"), "margin"], [t("erp.alerts"), "alerts"]]), "activity")}
-      ${card(t("erp.productionStatus"), t("erp.productionHint"), dataPanel(production, [[t("erp.activeOrders"), "activeOrders"], [t("erp.blockers"), "blockers"], [t("erp.onTime"), "onTime"], [t("erp.load"), "load"]]), "workflow")}
-      ${card(t("erp.lateOrders"), t("erp.lateOrdersHint"), list(Array.isArray(late) ? late : late?.items || late?.orders || []), "warn")}
-      ${card(t("erp.inventory"), t("erp.inventoryHint"), dataPanel(inventory, [[t("erp.stockRisk"), "stockRisk"], [t("erp.lowStock"), "lowStock"], [t("erp.fastMoving"), "fastMoving"], [t("erp.totalSku"), "totalSku"]]), "knowledge")}
-      ${card(t("erp.finance"), t("erp.financeHint"), dataPanel(finance, [[t("erp.revenue"), "revenue"], [t("erp.expense"), "expense"], [t("erp.profit"), "profit"], [t("erp.cashflow"), "cashflow"]]), "database")}
-      ${card(t("erp.employeeTasks"), t("erp.employeeTasksHint"), list(Array.isArray(tasks) ? tasks : tasks?.items || tasks?.tasks || []), "agents")}
+      ${card(t("erp.gmSummary"), t("erp.gmSummaryHint"), kv(summary, [
+        [t("erp.activeOrders"), activeOrders],
+        [t("erp.lateOrders"), lateOrders],
+        [t("erp.defects"), first(summary, ["todays_defects", "defects"], 0)],
+        [t("erp.waste"), first(summary, ["todays_waste", "waste"], 0)],
+        [t("erp.stockValue"), stockValue],
+        [t("erp.revenue"), revenue],
+      ]), "activity")}
+      ${card(t("erp.finance"), t("erp.financeHint"), kv(finance, [
+        [t("erp.revenue"), first(finance, ["revenue_total", "revenue"], 0)],
+        [t("erp.payments"), first(finance, ["payments_received", "payments"], 0)],
+        [t("erp.stockValue"), first(finance, ["branded_stock_value", "stock_value"], 0)],
+        [t("erp.wasteCost"), first(finance, ["waste_cost", "waste"], 0)],
+        [t("erp.wasteIncome"), first(finance, ["waste_income"], 0)],
+        [t("erp.profit"), first(finance, ["profit"], 0)],
+      ]), "database")}
+      ${card(t("erp.productionStatus"), t("erp.productionHint"), productionTable(production), "workflow")}
+      ${card(t("erp.lateOrders"), t("erp.lateOrdersHint"), lateOrdersTable(late), "warn")}
+      ${card(t("erp.inventory"), t("erp.inventoryHint"), inventoryTable(inventory), "knowledge")}
+      ${card(t("erp.employeeTasks"), t("erp.employeeTasksHint"), tasksTable(tasks), "agents")}
     </div>
     <div class="grid cols-2">
       ${card(t("erp.search"), t("erp.searchHint"), `<div class="row gap-2"><input class="input" id="erpSearchInput" placeholder="${esc(t("erp.searchPlaceholder"))}"/><button class="btn btn-primary" id="erpSearchBtn">${icon("search")}${t("erp.runSearch")}</button></div><div id="erpSearchResult" class="mt-3"></div>`, "search")}
-      ${card(t("erp.mcpAccess"), t("erp.mcpAccessHint"), `<div class="mb-3">${statusBadge(snapshot.server?.status || "stopped")}</div>${toolsHTML()}<div class="row gap-2 mt-3"><a class="btn btn-secondary" href="#/mcp">${icon("mcp")}${t("erp.openMcp")}</a><a class="btn btn-secondary" href="#/mila">${icon("mic")}${t("erp.askMila")}</a></div><pre class="codebox mt-3">${esc(objectText(me))}</pre>`, "mcp")}
+      ${card(t("erp.mcpAccess"), t("erp.mcpAccessHint"), `<div class="mb-3">${statusBadge(snapshot.server?.status || "stopped")}</div>${toolsHTML()}<div class="row gap-2 mt-3"><a class="btn btn-secondary" href="#/mcp">${icon("mcp")}${t("erp.openMcp")}</a><a class="btn btn-secondary" href="#/mila">${icon("mic")}${t("erp.askMila")}</a></div><details class="erp-raw mt-3"><summary>${esc(t("erp.currentUser"))}</summary><pre class="codebox">${esc(objectText(me))}</pre></details>`, "mcp")}
     </div>
   </div>`;
 }
@@ -132,6 +277,13 @@ async function load(root) {
 
 function bind(root) {
   root.querySelector("#erpRefresh")?.addEventListener("click", () => load(root));
+  root.querySelectorAll("[data-erp-prompt]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const prompt = button.dataset.erpPrompt || "";
+      try { await navigator.clipboard.writeText(prompt); toast("success", t("erp.promptCopied"), t("erp.promptCopiedHint")); }
+      catch { toast("info", t("erp.promptReady"), prompt); }
+    });
+  });
   root.querySelector("#erpSearchBtn")?.addEventListener("click", async () => {
     const input = root.querySelector("#erpSearchInput");
     const result = root.querySelector("#erpSearchResult");
@@ -140,7 +292,7 @@ function bind(root) {
     result.innerHTML = `<div class="card">${t("erp.searching")}</div>`;
     try {
       const response = await api.erp.tool("erp_search", { query, limit: 10 });
-      result.innerHTML = `<pre class="codebox">${esc(objectText(response.result?.data || response.result))}</pre>`;
+      result.innerHTML = searchResults(response.result?.data || response.result);
     } catch (err) {
       toast("error", t("erp.searchFailed"), err.message);
       result.innerHTML = `<div class="alert error">${esc(err.message)}</div>`;
