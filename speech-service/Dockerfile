@@ -9,6 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY qwen_tts /app/qwen_tts
 ENV SPEECH_MODELS_DIR=/app/models
 
 EXPOSE 4400

@@ -200,6 +200,12 @@ main{max-width:420px;padding:32px;text-align:center}b{display:block;font-size:24
 });
 
 // ---- Protected API (everything below requires auth when AUTH_TOKEN is set) ----
+// internal-secret bypass: service-to-service LLM calls (speech post-correction)
+app.use("/api/llm", (req, res, next) => {
+  const secret = process.env.INTERNAL_SECRET;
+  if (secret && req.get("x-internal-secret") === secret) return llm(req, res, next);
+  return next();
+});
 app.use("/api", requireAuth);
 // Every signed-in role may inspect and revoke only its own sessions.
 app.get("/api/auth/sessions", listSessionsHandler);

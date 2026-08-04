@@ -43,6 +43,7 @@ r.post("/stt", raw({ type: () => true, limit: MAX_AUDIO_BYTES }), async (req, re
       `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${safeSpeechFilename(req.get("X-File-Name"))}"\r\nContent-Type: application/octet-stream\r\n\r\n`
     ), req.body];
     if (language) parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}`));
+    if (req.query.correct === "true") parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="correct_text"\r\n\r\ntrue`));
     parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
     const upstream = await fetch(`${SPEECH_URL}/stt`, {
       method: "POST",

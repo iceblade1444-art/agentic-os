@@ -80,6 +80,7 @@ export default {
       <div class="card">
         <div class="sp-head"><span class="sp-ico">${icon("mic")}</span><div><div class="t">Речь → текст</div><div class="s">микрофон, файлы, субтитры</div></div></div>
         <div class="sp-row"><label>Язык</label>
+          <label style="margin-left:12px"><input type="checkbox" id="sttCorrect" checked/> исправлять ошибки через ИИ</label>
           <select id="sttLang" class="input" style="width:auto">
             ${LANGS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}
           </select>
@@ -160,7 +161,9 @@ export default {
       q("#recState").textContent = "распознаю…";
       try {
         const lang = q("#sttLang").value;
-        const res = await fetch(`/api/speech/stt${lang ? `?language=${lang}` : ""}`, {
+        const fix = q("#sttCorrect")?.checked ? "correct=true" : "";
+        const qs = [lang ? `language=${lang}` : "", fix].filter(Boolean).join("&");
+        const res = await fetch(`/api/speech/stt${qs ? `?${qs}` : ""}`, {
           method: "POST",
           headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(name) },
           body: blob,
