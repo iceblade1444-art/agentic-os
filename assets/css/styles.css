@@ -2774,4 +2774,12 @@ body.compact .card.pad-lg { padding: 16px; }
 .erp-page .chips{display:flex;flex-wrap:wrap;gap:8px}
 .erp-page .codebox{max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:12px;font-size:12px;line-height:1.5;white-space:pre-wrap}
 .erp-page .empty.compact{min-height:96px;display:grid;place-items:center;border:1px dashed var(--border);border-radius:8px;background:var(--surface-2)}
+.erp-page .erp-metric.ok{border-color:color-mix(in srgb,var(--success) 32%,var(--border))}
+.erp-page .erp-metric.warning{border-color:color-mix(in srgb,var(--warning) 38%,var(--border))}
+.erp-page .erp-metric.risk{border-color:color-mix(in srgb,var(--error) 42%,var(--border))}
+.erp-page .erp-table{border:1px solid var(--border);background:var(--surface-2)}
+.erp-page .erp-table .tbl tbody tr.risk{background:color-mix(in srgb,var(--error) 7%,transparent)}
+.erp-page .erp-table .tbl td small{display:block;color:var(--text-dim);font-size:11px;margin-top:4px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.erp-page .erp-raw{margin-top:12px}.erp-page .erp-raw summary{cursor:pointer;color:var(--text-muted);font-size:12px}
+.erp-page .erp-actions{display:flex;flex-wrap:wrap;gap:10px}.erp-page .erp-actions .btn{justify-content:flex-start}
 @media(max-width:720px){.erp-page .kv-grid{grid-template-columns:1fr}.erp-page .list-item{align-items:flex-start;flex-direction:column}}
