@@ -9,6 +9,7 @@ import pytest
 from milana_erp_mcp.client import ERPApiClient
 from milana_erp_mcp.config import Settings
 from milana_erp_mcp.tools import (
+    erp_active_production_tool,
     erp_create_task_tool,
     erp_finance_summary_tool,
     erp_gm_summary_tool,
@@ -112,6 +113,23 @@ async def test_erp_gm_summary_wraps_management_dashboard() -> None:
     result = await _with_client(handler, callback)
     assert result["ok"] is True
     assert result["data"]["active_orders"] == 12
+
+
+@pytest.mark.asyncio
+async def test_erp_active_production_reads_production_kpis() -> None:
+    def handler(request: httpx.Request, _seen: list[httpx.Request]) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json_response(200, ME)
+        assert request.url.path == "/api/dashboard/production"
+        return _json_response(200, {"cutting_output": 7592, "sewing_output": 535, "packaging_output": 535})
+
+    async def callback(client: ERPApiClient, _seen: list[httpx.Request], settings: Settings) -> dict[str, Any]:
+        return await erp_active_production_tool(settings=settings, client=client)
+
+    result = await _with_client(handler, callback)
+    assert result["ok"] is True
+    assert result["source"] == "/api/dashboard/production"
+    assert result["data"]["cutting_output"] == 7592
 
 
 @pytest.mark.asyncio

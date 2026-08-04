@@ -142,9 +142,9 @@ async def erp_active_production_tool(
 
     async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
         parsed = ActiveProductionArgs(limit=limit)
-        data = await api.get("/api/dashboard/active-production")
+        data = await api.get("/api/dashboard/production")
         items = data[: parsed.limit] if isinstance(data, list) else data
-        return ToolExecution({"ok": True, "data": items, "source": "/api/dashboard/active-production"})
+        return ToolExecution({"ok": True, "data": items, "source": "/api/dashboard/production"})
 
     return await _run_tool("erp_active_production", args, handler, settings=settings, client=client)
 
