@@ -26,6 +26,7 @@ import routines from "./routes/routines.js";
 import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import studio from "./routes/studio.js";
+import erp from "./routes/erp.js";
 import {
   authEnabled, configureAuthReadAdapter, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mfaVerifyHandler, mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
@@ -243,6 +244,7 @@ app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
 app.use("/api/studio", requireOperator, studio);
+app.use("/api/erp", requireOperator, erp);
 app.use("/api/governance", requireOperator, governance);
 app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));

@@ -20,6 +20,7 @@ function seed() {
       { id: "mcp_hub", name: "agentic-os-hub", kind: "agentic", status: "stopped", tools: [], desc: "Agentic OS itself as MCP tools — what an orchestrator like Hermes connects to" },
       { id: "mcp_obsidian", name: "obsidian", kind: "obsidian", status: "stopped", tools: [], desc: "Read / search / write notes in your Obsidian vault" },
       { id: "mcp_desktop", name: "desktop", kind: "desktop", status: "stopped", tools: [], desc: "Local PC screen, camera and UI automation through the NOVA VOICE desktop bridge" },
+      { id: "mcp_erp", name: "milana-erp", kind: "erp", status: "stopped", tools: [], desc: "Milana ERP business data, production, inventory, finance and confirmed ERP actions" },
     ],
     integrations: ["openai", "anthropic", "github", "notion", "slack", "postgres", "mila"].map((p) => ({
       id: "int_" + p, provider: p, connected: false, config: {}, testedAt: null, lastResult: null,

@@ -69,6 +69,48 @@ Keep port `8765` private until the runtime API has a reviewed authentication
 and proxy layer. Deployment details and rollback steps live in
 `agentos-runtime/sops/production-deploy-agent-milanapremium.md`.
 
+### Milana ERP bridge
+
+Agentic OS includes a bundled `milana-erp` MCP bridge and an operator-only
+`ERP` page. It lets the dashboard, MILA, Hermes and Claude read live business
+signals from `https://erp.milanapremium.uz`: GM summary, production, late
+orders, inventory, finance, employee tasks and safe ERP search. Write tools
+exist only for confirmed actions (`erp_send_notification`, `erp_create_task`)
+and require explicit `confirmed=true` by default.
+
+Create the ERP bearer token in the ERP super-admin MCP access panel, then set:
+
+```bash
+ERP_API_BASE_URL=https://erp.milanapremium.uz
+ERP_MCP_AUTH_MODE=bearer
+ERP_MCP_BEARER_TOKEN=<real-erp-token>
+ERP_MCP_REQUIRE_CONFIRMATION=true
+ERP_MCP_MAX_BULK_RECIPIENTS=25
+```
+
+Agentic OS vendors the official ERP MCP source under
+`vendor/milana-erp-mcp` and installs it during the Docker build. Use the Python
+stdio transport over the bundled HTTP fallback:
+
+```bash
+ERP_MCP_PYTHON_MODULE=milana_erp_mcp.server
+ERP_MCP_COMMAND=python3
+```
+
+The bundled bridge is kept as a fallback for ERP deployments that expose
+`/api/mcp/<tool>` HTTP endpoints. Current Milana ERP deployments expose the
+Python MCP module instead.
+
+Restart Agentic OS after changing `.env`. The MCP server will appear as
+`milana-erp` in **MCP Servers**, and the business dashboard will be available at
+`#/erp`.
+
+After the token is set, verify the bridge before deploying:
+
+```bash
+npm run erp:verify
+```
+
 **The operating system for AI agents.** A fully-functional, dependency-free web dashboard to
 build, run and orchestrate intelligent agents — agents, chat, a visual workflow builder,
 knowledge/memory, MCP servers, integrations, evaluations, observability, guardrails and secrets.

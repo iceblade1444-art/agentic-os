@@ -1351,6 +1351,57 @@ Object.assign(COPY["uz-UZ"], {
   "studio.analytics.action.stop": "To‘xtatish", "studio.analytics.action.validate": "Gipotezani tekshirish",
 });
 
+Object.assign(COPY["ru-RU"], {
+  "nav.erp": "ERP",
+  "erp.title": "ERP", "erp.subtitle": "Живая сводка бизнеса из Milana ERP и инструменты для MILA/Hermes.",
+  "erp.refresh": "Обновить", "erp.demo": "Запустите backend, чтобы читать ERP.", "erp.loading": "Загружаю ERP-сводку...",
+  "erp.unavailable": "ERP недоступна", "erp.tokenMissing": "Нужен ERP token", "erp.tokenMissingText": "Добавьте ERP_MCP_BEARER_TOKEN в .env Agentic OS и перезапустите контейнер.",
+  "erp.partial": "Часть ERP-данных не загрузилась", "erp.connection": "Подключение", "erp.tools": "Инструменты", "erp.sales": "Продажи", "erp.production": "Производство",
+  "erp.gmSummary": "GM сводка", "erp.gmSummaryHint": "Ключевые показатели управления.", "erp.productionStatus": "Производство", "erp.productionHint": "Активные заказы, этапы и блокеры.",
+  "erp.lateOrders": "Просроченные заказы", "erp.lateOrdersHint": "Заказы, требующие внимания.", "erp.inventory": "Склад", "erp.inventoryHint": "Остатки, риски и быстрые позиции.",
+  "erp.finance": "Финансы", "erp.financeHint": "Доступно только при ERP-правах.", "erp.employeeTasks": "Задачи сотрудников", "erp.employeeTasksHint": "Фильтрованная очередь задач.",
+  "erp.search": "Поиск ERP", "erp.searchHint": "Заказы, связи, модели и безопасная выдача.", "erp.searchPlaceholder": "Найти заказ, модель, клиента...",
+  "erp.runSearch": "Найти", "erp.searching": "Ищу в ERP...", "erp.searchFailed": "Поиск не выполнен", "erp.mcpAccess": "MCP доступ", "erp.mcpAccessHint": "Эти инструменты доступны MILA, Hermes и Claude.",
+  "erp.openMcp": "Открыть MCP", "erp.askMila": "Спросить MILA", "erp.noTools": "Инструменты появятся после подключения ERP MCP.", "erp.empty": "Нет данных",
+  "erp.revenue": "Выручка", "erp.orders": "Заказы", "erp.margin": "Маржа", "erp.alerts": "Алерты", "erp.activeOrders": "Активные заказы",
+  "erp.blockers": "Блокеры", "erp.onTime": "В срок", "erp.load": "Загрузка", "erp.stockRisk": "Риск склада", "erp.lowStock": "Низкие остатки",
+  "erp.fastMoving": "Быстрые позиции", "erp.totalSku": "SKU", "erp.expense": "Расход", "erp.profit": "Прибыль", "erp.cashflow": "Cashflow",
+});
+
+Object.assign(COPY["en-US"], {
+  "nav.erp": "ERP",
+  "erp.title": "ERP", "erp.subtitle": "Live Milana ERP business snapshot and tools for MILA/Hermes.",
+  "erp.refresh": "Refresh", "erp.demo": "Start the backend to read ERP.", "erp.loading": "Loading ERP snapshot...",
+  "erp.unavailable": "ERP unavailable", "erp.tokenMissing": "ERP token required", "erp.tokenMissingText": "Add ERP_MCP_BEARER_TOKEN to Agentic OS .env and restart the container.",
+  "erp.partial": "Some ERP data could not be loaded", "erp.connection": "Connection", "erp.tools": "Tools", "erp.sales": "Sales", "erp.production": "Production",
+  "erp.gmSummary": "GM summary", "erp.gmSummaryHint": "Key management indicators.", "erp.productionStatus": "Production", "erp.productionHint": "Active orders, stages and blockers.",
+  "erp.lateOrders": "Late orders", "erp.lateOrdersHint": "Orders requiring attention.", "erp.inventory": "Inventory", "erp.inventoryHint": "Stock, risks and fast moving items.",
+  "erp.finance": "Finance", "erp.financeHint": "Available when ERP permissions allow it.", "erp.employeeTasks": "Employee tasks", "erp.employeeTasksHint": "Filtered task queue.",
+  "erp.search": "ERP search", "erp.searchHint": "Orders, links, styles and safe output.", "erp.searchPlaceholder": "Find order, style, customer...",
+  "erp.runSearch": "Search", "erp.searching": "Searching ERP...", "erp.searchFailed": "Search failed", "erp.mcpAccess": "MCP access", "erp.mcpAccessHint": "These tools are available to MILA, Hermes and Claude.",
+  "erp.openMcp": "Open MCP", "erp.askMila": "Ask MILA", "erp.noTools": "Tools appear after the ERP MCP connects.", "erp.empty": "No data",
+  "erp.revenue": "Revenue", "erp.orders": "Orders", "erp.margin": "Margin", "erp.alerts": "Alerts", "erp.activeOrders": "Active orders",
+  "erp.blockers": "Blockers", "erp.onTime": "On time", "erp.load": "Load", "erp.stockRisk": "Stock risk", "erp.lowStock": "Low stock",
+  "erp.fastMoving": "Fast moving", "erp.totalSku": "SKU", "erp.expense": "Expense", "erp.profit": "Profit", "erp.cashflow": "Cashflow",
+});
+
+Object.assign(COPY["uz-UZ"], {
+  "nav.erp": "ERP",
+  "erp.title": "ERP", "erp.subtitle": "Milana ERP biznes holati va MILA/Hermes uchun vositalar.",
+  "erp.refresh": "Yangilash", "erp.demo": "ERP o'qish uchun backendni ishga tushiring.", "erp.loading": "ERP ma'lumotlari yuklanmoqda...",
+  "erp.unavailable": "ERP ishlamayapti", "erp.tokenMissing": "ERP token kerak", "erp.tokenMissingText": "Agentic OS .env fayliga ERP_MCP_BEARER_TOKEN qo'shing va konteynerni qayta ishga tushiring.",
+  "erp.partial": "ERP ma'lumotlarining bir qismi yuklanmadi", "erp.connection": "Ulanish", "erp.tools": "Vositalar", "erp.sales": "Sotuv", "erp.production": "Ishlab chiqarish",
+  "erp.gmSummary": "GM xulosa", "erp.gmSummaryHint": "Boshqaruvning asosiy ko'rsatkichlari.", "erp.productionStatus": "Ishlab chiqarish", "erp.productionHint": "Faol buyurtmalar, bosqichlar va to'siqlar.",
+  "erp.lateOrders": "Kechikkan buyurtmalar", "erp.lateOrdersHint": "E'tibor talab qiladigan buyurtmalar.", "erp.inventory": "Ombor", "erp.inventoryHint": "Qoldiq, xavflar va tez sotiladigan mahsulotlar.",
+  "erp.finance": "Moliya", "erp.financeHint": "ERP ruxsatlari imkon bersa ko'rinadi.", "erp.employeeTasks": "Xodim vazifalari", "erp.employeeTasksHint": "Filtrlangan vazifalar navbati.",
+  "erp.search": "ERP qidiruv", "erp.searchHint": "Buyurtmalar, modellar va xavfsiz natijalar.", "erp.searchPlaceholder": "Buyurtma, model, mijozni topish...",
+  "erp.runSearch": "Qidirish", "erp.searching": "ERP ichida qidirilmoqda...", "erp.searchFailed": "Qidiruv bajarilmadi", "erp.mcpAccess": "MCP kirish", "erp.mcpAccessHint": "Bu vositalar MILA, Hermes va Claude uchun ochiq.",
+  "erp.openMcp": "MCP ochish", "erp.askMila": "MILA'dan so'rash", "erp.noTools": "ERP MCP ulanganidan keyin vositalar ko'rinadi.", "erp.empty": "Ma'lumot yo'q",
+  "erp.revenue": "Tushum", "erp.orders": "Buyurtmalar", "erp.margin": "Marja", "erp.alerts": "Ogohlantirishlar", "erp.activeOrders": "Faol buyurtmalar",
+  "erp.blockers": "To'siqlar", "erp.onTime": "Vaqtida", "erp.load": "Yuklama", "erp.stockRisk": "Ombor xavfi", "erp.lowStock": "Kam qoldiq",
+  "erp.fastMoving": "Tez sotiladigan", "erp.totalSku": "SKU", "erp.expense": "Xarajat", "erp.profit": "Foyda", "erp.cashflow": "Cashflow",
+});
+
 const normalize = (value) => SUPPORTED_LOCALES.some(([code]) => code === value) ? value : "ru-RU";
 let currentLocale = (() => {
   try {
