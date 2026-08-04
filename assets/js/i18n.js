@@ -1373,8 +1373,11 @@ Object.assign(COPY["ru-RU"], {
   "erp.needsAttention": "Требует внимания", "erp.inventoryItems": "Позиции склада", "erp.stockValue": "Стоимость склада", "erp.tasks": "Задачи",
   "erp.defects": "Дефекты", "erp.waste": "Отходы", "erp.payments": "Оплаты", "erp.wasteCost": "Стоимость отходов", "erp.wasteIncome": "Доход отходов",
   "erp.quickActions": "Быстрые действия", "erp.quickActionsHint": "Готовые запросы для MILA и Hermes.", "erp.actionSummary": "Сводка для MILA",
-  "erp.actionInventory": "Разбор склада", "erp.actionLate": "План по просрочкам", "erp.promptCopied": "Запрос скопирован",
+  "erp.actionFlow": "Загрузка потоков", "erp.actionWarehouse": "Когда на склад", "erp.actionInventory": "Разбор склада", "erp.actionLate": "План по просрочкам", "erp.promptCopied": "Запрос скопирован",
   "erp.promptCopiedHint": "Откройте MILA и отправьте его.", "erp.promptReady": "Запрос для MILA", "erp.currentUser": "ERP пользователь",
+  "erp.trackedOrders": "Отслеживаемые заказы", "erp.processTracking": "Процесс-трекинг", "erp.busiestFlow": "Самый загруженный поток", "erp.nextWarehouse": "Ближайший склад", "erp.blockedOrders": "Заблокированные", "erp.noData": "Нет данных",
+  "erp.qtyShort": "шт.", "erp.flow": "Поток", "erp.plannedQty": "План", "erp.actualQty": "Факт", "erp.inProgress": "В работе", "erp.blocked": "Блок", "erp.model": "Модель", "erp.qty": "Кол-во", "erp.warehouseEta": "Склад ETA",
+  "erp.flowLoad": "Загрузка швейных потоков", "erp.flowLoadHint": "Где скопилась работа и какой поток перегружен.", "erp.warehouseEtaHint": "Когда заказы должны перейти на склад.", "erp.stageLoad": "Загрузка этапов", "erp.stageLoadHint": "Срез по раскрою, пошиву, упаковке и складу.",
 });
 
 Object.assign(COPY["en-US"], {
@@ -1399,8 +1402,11 @@ Object.assign(COPY["en-US"], {
   "erp.needsAttention": "Needs attention", "erp.inventoryItems": "Inventory items", "erp.stockValue": "Stock value", "erp.tasks": "Tasks",
   "erp.defects": "Defects", "erp.waste": "Waste", "erp.payments": "Payments", "erp.wasteCost": "Waste cost", "erp.wasteIncome": "Waste income",
   "erp.quickActions": "Quick actions", "erp.quickActionsHint": "Prepared prompts for MILA and Hermes.", "erp.actionSummary": "MILA summary",
-  "erp.actionInventory": "Inventory review", "erp.actionLate": "Late-order plan", "erp.promptCopied": "Prompt copied",
+  "erp.actionFlow": "Flow load", "erp.actionWarehouse": "Warehouse ETA", "erp.actionInventory": "Inventory review", "erp.actionLate": "Late-order plan", "erp.promptCopied": "Prompt copied",
   "erp.promptCopiedHint": "Open MILA and send it.", "erp.promptReady": "Prompt for MILA", "erp.currentUser": "ERP user",
+  "erp.trackedOrders": "Tracked orders", "erp.processTracking": "Process tracking", "erp.busiestFlow": "Busiest flow", "erp.nextWarehouse": "Next warehouse", "erp.blockedOrders": "Blocked orders", "erp.noData": "No data",
+  "erp.qtyShort": "pcs", "erp.flow": "Flow", "erp.plannedQty": "Planned", "erp.actualQty": "Actual", "erp.inProgress": "In progress", "erp.blocked": "Blocked", "erp.model": "Model", "erp.qty": "Qty", "erp.warehouseEta": "Warehouse ETA",
+  "erp.flowLoad": "Sewing flow load", "erp.flowLoadHint": "Where work is accumulating and which flow is overloaded.", "erp.warehouseEtaHint": "When orders should move to warehouse.", "erp.stageLoad": "Stage load", "erp.stageLoadHint": "Cutting, sewing, packaging and warehouse view.",
 });
 
 Object.assign(COPY["uz-UZ"], {
@@ -1425,8 +1431,11 @@ Object.assign(COPY["uz-UZ"], {
   "erp.needsAttention": "E'tibor kerak", "erp.inventoryItems": "Ombor pozitsiyalari", "erp.stockValue": "Ombor qiymati", "erp.tasks": "Vazifalar",
   "erp.defects": "Nuqsonlar", "erp.waste": "Chiqindi", "erp.payments": "To'lovlar", "erp.wasteCost": "Chiqindi tannarxi", "erp.wasteIncome": "Chiqindi daromadi",
   "erp.quickActions": "Tezkor harakatlar", "erp.quickActionsHint": "MILA va Hermes uchun tayyor so'rovlar.", "erp.actionSummary": "MILA xulosasi",
-  "erp.actionInventory": "Ombor tahlili", "erp.actionLate": "Kechikish rejasi", "erp.promptCopied": "So'rov nusxalandi",
+  "erp.actionFlow": "Oqim yuklamasi", "erp.actionWarehouse": "Ombor vaqti", "erp.actionInventory": "Ombor tahlili", "erp.actionLate": "Kechikish rejasi", "erp.promptCopied": "So'rov nusxalandi",
   "erp.promptCopiedHint": "MILA'ni ochib yuboring.", "erp.promptReady": "MILA uchun so'rov", "erp.currentUser": "ERP foydalanuvchi",
+  "erp.trackedOrders": "Kuzatilayotgan buyurtmalar", "erp.processTracking": "Jarayon kuzatuvi", "erp.busiestFlow": "Eng yuklangan oqim", "erp.nextWarehouse": "Keyingi ombor", "erp.blockedOrders": "Bloklanganlar", "erp.noData": "Ma'lumot yo'q",
+  "erp.qtyShort": "dona", "erp.flow": "Oqim", "erp.plannedQty": "Reja", "erp.actualQty": "Fakt", "erp.inProgress": "Ishda", "erp.blocked": "Blok", "erp.model": "Model", "erp.qty": "Soni", "erp.warehouseEta": "Ombor ETA",
+  "erp.flowLoad": "Tikuv oqimlari yuklamasi", "erp.flowLoadHint": "Ish qayerda yig'ilgan va qaysi oqim yuklangan.", "erp.warehouseEtaHint": "Buyurtmalar qachon omborga o'tishi kerak.", "erp.stageLoad": "Bosqich yuklamasi", "erp.stageLoadHint": "Bichish, tikuv, qadoqlash va ombor kesimi.",
 });
 
 const normalize = (value) => SUPPORTED_LOCALES.some(([code]) => code === value) ? value : "ru-RU";

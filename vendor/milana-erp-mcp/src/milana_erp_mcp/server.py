@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .tools import (
     erp_active_production_tool,
+    erp_business_control_tool,
     erp_create_task_tool,
     erp_finance_summary_tool,
     erp_gm_summary_tool,
@@ -51,6 +52,12 @@ async def erp_search(query: str, limit_per_type: int = 5) -> dict[str, Any]:
 async def erp_active_production(limit: int = 25) -> dict[str, Any]:
     """Return active production status from the ERP dashboard endpoint."""
     return await erp_active_production_tool(limit=limit)
+
+
+@mcp.tool(structured_output=True)
+async def erp_business_control(limit: int = 25) -> dict[str, Any]:
+    """Return a business-control snapshot: workload by stage, busiest sewing flows, blockers, overdue orders and warehouse ETA."""
+    return await erp_business_control_tool(limit=limit)
 
 
 @mcp.tool(structured_output=True)

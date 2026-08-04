@@ -10,6 +10,7 @@ from milana_erp_mcp.client import ERPApiClient
 from milana_erp_mcp.config import Settings
 from milana_erp_mcp.tools import (
     erp_active_production_tool,
+    erp_business_control_tool,
     erp_create_task_tool,
     erp_finance_summary_tool,
     erp_gm_summary_tool,
@@ -130,6 +131,62 @@ async def test_erp_active_production_reads_production_kpis() -> None:
     assert result["ok"] is True
     assert result["source"] == "/api/dashboard/production"
     assert result["data"]["cutting_output"] == 7592
+
+
+@pytest.mark.asyncio
+async def test_erp_business_control_builds_process_snapshot() -> None:
+    def handler(request: httpx.Request, _seen: list[httpx.Request]) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json_response(200, ME)
+        assert request.url.path == "/api/process-tracking"
+        return _json_response(
+            200,
+            [
+                {
+                    "production_order_id": 1,
+                    "production_no": "PO-1",
+                    "order_no": "SO-1",
+                    "model_code": "M-1",
+                    "model_name": "Model 1",
+                    "planned_quantity": 600,
+                    "actual_quantity": 100,
+                    "current_stage": "sewing",
+                    "current_stage_status": "in_progress",
+                    "sewing_factories": [{"name": "Line A"}],
+                    "stages": [
+                        {"operation": "sewing", "sewing_flow_name": "Line A", "deadline": "2026-08-08T10:00:00+00:00"},
+                        {"operation": "storage_transfer", "status": "waiting", "deadline": "2026-08-10T10:00:00+00:00"},
+                    ],
+                },
+                {
+                    "production_order_id": 2,
+                    "production_no": "PO-2",
+                    "order_no": "SO-2",
+                    "model_code": "M-2",
+                    "model_name": "Model 2",
+                    "planned_quantity": 400,
+                    "actual_quantity": 0,
+                    "current_stage": "sewing",
+                    "current_stage_status": "waiting",
+                    "sewing_factories": [{"name": "Line A"}],
+                    "stages": [
+                        {"operation": "sewing", "sewing_flow_name": "Line A"},
+                        {"operation": "storage_transfer", "status": "waiting", "deadline": "2026-08-11T10:00:00+00:00"},
+                    ],
+                },
+            ],
+        )
+
+    async def callback(client: ERPApiClient, _seen: list[httpx.Request], settings: Settings) -> dict[str, Any]:
+        return await erp_business_control_tool(settings=settings, client=client)
+
+    result = await _with_client(handler, callback)
+    assert result["ok"] is True
+    assert result["source"] == "/api/process-tracking"
+    assert result["data"]["total_orders"] == 2
+    assert result["data"]["answer_hints"]["busiest_sewing_flow"]["flow"] == "Line A"
+    assert result["data"]["answer_hints"]["busiest_sewing_flow"]["planned_quantity"] == 1000
+    assert result["data"]["answer_hints"]["next_warehouse_order"]["production_no"] == "PO-1"
 
 
 @pytest.mark.asyncio

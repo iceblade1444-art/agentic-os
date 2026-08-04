@@ -149,6 +149,25 @@ async def erp_active_production_tool(
     return await _run_tool("erp_active_production", args, handler, settings=settings, client=client)
 
 
+async def erp_business_control_tool(
+    limit: int = 25,
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    args = {"limit": limit}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        parsed = ActiveProductionArgs(limit=limit)
+        rows = await api.get("/api/process-tracking")
+        if not isinstance(rows, list):
+            return ToolExecution({"ok": True, "data": rows, "source": "/api/process-tracking"})
+        snapshot = _business_control_snapshot(rows, parsed.limit)
+        return ToolExecution({"ok": True, "data": snapshot, "source": "/api/process-tracking"})
+
+    return await _run_tool("erp_business_control", args, handler, settings=settings, client=client)
+
+
 async def erp_late_orders_tool(
     limit: int = 25,
     *,
@@ -483,6 +502,120 @@ async def _department_user_ids(api: ERPApiClient, department: str) -> set[int]:
 def _parse_user_id(value: str) -> int | None:
     stripped = value.strip()
     return int(stripped) if stripped.isdigit() else None
+
+
+def _business_control_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+    stage_counts: dict[str, dict[str, Any]] = {}
+    sewing_flows: dict[str, dict[str, Any]] = {}
+    blocked: list[dict[str, Any]] = []
+    overdue: list[dict[str, Any]] = []
+    storage_eta: list[dict[str, Any]] = []
+
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        order = _order_brief(item)
+        stage = str(item.get("current_stage") or "unknown")
+        stage_bucket = stage_counts.setdefault(stage, {"stage": stage, "orders": 0, "planned_quantity": 0, "actual_quantity": 0})
+        stage_bucket["orders"] += 1
+        stage_bucket["planned_quantity"] += _num(item.get("planned_quantity"))
+        stage_bucket["actual_quantity"] += _num(item.get("actual_quantity"))
+
+        flow_name = _sewing_flow_name(item)
+        if flow_name:
+            flow_bucket = sewing_flows.setdefault(
+                flow_name,
+                {"flow": flow_name, "orders": 0, "planned_quantity": 0, "in_progress": 0, "waiting": 0, "blocked": 0},
+            )
+            flow_bucket["orders"] += 1
+            flow_bucket["planned_quantity"] += _num(item.get("planned_quantity"))
+            status = str(item.get("current_stage_status") or "").lower()
+            if status in {"in_progress", "in progress", "active", "running"}:
+                flow_bucket["in_progress"] += 1
+            else:
+                flow_bucket["waiting"] += 1
+            if item.get("is_blocked"):
+                flow_bucket["blocked"] += 1
+
+        if item.get("is_blocked"):
+            blocked.append({**order, "stage": stage, "blocked_by": item.get("blocked_by")})
+        if item.get("po_overdue") or any(stage_item.get("overdue") for stage_item in item.get("stages") or [] if isinstance(stage_item, dict)):
+            overdue.append({**order, "stage": stage, "deadline": item.get("po_deadline")})
+
+        storage_stage = _stage(item, "storage_transfer")
+        if storage_stage:
+            storage_eta.append(
+                {
+                    **order,
+                    "warehouse_eta": storage_stage.get("deadline"),
+                    "warehouse_status": storage_stage.get("status"),
+                    "warehouse_overdue": bool(storage_stage.get("overdue")),
+                }
+            )
+
+    stage_summary = sorted(stage_counts.values(), key=lambda value: value["planned_quantity"], reverse=True)
+    busiest_flows = sorted(sewing_flows.values(), key=lambda value: (value["planned_quantity"], value["orders"]), reverse=True)
+    storage_eta = sorted(storage_eta, key=lambda value: str(value.get("warehouse_eta") or ""))[:limit]
+
+    return {
+        "total_orders": len(rows),
+        "stage_summary": stage_summary,
+        "busiest_sewing_flows": busiest_flows[:limit],
+        "blocked_orders": blocked[:limit],
+        "overdue_orders": overdue[:limit],
+        "warehouse_eta": storage_eta,
+        "answer_hints": {
+            "busiest_sewing_flow": busiest_flows[0] if busiest_flows else None,
+            "next_warehouse_order": storage_eta[0] if storage_eta else None,
+        },
+    }
+
+
+def _order_brief(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "production_order_id": item.get("production_order_id"),
+        "production_no": item.get("production_no"),
+        "order_no": item.get("order_no") or item.get("sales_order_no"),
+        "model_code": item.get("model_code"),
+        "model_name": item.get("model_name"),
+        "planned_quantity": item.get("planned_quantity"),
+        "actual_quantity": item.get("actual_quantity"),
+        "deadline": item.get("po_deadline"),
+    }
+
+
+def _sewing_flow_name(item: dict[str, Any]) -> str | None:
+    direct = item.get("current_sewing_flow")
+    if isinstance(direct, dict):
+        return str(direct.get("name") or direct.get("code") or "").strip() or None
+    if direct:
+        return str(direct).strip()
+    for stage_item in item.get("stages") or []:
+        if not isinstance(stage_item, dict):
+            continue
+        if stage_item.get("operation") != "sewing":
+            continue
+        name = stage_item.get("sewing_flow_name") or stage_item.get("sewing_flow_code")
+        if name:
+            return str(name).strip()
+    factories = item.get("sewing_factories") or []
+    if factories and isinstance(factories[0], dict):
+        return str(factories[0].get("name") or factories[0].get("code") or "").strip() or None
+    return None
+
+
+def _stage(item: dict[str, Any], operation: str) -> dict[str, Any] | None:
+    for stage_item in item.get("stages") or []:
+        if isinstance(stage_item, dict) and stage_item.get("operation") == operation:
+            return stage_item
+    return None
+
+
+def _num(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _is_late_order(item: dict[str, Any], now: datetime) -> bool:

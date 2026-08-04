@@ -67,6 +67,132 @@ async function callErpTool(tool, args = {}, preferredMethod = "POST") {
   return jsonText({ ok: true, tool, data });
 }
 
+async function fetchErpPath(pathname, args = {}) {
+  if (!config.token) return notConfigured(pathname);
+  const payload = normalizeArgs(args);
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(payload)) {
+    if (typeof value !== "object") query.set(key, String(value));
+  }
+  const response = await fetch(`${config.baseUrl}${pathname}${query.size ? `?${query}` : ""}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `${config.authMode === "bearer" ? "Bearer" : config.authMode} ${config.token}`,
+    },
+  });
+  const text = await response.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { text }; }
+  if (!response.ok) return jsonText({ ok: false, status: "erp_error", tool: pathname, httpStatus: response.status, message: data.error || data.message || text.slice(0, 600) || "ERP request failed" });
+  return jsonText({ ok: true, data, source: pathname });
+}
+
+function numberValue(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findStage(item, operation) {
+  return (Array.isArray(item?.stages) ? item.stages : []).find((stage) => stage?.operation === operation);
+}
+
+function orderBrief(item) {
+  return {
+    production_order_id: item.production_order_id,
+    production_no: item.production_no,
+    order_no: item.order_no || item.sales_order_no,
+    model_code: item.model_code,
+    model_name: item.model_name,
+    planned_quantity: item.planned_quantity,
+    actual_quantity: item.actual_quantity,
+    deadline: item.po_deadline,
+  };
+}
+
+function sewingFlowName(item) {
+  if (item?.current_sewing_flow && typeof item.current_sewing_flow === "object") {
+    return item.current_sewing_flow.name || item.current_sewing_flow.code || null;
+  }
+  if (item?.current_sewing_flow) return String(item.current_sewing_flow);
+  const sewing = findStage(item, "sewing");
+  if (sewing?.sewing_flow_name || sewing?.sewing_flow_code) return sewing.sewing_flow_name || sewing.sewing_flow_code;
+  const factories = Array.isArray(item?.sewing_factories) ? item.sewing_factories : [];
+  return factories[0]?.name || factories[0]?.code || null;
+}
+
+function businessControlSnapshot(rows, limit = 25) {
+  const stageCounts = new Map();
+  const flows = new Map();
+  const blocked = [];
+  const overdue = [];
+  const warehouse = [];
+
+  for (const item of Array.isArray(rows) ? rows : []) {
+    if (!item || typeof item !== "object") continue;
+    const stage = String(item.current_stage || "unknown");
+    const stageBucket = stageCounts.get(stage) || { stage, orders: 0, planned_quantity: 0, actual_quantity: 0 };
+    stageBucket.orders += 1;
+    stageBucket.planned_quantity += numberValue(item.planned_quantity);
+    stageBucket.actual_quantity += numberValue(item.actual_quantity);
+    stageCounts.set(stage, stageBucket);
+
+    const flow = sewingFlowName(item);
+    if (flow) {
+      const flowBucket = flows.get(flow) || { flow, orders: 0, planned_quantity: 0, in_progress: 0, waiting: 0, blocked: 0 };
+      flowBucket.orders += 1;
+      flowBucket.planned_quantity += numberValue(item.planned_quantity);
+      const status = String(item.current_stage_status || "").toLowerCase();
+      if (["in_progress", "in progress", "active", "running"].includes(status)) flowBucket.in_progress += 1;
+      else flowBucket.waiting += 1;
+      if (item.is_blocked) flowBucket.blocked += 1;
+      flows.set(flow, flowBucket);
+    }
+
+    const brief = orderBrief(item);
+    if (item.is_blocked) blocked.push({ ...brief, stage, blocked_by: item.blocked_by });
+    if (item.po_overdue || (Array.isArray(item.stages) && item.stages.some((stageItem) => stageItem?.overdue))) {
+      overdue.push({ ...brief, stage, deadline: item.po_deadline });
+    }
+
+    const storage = findStage(item, "storage_transfer");
+    if (storage) {
+      warehouse.push({
+        ...brief,
+        warehouse_eta: storage.deadline,
+        warehouse_status: storage.status,
+        warehouse_overdue: Boolean(storage.overdue),
+      });
+    }
+  }
+
+  const busiest = [...flows.values()].sort((a, b) => (b.planned_quantity - a.planned_quantity) || (b.orders - a.orders));
+  const warehouseEta = warehouse.sort((a, b) => String(a.warehouse_eta || "").localeCompare(String(b.warehouse_eta || ""))).slice(0, limit);
+  return {
+    total_orders: Array.isArray(rows) ? rows.length : 0,
+    stage_summary: [...stageCounts.values()].sort((a, b) => b.planned_quantity - a.planned_quantity),
+    busiest_sewing_flows: busiest.slice(0, limit),
+    blocked_orders: blocked.slice(0, limit),
+    overdue_orders: overdue.slice(0, limit),
+    warehouse_eta: warehouseEta,
+    answer_hints: {
+      busiest_sewing_flow: busiest[0] || null,
+      next_warehouse_order: warehouseEta[0] || null,
+    },
+  };
+}
+
+async function businessControlTool(args = {}) {
+  const response = await fetchErpPath("/api/process-tracking", args);
+  const parsed = JSON.parse(response.content[0].text);
+  if (!parsed.ok || !Array.isArray(parsed.data)) return response;
+  return jsonText({
+    ok: true,
+    data: businessControlSnapshot(parsed.data, Math.min(100, Math.max(1, Number(args?.limit) || 25))),
+    source: "/api/process-tracking",
+  });
+}
+
 function requireConfirmation(tool, args) {
   if (!config.requireConfirmation || args?.confirmed === true) return null;
   return jsonText({
@@ -98,6 +224,11 @@ server.registerTool("erp_active_production", {
   description: "Active production dashboard status: current orders, stages, blockers and workload.",
   inputSchema: {},
 }, async () => callErpTool("erp_active_production", {}, "GET"));
+
+server.registerTool("erp_business_control", {
+  description: "Business-control snapshot from process tracking: busiest sewing flows, stage workload, blocked/late orders and warehouse ETA.",
+  inputSchema: { limit: z.number().int().min(1).max(100).optional() },
+}, async (args) => businessControlTool(args));
 
 server.registerTool("erp_late_orders", {
   description: "Late active orders derived from production dashboard data.",
