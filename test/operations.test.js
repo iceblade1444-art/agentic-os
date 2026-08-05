@@ -191,8 +191,10 @@ test("a backup still completes where the Docker CLI is absent", { skip: !hasPyth
   const stateDir = path.join(dir, "state");
   const emptyPath = path.join(dir, "no-tools");
   fs.mkdirSync(emptyPath, { recursive: true });
-  // An empty PATH keeps python itself resolvable by absolute call while making
-  // every helper binary, docker included, impossible to find.
+  // Emptying PATH is what hides docker, so the interpreter has to be launched by
+  // absolute path — otherwise the child cannot start and proves nothing.
+  const python = spawnSync("sh", ["-c", "command -v python3"], { encoding: "utf8" }).stdout.trim();
+  assert.ok(python && path.isAbsolute(python), "python3 must be resolvable before PATH is emptied");
   const env = {
     ...process.env,
     OPS_STATE_DIR: stateDir,
@@ -200,7 +202,7 @@ test("a backup still completes where the Docker CLI is absent", { skip: !hasPyth
     OPS_HERMES_HOME: path.join(dir, "hermes"),
     PATH: emptyPath,
   };
-  const backup = spawnSync("python3", ["scripts/agentic-os-operations.py", "backup", "--root", dir], {
+  const backup = spawnSync(python, ["scripts/agentic-os-operations.py", "backup", "--root", dir], {
     cwd: repoRoot, env, encoding: "utf8",
   });
   assert.equal(backup.status, 0, backup.stderr || backup.stdout);
