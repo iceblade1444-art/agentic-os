@@ -38,21 +38,21 @@ function splitArgs(value) {
   return args;
 }
 
-function erpEnv() {
+function erpEnv(erp = config.erp) {
   return {
-    ERP_API_BASE_URL: config.erp.baseUrl,
-    ERP_MCP_AUTH_MODE: config.erp.authMode,
-    ERP_MCP_BEARER_TOKEN: config.erp.bearerToken,
-    ERP_MCP_USERNAME: config.erp.username,
-    ERP_MCP_PASSWORD: config.erp.password,
-    ERP_MCP_REQUIRE_CONFIRMATION: String(config.erp.requireConfirmation),
-    ERP_MCP_MAX_BULK_RECIPIENTS: String(config.erp.maxBulkRecipients),
+    ERP_API_BASE_URL: erp.baseUrl,
+    ERP_MCP_AUTH_MODE: erp.authMode,
+    ERP_MCP_BEARER_TOKEN: erp.bearerToken,
+    ERP_MCP_USERNAME: erp.username,
+    ERP_MCP_PASSWORD: erp.password,
+    ERP_MCP_REQUIRE_CONFIRMATION: String(erp.requireConfirmation),
+    ERP_MCP_MAX_BULK_RECIPIENTS: String(erp.maxBulkRecipients),
   };
 }
 
 // Resolve the actual spawn command for a stored server record. Built-in kinds are
 // resolved at runtime so stored records never carry machine-specific absolute paths.
-export function resolveSpawn(server) {
+export function resolveSpawn(server, erp = config.erp) {
   switch (server.kind) {
     case "sample":
       return { command: process.execPath, args: [SAMPLE], env: {} };
@@ -67,20 +67,20 @@ export function resolveSpawn(server) {
     case "desktop":
       return { command: process.execPath, args: [DESKTOP], env: { NOVA_VOICE_HOME: process.env.NOVA_VOICE_HOME || "C:\\NOVA VOICE", DESKTOP_BRIDGE_PYTHON: process.env.DESKTOP_BRIDGE_PYTHON || "python" } };
     case "erp":
-      if (config.erp.pythonModule) {
+      if (erp.pythonModule) {
         return {
-          command: config.erp.command || process.env.PYTHON || "python3",
-          args: ["-m", config.erp.pythonModule, ...splitArgs(config.erp.args)],
-          env: erpEnv(),
+          command: erp.command || process.env.PYTHON || "python3",
+          args: ["-m", erp.pythonModule, ...splitArgs(erp.args)],
+          env: erpEnv(erp),
         };
       }
-      if (config.erp.command) {
-        return { command: config.erp.command, args: splitArgs(config.erp.args), env: erpEnv() };
+      if (erp.command) {
+        return { command: erp.command, args: splitArgs(erp.args), env: erpEnv(erp) };
       }
       return {
         command: process.execPath,
         args: [ERP],
-        env: erpEnv(),
+        env: erpEnv(erp),
       };
     default: // custom
       return { command: server.command, args: server.args || [], env: server.env || {} };
