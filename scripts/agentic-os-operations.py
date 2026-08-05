@@ -110,7 +110,14 @@ class Operations:
                 os.unlink(temp_name)
 
     def run(self, *args: str, timeout: int = 12) -> subprocess.CompletedProcess:
-        return subprocess.run(args, cwd=self.root, text=True, capture_output=True, timeout=timeout, check=False)
+        try:
+            return subprocess.run(args, cwd=self.root, text=True, capture_output=True, timeout=timeout, check=False)
+        except FileNotFoundError as error:
+            # A missing helper binary is an absent capability, not a crash: the
+            # backup runs inside the app container too, where docker does not
+            # exist, and losing the whole archive over one optional probe would
+            # be far worse than skipping it.
+            return subprocess.CompletedProcess(args, 127, "", f"{args[0]}: not found ({error})")
 
     def backup(self) -> dict:
         with self.locked():
@@ -185,15 +192,19 @@ class Operations:
         user = os.environ.get("POSTGRES_USER", "agentic_os")
         database = os.environ.get("POSTGRES_DB", "agentic_os")
         target = destination / "postgres.dump"
-        with target.open("wb") as output:
-            result = subprocess.run(
-                ["docker", "exec", "agentic-os-postgres", "pg_dump", "-U", user, "-d", database, "--format=custom"],
-                cwd=self.root,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=120,
-                check=False,
-            )
+        try:
+            with target.open("wb") as output:
+                result = subprocess.run(
+                    ["docker", "exec", "agentic-os-postgres", "pg_dump", "-U", user, "-d", database, "--format=custom"],
+                    cwd=self.root,
+                    stdout=output,
+                    stderr=subprocess.PIPE,
+                    timeout=120,
+                    check=False,
+                )
+        except FileNotFoundError:
+            target.unlink(missing_ok=True)
+            return None
         if result.returncode != 0:
             target.unlink(missing_ok=True)
             raise RuntimeError(f"PostgreSQL backup failed: {result.stderr.decode('utf-8', 'replace')[:300]}")
