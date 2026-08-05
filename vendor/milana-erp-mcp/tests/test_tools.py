@@ -165,6 +165,60 @@ async def test_erp_finished_goods_stock_reads_ready_product_warehouse() -> None:
     def handler(request: httpx.Request, _seen: list[httpx.Request]) -> httpx.Response:
         if request.url.path == "/api/auth/me":
             return _json_response(200, ME)
+        assert request.url.path == "/api/packages/storage-map"
+        return _json_response(
+            200,
+            {
+                "summary": {"packages_on_map": 9, "packages_in_storage": 9, "cells_occupied": 1},
+                "placements": [
+                    {
+                        "package_no": "PKG-1",
+                        "model_code": "РJ1118-2922",
+                        "model_name": "Фут-штаны",
+                        "order_no": "SO-2026-000017",
+                        "color": "white",
+                        "total_quantity": 300,
+                        "storage_cell": "N-01",
+                        "storage_shelf": "S1",
+                        "status": "received_in_storage",
+                    },
+                    {
+                        "package_no": "PKG-2",
+                        "model_code": "РJ1118-2922",
+                        "model_name": "Фут-штаны",
+                        "order_no": "SO-2026-000017",
+                        "color": "white",
+                        "total_quantity": 235,
+                        "storage_cell": "N-01",
+                        "storage_shelf": "S1",
+                        "status": "received_in_storage",
+                    },
+                ],
+            },
+        )
+
+    async def callback(client: ERPApiClient, _seen: list[httpx.Request], settings: Settings) -> dict[str, Any]:
+        return await erp_finished_goods_stock_tool(settings=settings, client=client)
+
+    result = await _with_client(handler, callback)
+    assert result["ok"] is True
+    assert result["source"] == "/api/packages/storage-map"
+    assert result["source_page"] == "/warehouse-stock"
+    assert result["map_page"] == "/warehouse-map"
+    assert result["data"]["total_pieces"] == 535
+    assert result["data"]["total_packages"] == 2
+    assert result["data"]["top_models"][0]["model_code"] == "РJ1118-2922"
+    assert result["data"]["top_models"][0]["model_name"] == "Фут-штаны"
+    assert result["data"]["top_models"][0]["sample_rows"][0]["cell"] == "N-01"
+
+
+@pytest.mark.asyncio
+async def test_erp_finished_goods_stock_falls_back_to_ready_product_rows() -> None:
+    def handler(request: httpx.Request, _seen: list[httpx.Request]) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json_response(200, ME)
+        if request.url.path == "/api/packages/storage-map":
+            return _json_response(200, {"placements": []})
         assert request.url.path == "/api/finished-goods"
         return _json_response(
             200,
@@ -184,21 +238,6 @@ async def test_erp_finished_goods_stock_reads_ready_product_warehouse() -> None:
                     "shelf": "S1",
                     "status": "available",
                 },
-                {
-                    "model_code": "РJ1118-2922",
-                    "model_name": "Фут-штаны",
-                    "order_no": "SO-2026-000017",
-                    "color": "white",
-                    "size": "52",
-                    "quantity": 235,
-                    "available_quantity": 235,
-                    "reserved_quantity": 0,
-                    "package_id": "PKG-2",
-                    "section": "N",
-                    "cell": "N-01",
-                    "shelf": "S1",
-                    "status": "available",
-                },
             ],
         )
 
@@ -207,9 +246,9 @@ async def test_erp_finished_goods_stock_reads_ready_product_warehouse() -> None:
 
     result = await _with_client(handler, callback)
     assert result["ok"] is True
-    assert result["source"] == "/api/finished-goods"
-    assert result["data"]["total_pieces"] == 535
-    assert result["data"]["total_packages"] == 2
+    assert result["source"] == "/api/packages/storage-map"
+    assert result["data"]["total_pieces"] == 300
+    assert result["data"]["total_packages"] == 1
     assert result["data"]["top_models"][0]["model_code"] == "РJ1118-2922"
     assert result["data"]["top_models"][0]["model_name"] == "Фут-штаны"
     assert result["data"]["top_models"][0]["sample_rows"][0]["cell"] == "N-01"

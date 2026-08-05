@@ -74,7 +74,7 @@ export const MILA_TOOLS = [
   },
   {
     name: "get_erp_business_context",
-    description: "Read live Milana ERP business context for questions about production, cutting, sewing flow load, warehouse ETA, finished-goods stock, material inventory, finance and operational risks.",
+    description: "Read live Milana ERP business context for questions about production, cutting, sewing flow load, warehouse ETA, finished-goods stock from /warehouse-stock and /warehouse-map, material inventory, finance and operational risks.",
     parameters: { type: "object", properties: {
       limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum rows for ERP control sections" },
     } },

@@ -283,8 +283,29 @@ function finishedGoodsRow(item) {
     section: item?.section,
     cell: item?.cell,
     shelf: item?.shelf,
+    location: item?.location || (item?.cell && item?.shelf ? `${item.cell}/${item.shelf}` : null),
     status: item?.status,
   };
+}
+
+function storageMapFinishedGoodsRows(data) {
+  const placements = Array.isArray(data?.placements) ? data.placements : [];
+  return placements.filter((item) => item && typeof item === "object").map((item) => {
+    const cell = item.storage_cell || item.cell || "";
+    const shelf = item.storage_shelf || item.shelf || "";
+    const zone = cell ? String(cell).split("-")[0] : item.zone;
+    return {
+      ...item,
+      quantity: item.total_quantity ?? item.quantity,
+      available_quantity: item.available_quantity ?? item.total_quantity ?? item.quantity,
+      reserved_quantity: item.reserved_quantity ?? item.reserved_qty ?? 0,
+      package_id: item.package_no || item.package_id,
+      section: zone,
+      cell,
+      shelf,
+      location: item.location || (cell && shelf ? `${cell}/${shelf}` : cell || null),
+    };
+  });
 }
 
 function cleanNumber(value) {
@@ -363,8 +384,10 @@ function finishedGoodsSnapshot(rows, limit = 50, query = "") {
   })).sort((a, b) => b.total_pieces - a.total_pieces).slice(0, limit);
 
   return {
-    source: "/api/finished-goods",
-    meaning: "Finished goods / ready product warehouse stock. Do not confuse with fabric/material inventory or production output.",
+    source: "/api/packages/storage-map",
+    source_page: "/warehouse-stock",
+    map_page: "/warehouse-map",
+    meaning: "Finished goods / ready product warehouse stock from the ERP warehouse-stock page and warehouse-map placements. Do not confuse with fabric/material inventory or production output.",
     query: query || null,
     total_rows: filtered.length,
     total_models: models.size,
@@ -379,6 +402,8 @@ function finishedGoodsSnapshot(rows, limit = 50, query = "") {
       ready_goods_total_pieces: cleanNumber(totalPieces),
       ready_goods_packages: packages.size,
       top_ready_goods_model: topModels[0] || null,
+      ready_goods_source_of_truth: "/warehouse-stock + /warehouse-map",
+      do_not_use_for_ready_goods: ["production_output", "cutting_output", "sewing_output", "packaging_output", "material_inventory"],
     },
   };
 }
@@ -395,13 +420,21 @@ async function businessControlTool(args = {}) {
 }
 
 async function finishedGoodsTool(args = {}) {
-  const response = await fetchErpPath("/api/finished-goods", {});
+  let response = await fetchErpPath("/api/packages/storage-map", {});
   const parsed = JSON.parse(response.content[0].text);
-  if (!parsed.ok || !Array.isArray(parsed.data)) return response;
+  let rows = parsed.ok ? storageMapFinishedGoodsRows(parsed.data) : [];
+  if (!rows.length) {
+    response = await fetchErpPath("/api/finished-goods", {});
+    const fallback = JSON.parse(response.content[0].text);
+    if (!fallback.ok || !Array.isArray(fallback.data)) return response;
+    rows = fallback.data;
+  }
   return jsonText({
     ok: true,
-    data: finishedGoodsSnapshot(parsed.data, Math.min(200, Math.max(1, Number(args?.limit) || 50)), args?.query || ""),
-    source: "/api/finished-goods",
+    data: finishedGoodsSnapshot(rows, Math.min(200, Math.max(1, Number(args?.limit) || 50)), args?.query || ""),
+    source: "/api/packages/storage-map",
+    source_page: "/warehouse-stock",
+    map_page: "/warehouse-map",
   });
 }
 
@@ -453,7 +486,7 @@ server.registerTool("erp_inventory_status", {
 }, async () => callErpTool("erp_inventory_status", {}, "GET"));
 
 server.registerTool("erp_finished_goods_stock", {
-  description: "Finished-goods warehouse stock from /api/finished-goods: ready product pieces, packages, models, colors, sizes and availability.",
+  description: "Finished-goods warehouse stock from ERP /warehouse-stock and /warehouse-map (/api/packages/storage-map): ready product pieces, packages, models, colors, cells, shelves and availability. This is the only source for ready-product warehouse questions.",
   inputSchema: {
     query: z.string().optional(),
     limit: z.number().int().min(1).max(200).optional(),

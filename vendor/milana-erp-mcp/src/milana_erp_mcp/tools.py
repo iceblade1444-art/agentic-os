@@ -220,12 +220,19 @@ async def erp_finished_goods_stock_tool(
 
     async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
         parsed = ActiveProductionArgs(limit=limit)
-        rows = await api.get("/api/finished-goods")
+        map_data = await api.get("/api/packages/storage-map")
+        rows = _storage_map_finished_goods_rows(map_data)
+        if not rows:
+            rows = await api.get("/api/finished-goods")
         if not isinstance(rows, list):
-            return ToolExecution({"ok": True, "data": rows, "source": "/api/finished-goods"})
+            return ToolExecution({"ok": True, "data": rows, "source": "/api/packages/storage-map", "source_page": "/warehouse-stock", "map_page": "/warehouse-map"})
         filtered = _filter_finished_goods(rows, query)
         snapshot = _finished_goods_snapshot(filtered, parsed.limit)
-        return ToolExecution({"ok": True, "data": snapshot, "source": "/api/finished-goods"})
+        snapshot["source"] = "/api/packages/storage-map"
+        snapshot["source_page"] = "/warehouse-stock"
+        snapshot["map_page"] = "/warehouse-map"
+        snapshot["meaning"] = "Finished goods / ready product warehouse stock from the ERP warehouse-stock page and warehouse-map placements. Do not confuse with production output."
+        return ToolExecution({"ok": True, "data": snapshot, "source": "/api/packages/storage-map", "source_page": "/warehouse-stock", "map_page": "/warehouse-map"})
 
     return await _run_tool("erp_finished_goods_stock", args, handler, settings=settings, client=client)
 
@@ -736,8 +743,10 @@ def _finished_goods_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[str
     model_items.sort(key=lambda item: item["total_pieces"], reverse=True)
     top_models = model_items[:limit]
     return {
-        "source": "/api/finished-goods",
-        "meaning": "Finished goods / ready product warehouse stock. Do not confuse with fabric/material inventory or production output.",
+        "source": "/api/packages/storage-map",
+        "source_page": "/warehouse-stock",
+        "map_page": "/warehouse-map",
+        "meaning": "Finished goods / ready product warehouse stock from the ERP warehouse-stock page and warehouse-map placements. Do not confuse with fabric/material inventory or production output.",
         "total_rows": len(rows),
         "total_models": len(model_items),
         "total_packages": len(packages),
@@ -751,8 +760,43 @@ def _finished_goods_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[str
             "ready_goods_total_pieces": _clean_number(total_pieces),
             "ready_goods_packages": len(packages),
             "top_ready_goods_model": top_models[0] if top_models else None,
+            "ready_goods_source_of_truth": "/warehouse-stock + /warehouse-map",
+            "do_not_use_for_ready_goods": ["production_output", "cutting_output", "sewing_output", "packaging_output", "material_inventory"],
         },
     }
+
+
+def _storage_map_finished_goods_rows(data: Any) -> list[dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    placements = data.get("placements")
+    if not isinstance(placements, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in placements:
+        if not isinstance(item, dict):
+            continue
+        cell = item.get("storage_cell") or item.get("cell")
+        shelf = item.get("storage_shelf") or item.get("shelf")
+        zone = str(cell).split("-", 1)[0] if cell else item.get("zone")
+        rows.append(
+            {
+                **item,
+                "quantity": item.get("total_quantity") if item.get("total_quantity") is not None else item.get("quantity"),
+                "available_quantity": item.get("available_quantity")
+                if item.get("available_quantity") is not None
+                else item.get("total_quantity")
+                if item.get("total_quantity") is not None
+                else item.get("quantity"),
+                "reserved_quantity": item.get("reserved_quantity") or item.get("reserved_qty") or 0,
+                "package_id": item.get("package_no") or item.get("package_id"),
+                "section": zone,
+                "cell": cell,
+                "shelf": shelf,
+                "location": item.get("location") or (f"{cell}/{shelf}" if cell and shelf else cell),
+            }
+        )
+    return rows
 
 
 def _finished_goods_row(item: dict[str, Any]) -> dict[str, Any]:
@@ -769,6 +813,7 @@ def _finished_goods_row(item: dict[str, Any]) -> dict[str, Any]:
         "section": item.get("section"),
         "cell": item.get("cell"),
         "shelf": item.get("shelf"),
+        "location": item.get("location") or (f"{item.get('cell')}/{item.get('shelf')}" if item.get("cell") and item.get("shelf") else None),
         "status": item.get("status"),
     }
 

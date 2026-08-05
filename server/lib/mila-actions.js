@@ -208,7 +208,7 @@ export function createMilaActions(options = {}) {
         callTool("erp_finance_summary").catch((error) => ({ ok: false, error: { message: error.message } })),
       ]);
       return {
-        source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing. For finished-goods / ready-product warehouse questions, use finished_goods_stock only; do not use production output or material inventory.",
+        source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing. For finished-goods / ready-product warehouse questions, use finished_goods_stock only. The exact ready-stock count is finished_goods_stock.total_pieces or finished_goods_stock.answer_hints.ready_goods_total_pieces from /warehouse-stock and /warehouse-map. Never use production.production_output, cutting_output, sewing_output, packaging_output, GM summary, material inventory or old conversation memory as finished-goods warehouse stock.",
         erp_user: me?.data || me,
         production: production?.data || production,
         business_control: control?.data || control,

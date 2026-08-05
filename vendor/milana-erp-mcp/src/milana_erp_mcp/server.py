@@ -75,7 +75,7 @@ async def erp_inventory_status() -> dict[str, Any]:
 
 @mcp.tool(structured_output=True)
 async def erp_finished_goods_stock(query: str | None = None, limit: int = 50) -> dict[str, Any]:
-    """Return ready product warehouse stock from /api/finished-goods, grouped by model, color, order, size and packages."""
+    """Return ready product warehouse stock from /warehouse-stock and /warehouse-map, grouped by model, location and packages."""
     return await erp_finished_goods_stock_tool(query=query, limit=limit)
 
 

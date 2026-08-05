@@ -207,10 +207,11 @@ ${compactJson(finance)}
 
 Updated: ${now}
 
-Live source: /api/finished-goods
+Live source of truth: /warehouse-stock + /warehouse-map
+API source: /api/packages/storage-map
 
 Use this note and erp_finished_goods_stock for questions about "склад готовых изделий", "готовая продукция", "ready product", "finished goods" or "FGS".
-Do not answer finished-goods questions from production output or material inventory.
+Do not answer finished-goods questions from production output, GM summary or material inventory. Production output is what the factory produced; finished-goods stock is what is physically accepted into ready-product warehouse cells.
 
 ## Current ready product stock
 
@@ -221,8 +222,8 @@ Do not answer finished-goods questions from production output or material invent
 - Models: ${fmt(finishedGoods?.total_models)}
 - Sections: ${(finishedGoods?.sections || []).join(", ") || "-"}
 
-${table(["Model", "Name", "Color", "Order", "Pieces", "Packages", "Sizes", "Status"], readyGoodsModels.slice(0, 50).map((row) =>
-  `| ${fmt(row.model_code)} | ${fmt(row.model_name)} | ${fmt(row.color)} | ${fmt(row.order_no)} | ${fmt(row.total_pieces)} | ${fmt(row.packages)} | ${fmt(Object.entries(row.sizes || {}).map(([size, qty]) => `${size}: ${qty}`).join(", "))} | ${fmt(Object.entries(row.statuses || {}).map(([status, qty]) => `${status}: ${qty}`).join(", "))} |`
+${table(["Model", "Name", "Color", "Order", "Pieces", "Packages", "Location", "Sizes", "Status"], readyGoodsModels.slice(0, 50).map((row) =>
+  `| ${fmt(row.model_code)} | ${fmt(row.model_name)} | ${fmt(row.color)} | ${fmt(row.order_no)} | ${fmt(row.total_pieces)} | ${fmt(row.packages)} | ${fmt((row.sample_rows || []).map((sample) => sample.location || [sample.cell, sample.shelf].filter(Boolean).join("/")).filter(Boolean).join(", "))} | ${fmt(Object.entries(row.sizes || {}).map(([size, qty]) => `${size}: ${qty}`).join(", "))} | ${fmt(Object.entries(row.statuses || {}).map(([status, qty]) => `${status}: ${qty}`).join(", "))} |`
 ))}
 
 ## Raw finished-goods snapshot

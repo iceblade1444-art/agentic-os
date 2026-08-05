@@ -274,7 +274,7 @@ function quickActions() {
     ["summary", t("erp.actionSummary"), "Мила, сделай короткую бизнес-сводку ERP: продажи, производство, склад, риски и следующий шаг."],
     ["flow", t("erp.actionFlow"), "Мила, какой швейный поток сейчас самый загруженный? Назови поток, количество заказов, плановое количество и риск."],
     ["warehouse", t("erp.actionWarehouse"), "Мила, какие заказы быстрее всего дойдут до склада и где есть риск задержки?"],
-    ["ready", t("erp.actionReadyGoods"), "Мила, что сейчас есть на складе готовых изделий? Ответь только по ERP finished_goods_stock: модель, название, заказ, цвет, упаковки, штуки и место хранения."],
+    ["ready", t("erp.actionReadyGoods"), "Мила, что сейчас есть на складе готовых изделий? Ответь только по ERP finished_goods_stock из /warehouse-stock и /warehouse-map: модель, название, заказ, цвет, упаковки, штуки и место хранения. Не используй выпуск производства."],
     ["inventory", t("erp.actionInventory"), "Мила, проанализируй склад ERP: что в риске, какие позиции проверить, что нужно докупить или зарезервировать."],
     ["late", t("erp.actionLate"), "Мила, проверь просроченные ERP-заказы и предложи план действий для Hermes Kanban."],
   ];
@@ -348,7 +348,7 @@ function erpHTML() {
       ${metric(t("erp.finishedGoodsPackages"), readyPackages, t("erp.finishedGoods"), readyPackages ? "ok" : "")}
       ${metric(t("erp.finishedGoodsModels"), readyModelsCount, t("erp.finishedGoods"), readyModelsCount ? "ok" : "")}
       ${metric(t("erp.materialInventory"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
-      ${metric(t("erp.source"), finishedGoods.source || "-", "/api/finished-goods", finishedGoods.source ? "ok" : "")}
+      ${metric(t("erp.source"), finishedGoods.source_page || finishedGoods.source || "-", "/warehouse-stock + /warehouse-map", finishedGoods.source ? "ok" : "")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.trackedOrders"), totalTrackedOrders, t("erp.processTracking"), totalTrackedOrders ? "ok" : "")}
