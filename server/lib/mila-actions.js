@@ -92,6 +92,7 @@ export function createMilaActions(options = {}) {
   const library = options.knowledge || knowledge;
   const claude = options.claude || claudeCode;
   const hermesStatus = options.hermesStatus || hermesDashboardStatus;
+  const mcp = options.mcpManager || mcpManager;
   const now = options.now || Date.now;
   const makeToken = options.makeToken || (() => crypto.randomBytes(24).toString("base64url"));
   const pending = new Map();
@@ -169,11 +170,11 @@ export function createMilaActions(options = {}) {
     if (name === "call_mcp_tool") {
       const server = db.mcp.list().find((item) => item.id === args.server || item.name === args.server);
       if (!server) throw Object.assign(new Error(`MCP server not found: ${args.server}`), { status: 404 });
-      if (!mcpManager.isLive(server.id)) {
-        const connected = await mcpManager.connect(server);
+      if (!mcp.isLive(server.id)) {
+        const connected = await mcp.connect(server);
         db.mcp.update(server.id, { status: "active", tools: connected.tools });
       }
-      const result = await mcpManager.callTool(server.id, args.tool, args.args || {});
+      const result = await mcp.callTool(server.id, args.tool, args.args || {});
       return {
         ok: true,
         action: name,
@@ -186,26 +187,39 @@ export function createMilaActions(options = {}) {
   }
 
   async function executeRead(name, args, context) {
-    if (name === "get_erp_business_context") {
+    if (name === "get_erp_business_context" || name === "get_finished_goods_stock") {
       const server = db.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
       if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
-      if (!mcpManager.isLive(server.id)) {
-        const connected = await mcpManager.connect(server);
+      if (!mcp.isLive(server.id)) {
+        const connected = await mcp.connect(server);
         db.mcp.update(server.id, { status: "active", tools: connected.tools });
       }
       const limit = integer(args.limit, 1, 100, 25);
       const callTool = async (tool, toolArgs = {}) => {
-        const result = await mcpManager.callTool(server.id, tool, toolArgs);
+        const result = await mcp.callTool(server.id, tool, toolArgs);
         const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
         try { return JSON.parse(text); } catch { return { ok: true, text }; }
       };
-      const [me, production, control, inventory, finishedGoods, finance] = await Promise.all([
-        callTool("erp_me"),
-        callTool("erp_active_production", { limit }),
-        callTool("erp_business_control", { limit }),
-        callTool("erp_inventory_status"),
-        callTool("erp_finished_goods_stock", { limit: Math.max(limit, 50) }),
-        callTool("erp_finance_summary").catch((error) => ({ ok: false, error: { message: error.message } })),
+      const safeCallTool = async (tool, toolArgs = {}) => callTool(tool, toolArgs)
+        .catch((error) => ({ ok: false, tool, error: { message: error.message } }));
+      const finishedGoods = await safeCallTool("erp_finished_goods_stock", { limit: Math.max(limit, 50) });
+      const finishedGoodsData = finishedGoods?.data || finishedGoods;
+      if (name === "get_finished_goods_stock") {
+        return {
+          source_policy: "This is the only live source for finished-goods / ready-product warehouse questions. Answer only from this payload. If ok is false or total_pieces is absent, say the ERP finished-goods data is missing. Do not use production output or old memory.",
+          source: finishedGoods.source || "/api/packages/storage-map",
+          source_page: finishedGoods.source_page || "/warehouse-stock",
+          map_page: finishedGoods.map_page || "/warehouse-map",
+          finished_goods_stock: finishedGoodsData,
+          answer_hints: finishedGoodsData?.answer_hints || null,
+        };
+      }
+      const [me, production, control, inventory, finance] = await Promise.all([
+        safeCallTool("erp_me"),
+        safeCallTool("erp_active_production", { limit }),
+        safeCallTool("erp_business_control", { limit }),
+        safeCallTool("erp_inventory_status"),
+        safeCallTool("erp_finance_summary"),
       ]);
       return {
         source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing. For finished-goods / ready-product warehouse questions, use finished_goods_stock only. The exact ready-stock count is finished_goods_stock.total_pieces or finished_goods_stock.answer_hints.ready_goods_total_pieces from /warehouse-stock and /warehouse-map. Never use production.production_output, cutting_output, sewing_output, packaging_output, GM summary, material inventory or old conversation memory as finished-goods warehouse stock.",
@@ -214,11 +228,11 @@ export function createMilaActions(options = {}) {
         business_control: control?.data || control,
         cutting_department: control?.data?.cutting_department || null,
         material_inventory: inventory?.data || inventory,
-        finished_goods_stock: finishedGoods?.data || finishedGoods,
+        finished_goods_stock: finishedGoodsData,
         finance: finance?.data || finance,
         answer_hints: {
           ...(control?.data?.answer_hints || {}),
-          finished_goods_stock: finishedGoods?.data?.answer_hints || null,
+          finished_goods_stock: finishedGoodsData?.answer_hints || null,
         },
       };
     }
@@ -230,10 +244,10 @@ export function createMilaActions(options = {}) {
           name: server.name,
           kind: server.kind,
           desc: server.desc || "",
-          status: mcpManager.isLive(server.id) ? "active" : (server.status === "error" ? "error" : "stopped"),
-          tools: mcpManager.isLive(server.id) ? mcpManager.getTools(server.id).map((tool) => publicMcpTool(server, tool)) : [],
+          status: mcp.isLive(server.id) ? "active" : (server.status === "error" ? "error" : "stopped"),
+          tools: mcp.isLive(server.id) ? mcp.getTools(server.id).map((tool) => publicMcpTool(server, tool)) : [],
         })),
-        tools: servers.flatMap((server) => (mcpManager.isLive(server.id) ? mcpManager.getTools(server.id) : [])
+        tools: servers.flatMap((server) => (mcp.isLive(server.id) ? mcp.getTools(server.id) : [])
           .map((tool) => publicMcpTool(server, tool))),
       };
     }

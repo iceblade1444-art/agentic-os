@@ -80,6 +80,13 @@ export const MILA_TOOLS = [
     } },
   },
   {
+    name: "get_finished_goods_stock",
+    description: "Read the exact live finished-goods / ready-product warehouse stock from /warehouse-stock and /warehouse-map. Use this first for questions like 'сколько готовых изделий на складе', 'готовая продукция', 'ready product stock', 'finished goods', locations, packages, model and warehouse map cells.",
+    parameters: { type: "object", properties: {
+      limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum finished-goods rows or packages to include" },
+    } },
+  },
+  {
     name: "call_mcp_tool",
     description: "Stage or confirm a call to any connected Agentic OS MCP tool. This always uses two-step confirmation because MCP tools can read, write or control external systems.",
     parameters: { type: "object", properties: {

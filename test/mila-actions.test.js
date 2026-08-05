@@ -42,11 +42,36 @@ function fixture() {
     createSession: () => { throw new Error("should reuse Agentic OS session"); },
     message: async (id, input) => { messages.push({ id, input }); return { id, status: "ready" }; },
   };
+  const mcpCalls = [];
+  const mcpManager = {
+    isLive: () => true,
+    connect: async () => ({ tools: [] }),
+    getTools: () => [],
+    callTool: async (serverId, tool, args = {}) => {
+      mcpCalls.push({ serverId, tool, args });
+      if (tool === "erp_finished_goods_stock") return { content: [{ type: "text", text: JSON.stringify({
+        ok: true,
+        source: "/api/packages/storage-map",
+        source_page: "/warehouse-stock",
+        map_page: "/warehouse-map",
+        data: {
+          total_pieces: 535,
+          total_packages: 9,
+          total_models: 1,
+          top_models: [{ model_code: "РJ1118-2922", model_name: "Фут-штаны", total_pieces: 535, location: "N-01/S1" }],
+          answer_hints: { ready_goods_total_pieces: 535, ready_goods_source_of_truth: "/warehouse-stock + /warehouse-map" },
+        },
+      }) }] };
+      if (tool === "erp_business_control") throw new Error("temporary ERP section failure");
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true, data: { tool } }) }] };
+    },
+  };
   return {
-    requests, notes, messages,
+    requests, notes, messages, mcpCalls,
     actions: createMilaActions({
       kanbanRequest, knowledge, claude, board: "agentic-os",
       hermesStatus: async () => ({ ready: true, status: 200 }),
+      mcpManager,
       makeToken: () => `confirm_${++token}`,
     }),
   };
@@ -111,9 +136,25 @@ test("MILA writes Obsidian and starts Claude only after explicit confirmation", 
 test("MILA tool declarations expose all four Agentic OS control surfaces", async () => {
   const source = await import("../assets/js/mila-tools.js");
   const names = source.MILA_TOOLS.map((tool) => tool.name);
-  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code", "list_mcp_tools", "call_mcp_tool", "get_erp_business_context"]) {
+  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code", "list_mcp_tools", "call_mcp_tool", "get_erp_business_context", "get_finished_goods_stock"]) {
     assert.ok(names.includes(name), `${name} must be available to Gemini Live`);
   }
   const erp = source.MILA_TOOLS.find((tool) => tool.name === "get_erp_business_context");
   assert.match(erp.description, /finished-goods/i);
+  const finishedGoods = source.MILA_TOOLS.find((tool) => tool.name === "get_finished_goods_stock");
+  assert.match(finishedGoods.description, /warehouse-stock/i);
+});
+
+test("MILA reads finished goods from the dedicated ERP warehouse source", async () => {
+  const { actions, mcpCalls } = fixture();
+  const result = await actions.call("get_finished_goods_stock", { limit: 10 }, { actor: "Creator" });
+  assert.equal(result.finished_goods_stock.total_pieces, 535);
+  assert.equal(result.finished_goods_stock.total_packages, 9);
+  assert.equal(result.source_page, "/warehouse-stock");
+  assert.equal(result.map_page, "/warehouse-map");
+  assert.deepEqual(mcpCalls.map((call) => call.tool), ["erp_finished_goods_stock"]);
+
+  const context = await actions.call("get_erp_business_context", { limit: 10 }, { actor: "Creator" });
+  assert.equal(context.finished_goods_stock.total_pieces, 535);
+  assert.equal(context.business_control.ok, false);
 });
