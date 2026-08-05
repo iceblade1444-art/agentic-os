@@ -129,6 +129,32 @@ function inventoryTable(inventory) {
   );
 }
 
+function finishedGoodsTable(finishedGoods) {
+  const models = asArray(first(finishedGoods, ["top_models", "topModels"], []));
+  return table(
+    [t("erp.model"), t("erp.item"), t("erp.order"), t("erp.color"), t("erp.finishedGoodsPieces"), t("erp.finishedGoodsPackages"), t("erp.location"), t("erp.status")],
+    models.slice(0, 12).map((item) => {
+      const sections = asArray(first(item, ["sections"], [])).join(", ");
+      const sample = asArray(first(item, ["sample_rows", "sampleRows"], []))[0] || {};
+      const location = [
+        sections ? `${t("erp.section")}: ${sections}` : "",
+        first(sample, ["cell"], "") ? `${t("erp.cell")}: ${first(sample, ["cell"], "")}` : "",
+        first(sample, ["shelf"], "") ? `${t("erp.shelf")}: ${first(sample, ["shelf"], "")}` : "",
+      ].filter(Boolean).join(" / ");
+      return `<tr>
+        <td><strong>${esc(first(item, ["model_code", "modelCode"], "-"))}</strong><small>${esc(first(item, ["sizes"], "") ? objectText(first(item, ["sizes"], {})) : "")}</small></td>
+        <td><strong>${esc(first(item, ["model_name", "modelName"], "-"))}</strong></td>
+        <td>${esc(first(item, ["order_no", "orderNo"], "-"))}</td>
+        <td>${esc(first(item, ["color"], "-"))}</td>
+        <td><span class="badge success">${esc(pretty(first(item, ["total_pieces", "totalPieces"], 0)))}</span></td>
+        <td>${esc(pretty(first(item, ["packages"], 0)))}</td>
+        <td>${esc(location || "-")}</td>
+        <td>${statusBadge(Object.keys(first(item, ["statuses"], {}))[0] || first(sample, ["status"], "-"))}</td>
+      </tr>`;
+    })
+  );
+}
+
 function productionTable(production) {
   const rows = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
   const data = unwrap(production) || {};
@@ -248,10 +274,11 @@ function quickActions() {
     ["summary", t("erp.actionSummary"), "Мила, сделай короткую бизнес-сводку ERP: продажи, производство, склад, риски и следующий шаг."],
     ["flow", t("erp.actionFlow"), "Мила, какой швейный поток сейчас самый загруженный? Назови поток, количество заказов, плановое количество и риск."],
     ["warehouse", t("erp.actionWarehouse"), "Мила, какие заказы быстрее всего дойдут до склада и где есть риск задержки?"],
+    ["ready", t("erp.actionReadyGoods"), "Мила, что сейчас есть на складе готовых изделий? Ответь только по ERP finished_goods_stock: модель, название, заказ, цвет, упаковки, штуки и место хранения."],
     ["inventory", t("erp.actionInventory"), "Мила, проанализируй склад ERP: что в риске, какие позиции проверить, что нужно докупить или зарезервировать."],
     ["late", t("erp.actionLate"), "Мила, проверь просроченные ERP-заказы и предложи план действий для Hermes Kanban."],
   ];
-  return `<div class="erp-actions">${prompts.map(([key, label, prompt]) => `<button class="btn btn-secondary" data-erp-prompt="${esc(prompt)}">${icon(key === "late" ? "warn" : key === "inventory" ? "knowledge" : key === "warehouse" ? "workflow" : "mic")}${esc(label)}</button>`).join("")}</div>`;
+  return `<div class="erp-actions">${prompts.map(([key, label, prompt]) => `<button class="btn btn-secondary" data-erp-prompt="${esc(prompt)}">${icon(key === "late" ? "warn" : key === "inventory" || key === "ready" ? "knowledge" : key === "warehouse" ? "workflow" : "mic")}${esc(label)}</button>`).join("")}</div>`;
 }
 
 function erpHTML() {
@@ -266,11 +293,13 @@ function erpHTML() {
   const control = unwrap(cards.erp_business_control) || {};
   const late = unwrap(cards.erp_late_orders);
   const inventory = unwrap(cards.erp_inventory_status) || {};
+  const finishedGoods = unwrap(cards.erp_finished_goods_stock) || {};
   const finance = unwrap(cards.erp_finance_summary) || {};
   const tasks = unwrap(cards.erp_list_employee_tasks);
   const me = unwrap(cards.erp_me) || {};
 
   const invItems = asArray(inventory);
+  const readyModels = asArray(first(finishedGoods, ["top_models", "topModels"], []));
   const lateItems = asArray(late);
   const taskItems = asArray(tasks);
   const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
@@ -289,6 +318,9 @@ function erpHTML() {
   const blockedOrders = asArray(first(control, ["blocked_orders", "blockedOrders"], []));
   const busiestFlow = first(first(control, ["answer_hints", "answerHints"], {}), ["busiest_sewing_flow", "busiestSewingFlow"], null);
   const nextWarehouse = first(first(control, ["answer_hints", "answerHints"], {}), ["next_warehouse_order", "nextWarehouseOrder"], null);
+  const readyPieces = numeric(finishedGoods, ["total_pieces", "totalPieces"], 0);
+  const readyPackages = numeric(finishedGoods, ["total_packages", "totalPackages"], 0);
+  const readyModelsCount = numeric(finishedGoods, ["total_models", "totalModels"], readyModels.length);
 
   return `<div class="page erp-page">
     ${head()}
@@ -301,7 +333,7 @@ function erpHTML() {
       ${metric(t("erp.lateOrders"), lateOrders, t("erp.needsAttention"), lateOrders ? "risk" : "ok")}
     </div>
     <div class="grid cols-4 mb-4">
-      ${metric(t("erp.inventoryItems"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
+      ${metric(t("erp.finishedGoodsPieces"), readyPieces, t("erp.finishedGoods"), readyPieces ? "ok" : "")}
       ${metric(t("erp.activeOrders"), activeOrders, t("erp.production"), activeOrders ? "ok" : "")}
       ${metric(t("erp.sewing"), sewingOutput, t("erp.production"), sewingOutput ? "ok" : "")}
       ${metric(t("erp.packaging"), packagingOutput, t("erp.production"), packagingOutput ? "ok" : "")}
@@ -311,6 +343,12 @@ function erpHTML() {
       ${metric(t("erp.employeeTasks"), taskItems.length, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
       ${metric(t("erp.rework"), reworkQty, t("erp.needsAttention"), reworkQty ? "risk" : "ok")}
       ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP", "ok")}
+    </div>
+    <div class="grid cols-4 mb-4">
+      ${metric(t("erp.finishedGoodsPackages"), readyPackages, t("erp.finishedGoods"), readyPackages ? "ok" : "")}
+      ${metric(t("erp.finishedGoodsModels"), readyModelsCount, t("erp.finishedGoods"), readyModelsCount ? "ok" : "")}
+      ${metric(t("erp.materialInventory"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
+      ${metric(t("erp.source"), finishedGoods.source || "-", "/api/finished-goods", finishedGoods.source ? "ok" : "")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.trackedOrders"), totalTrackedOrders, t("erp.processTracking"), totalTrackedOrders ? "ok" : "")}
@@ -344,7 +382,8 @@ function erpHTML() {
       ${card(t("erp.flowLoad"), t("erp.flowLoadHint"), flowLoadTable(control), "agents")}
       ${card(t("erp.warehouseEta"), t("erp.warehouseEtaHint"), warehouseEtaTable(control), "workflow")}
       ${card(t("erp.stageLoad"), t("erp.stageLoadHint"), stageLoadTable(control), "activity")}
-      ${card(t("erp.inventory"), t("erp.inventoryHint"), inventoryTable(inventory), "knowledge")}
+      ${card(t("erp.finishedGoods"), t("erp.finishedGoodsHint"), finishedGoodsTable(finishedGoods), "knowledge")}
+      ${card(t("erp.materialInventory"), t("erp.materialInventoryHint"), inventoryTable(inventory), "database")}
       ${card(t("erp.employeeTasks"), t("erp.employeeTasksHint"), tasksTable(tasks), "agents")}
     </div>
     <div class="grid cols-2">

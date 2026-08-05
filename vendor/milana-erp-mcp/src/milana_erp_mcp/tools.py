@@ -209,6 +209,27 @@ async def erp_inventory_status_tool(
     return await _run_tool("erp_inventory_status", {}, handler, settings=settings, client=client)
 
 
+async def erp_finished_goods_stock_tool(
+    query: str | None = None,
+    limit: int = 50,
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    args = {"query": query, "limit": limit}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        parsed = ActiveProductionArgs(limit=limit)
+        rows = await api.get("/api/finished-goods")
+        if not isinstance(rows, list):
+            return ToolExecution({"ok": True, "data": rows, "source": "/api/finished-goods"})
+        filtered = _filter_finished_goods(rows, query)
+        snapshot = _finished_goods_snapshot(filtered, parsed.limit)
+        return ToolExecution({"ok": True, "data": snapshot, "source": "/api/finished-goods"})
+
+    return await _run_tool("erp_finished_goods_stock", args, handler, settings=settings, client=client)
+
+
 async def erp_finance_summary_tool(
     *,
     settings: Settings | None = None,
@@ -600,6 +621,160 @@ def _business_control_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[s
             "next_warehouse_order": storage_eta[0] if storage_eta else None,
         },
     }
+
+
+def _filter_finished_goods(rows: list[dict[str, Any]], query: str | None) -> list[dict[str, Any]]:
+    needle = str(query or "").strip().lower()
+    if not needle:
+        return rows
+    keys = (
+        "model_code",
+        "model_name",
+        "order_no",
+        "sales_order_no",
+        "color",
+        "status",
+        "section",
+        "cell",
+        "shelf",
+    )
+    return [
+        item
+        for item in rows
+        if isinstance(item, dict)
+        and any(needle in str(item.get(key) or "").lower() for key in keys)
+    ]
+
+
+def _finished_goods_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+    models: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    packages: set[str] = set()
+    sections: set[str] = set()
+    statuses: dict[str, int] = {}
+    total_pieces = 0.0
+    available_pieces = 0.0
+    reserved_pieces = 0.0
+
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        quantity = _num(item.get("quantity") if item.get("quantity") is not None else item.get("total_quantity"))
+        available = _num(
+            item.get("available_qty")
+            if item.get("available_qty") is not None
+            else item.get("available_quantity")
+            if item.get("available_quantity") is not None
+            else quantity
+        )
+        reserved = _num(
+            item.get("reserved_qty")
+            if item.get("reserved_qty") is not None
+            else item.get("reserved_quantity")
+        )
+        total_pieces += quantity
+        available_pieces += available
+        reserved_pieces += reserved
+
+        package_id = item.get("package_id") or item.get("package_no") or item.get("package_code")
+        if package_id is not None:
+            packages.add(str(package_id))
+        section = item.get("section")
+        if section:
+            sections.add(str(section))
+        status = str(item.get("status") or "unknown")
+        statuses[status] = statuses.get(status, 0) + int(quantity or 0)
+
+        model_code = str(item.get("model_code") or "").strip()
+        model_name = str(item.get("model_name") or "").strip()
+        color = str(item.get("color") or "").strip()
+        order_no = str(item.get("order_no") or item.get("sales_order_no") or "").strip()
+        key = (model_code, model_name, color, order_no)
+        bucket = models.setdefault(
+            key,
+            {
+                "model_code": model_code,
+                "model_name": model_name,
+                "color": color,
+                "order_no": order_no,
+                "total_pieces": 0.0,
+                "available_pieces": 0.0,
+                "reserved_pieces": 0.0,
+                "packages": set(),
+                "sections": set(),
+                "sizes": {},
+                "statuses": {},
+                "sample_rows": [],
+            },
+        )
+        bucket["total_pieces"] += quantity
+        bucket["available_pieces"] += available
+        bucket["reserved_pieces"] += reserved
+        if package_id is not None:
+            bucket["packages"].add(str(package_id))
+        if section:
+            bucket["sections"].add(str(section))
+        bucket["statuses"][status] = bucket["statuses"].get(status, 0) + int(quantity or 0)
+        size = str(item.get("size") or item.get("size_label") or "").strip() or "unknown"
+        bucket["sizes"][size] = bucket["sizes"].get(size, 0) + quantity
+        if len(bucket["sample_rows"]) < 5:
+            bucket["sample_rows"].append(_finished_goods_row(item))
+
+    model_items = []
+    for bucket in models.values():
+        model_items.append(
+            {
+                **{key: value for key, value in bucket.items() if key not in {"packages", "sections", "sample_rows"}},
+                "total_pieces": _clean_number(bucket["total_pieces"]),
+                "available_pieces": _clean_number(bucket["available_pieces"]),
+                "reserved_pieces": _clean_number(bucket["reserved_pieces"]),
+                "packages": len(bucket["packages"]),
+                "sections": sorted(bucket["sections"]),
+                "sizes": {size: _clean_number(value) for size, value in sorted(bucket["sizes"].items())},
+                "sample_rows": bucket["sample_rows"],
+            }
+        )
+    model_items.sort(key=lambda item: item["total_pieces"], reverse=True)
+    top_models = model_items[:limit]
+    return {
+        "source": "/api/finished-goods",
+        "meaning": "Finished goods / ready product warehouse stock. Do not confuse with fabric/material inventory or production output.",
+        "total_rows": len(rows),
+        "total_models": len(model_items),
+        "total_packages": len(packages),
+        "total_pieces": _clean_number(total_pieces),
+        "available_pieces": _clean_number(available_pieces),
+        "reserved_pieces": _clean_number(reserved_pieces),
+        "sections": sorted(sections),
+        "statuses": statuses,
+        "top_models": top_models,
+        "answer_hints": {
+            "ready_goods_total_pieces": _clean_number(total_pieces),
+            "ready_goods_packages": len(packages),
+            "top_ready_goods_model": top_models[0] if top_models else None,
+        },
+    }
+
+
+def _finished_goods_row(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "model_code": item.get("model_code"),
+        "model_name": item.get("model_name"),
+        "order_no": item.get("order_no") or item.get("sales_order_no"),
+        "color": item.get("color"),
+        "size": item.get("size") or item.get("size_label"),
+        "quantity": item.get("quantity") if item.get("quantity") is not None else item.get("total_quantity"),
+        "available_qty": item.get("available_qty") if item.get("available_qty") is not None else item.get("available_quantity"),
+        "reserved_qty": item.get("reserved_qty") if item.get("reserved_qty") is not None else item.get("reserved_quantity"),
+        "package_id": item.get("package_id") or item.get("package_no") or item.get("package_code"),
+        "section": item.get("section"),
+        "cell": item.get("cell"),
+        "shelf": item.get("shelf"),
+        "status": item.get("status"),
+    }
+
+
+def _clean_number(value: float) -> int | float:
+    return int(value) if float(value).is_integer() else round(value, 3)
 
 
 def _order_brief(item: dict[str, Any]) -> dict[str, Any]:

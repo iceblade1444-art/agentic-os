@@ -10,6 +10,7 @@ from .tools import (
     erp_business_control_tool,
     erp_create_task_tool,
     erp_finance_summary_tool,
+    erp_finished_goods_stock_tool,
     erp_gm_summary_tool,
     erp_inventory_status_tool,
     erp_late_orders_tool,
@@ -68,8 +69,14 @@ async def erp_late_orders(limit: int = 25) -> dict[str, Any]:
 
 @mcp.tool(structured_output=True)
 async def erp_inventory_status() -> dict[str, Any]:
-    """Return the GM-facing inventory dashboard summary."""
+    """Return the GM-facing fabric/material inventory dashboard summary."""
     return await erp_inventory_status_tool()
+
+
+@mcp.tool(structured_output=True)
+async def erp_finished_goods_stock(query: str | None = None, limit: int = 50) -> dict[str, Any]:
+    """Return ready product warehouse stock from /api/finished-goods, grouped by model, color, order, size and packages."""
+    return await erp_finished_goods_stock_tool(query=query, limit=limit)
 
 
 @mcp.tool(structured_output=True)

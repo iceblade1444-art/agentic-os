@@ -111,7 +111,9 @@ test("MILA writes Obsidian and starts Claude only after explicit confirmation", 
 test("MILA tool declarations expose all four Agentic OS control surfaces", async () => {
   const source = await import("../assets/js/mila-tools.js");
   const names = source.MILA_TOOLS.map((tool) => tool.name);
-  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code", "list_mcp_tools", "call_mcp_tool"]) {
+  for (const name of ["delegate_to_hermes", "list_kanban_tasks", "search_obsidian_notes", "ask_claude_code", "list_mcp_tools", "call_mcp_tool", "get_erp_business_context"]) {
     assert.ok(names.includes(name), `${name} must be available to Gemini Live`);
   }
+  const erp = source.MILA_TOOLS.find((tool) => tool.name === "get_erp_business_context");
+  assert.match(erp.description, /finished-goods/i);
 });

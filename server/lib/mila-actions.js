@@ -199,22 +199,27 @@ export function createMilaActions(options = {}) {
         const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
         try { return JSON.parse(text); } catch { return { ok: true, text }; }
       };
-      const [me, production, control, inventory, finance] = await Promise.all([
+      const [me, production, control, inventory, finishedGoods, finance] = await Promise.all([
         callTool("erp_me"),
         callTool("erp_active_production", { limit }),
         callTool("erp_business_control", { limit }),
         callTool("erp_inventory_status"),
+        callTool("erp_finished_goods_stock", { limit: Math.max(limit, 50) }),
         callTool("erp_finance_summary").catch((error) => ({ ok: false, error: { message: error.message } })),
       ]);
       return {
-        source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing.",
+        source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing. For finished-goods / ready-product warehouse questions, use finished_goods_stock only; do not use production output or material inventory.",
         erp_user: me?.data || me,
         production: production?.data || production,
         business_control: control?.data || control,
         cutting_department: control?.data?.cutting_department || null,
-        inventory: inventory?.data || inventory,
+        material_inventory: inventory?.data || inventory,
+        finished_goods_stock: finishedGoods?.data || finishedGoods,
         finance: finance?.data || finance,
-        answer_hints: control?.data?.answer_hints || {},
+        answer_hints: {
+          ...(control?.data?.answer_hints || {}),
+          finished_goods_stock: finishedGoods?.data?.answer_hints || null,
+        },
       };
     }
     if (name === "list_mcp_tools") {

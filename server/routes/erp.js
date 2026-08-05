@@ -13,6 +13,7 @@ const READ_TOOLS = [
   ["erp_business_control", { limit: 25 }],
   ["erp_late_orders", { limit: 12 }],
   ["erp_inventory_status", {}],
+  ["erp_finished_goods_stock", { limit: 50 }],
   ["erp_finance_summary", {}],
   ["erp_list_employee_tasks", { limit: 20 }],
 ];
@@ -60,7 +61,7 @@ function table(headers, rows) {
   ].join("\n");
 }
 
-function buildWikiNotes({ me, summary, production, control, inventory, finance }) {
+function buildWikiNotes({ me, summary, production, control, inventory, finishedGoods, finance }) {
   const now = new Date().toISOString();
   const busiest = control?.answer_hints?.busiest_sewing_flow || {};
   const nextWarehouse = control?.answer_hints?.next_warehouse_order || {};
@@ -70,6 +71,7 @@ function buildWikiNotes({ me, summary, production, control, inventory, finance }
   const cutting = control?.cutting_department || {};
   const cuttingItems = cutting?.items || [];
   const items = inventory?.items || [];
+  const readyGoodsModels = finishedGoods?.top_models || [];
   const activeWork = Number(production?.active_work_orders || 0);
   const output = Number(production?.cutting_output || 0)
     + Number(production?.printing_output || 0)
@@ -96,6 +98,7 @@ Milana ERP is the live business source for production, inventory, finance, plann
 - Which production orders are blocked or late?
 - What is the current production output by stage?
 - Which inventory items need attention?
+- What finished goods are ready in warehouse?
 - What should Hermes put on Kanban next?
 
 ## Live headline
@@ -104,10 +107,11 @@ Milana ERP is the live business source for production, inventory, finance, plann
 - Cutting department: ${fmt(cutting?.orders)} orders, ${fmt(cutting?.planned_quantity)} planned qty, ${fmt(cutting?.overdue_orders)} overdue
 - Active work orders: ${fmt(activeWork)}
 - Total staged production output: ${fmt(output)}
+- Finished goods stock: ${fmt(finishedGoods?.total_pieces)} pcs, ${fmt(finishedGoods?.total_packages)} packages, ${fmt(finishedGoods?.total_models)} models
 - Busiest sewing flow: ${fmt(busiest?.flow)} (${fmt(busiest?.orders)} orders, ${fmt(busiest?.planned_quantity)} planned qty)
 - Next warehouse order: ${fmt(nextWarehouse?.production_no || nextWarehouse?.order_no)} due ${fmt(nextWarehouse?.warehouse_eta)}
 
-Related notes: [[ERP/Production Control]], [[ERP/Sewing Flows]], [[ERP/Warehouse ETA]], [[ERP/Inventory]], [[ERP/MILA ERP Playbook]]
+Related notes: [[ERP/Production Control]], [[ERP/Sewing Flows]], [[ERP/Warehouse ETA]], [[ERP/Finished Goods]], [[ERP/Inventory]], [[ERP/MILA ERP Playbook]]
 `;
 
   const productionNote = `# ERP Production Control
@@ -184,6 +188,8 @@ ${table(["Production", "Order", "Model", "Qty", "Warehouse ETA", "Status"], ware
 
 Updated: ${now}
 
+This note is for fabric/material inventory. For ready product warehouse stock, use [[ERP/Finished Goods]] and the erp_finished_goods_stock MCP tool.
+
 ## Current inventory sample
 
 ${table(["SKU", "Item", "Category", "Available", "Reserved", "Unit"], items.slice(0, 50).map((row) =>
@@ -194,6 +200,35 @@ ${table(["SKU", "Item", "Category", "Available", "Reserved", "Unit"], items.slic
 
 \`\`\`json
 ${compactJson(finance)}
+\`\`\`
+`;
+
+  const finishedGoodsNote = `# ERP Finished Goods
+
+Updated: ${now}
+
+Live source: /api/finished-goods
+
+Use this note and erp_finished_goods_stock for questions about "склад готовых изделий", "готовая продукция", "ready product", "finished goods" or "FGS".
+Do not answer finished-goods questions from production output or material inventory.
+
+## Current ready product stock
+
+- Total pieces: ${fmt(finishedGoods?.total_pieces)}
+- Available pieces: ${fmt(finishedGoods?.available_pieces)}
+- Reserved pieces: ${fmt(finishedGoods?.reserved_pieces)}
+- Packages: ${fmt(finishedGoods?.total_packages)}
+- Models: ${fmt(finishedGoods?.total_models)}
+- Sections: ${(finishedGoods?.sections || []).join(", ") || "-"}
+
+${table(["Model", "Name", "Color", "Order", "Pieces", "Packages", "Sizes", "Status"], readyGoodsModels.slice(0, 50).map((row) =>
+  `| ${fmt(row.model_code)} | ${fmt(row.model_name)} | ${fmt(row.color)} | ${fmt(row.order_no)} | ${fmt(row.total_pieces)} | ${fmt(row.packages)} | ${fmt(Object.entries(row.sizes || {}).map(([size, qty]) => `${size}: ${qty}`).join(", "))} | ${fmt(Object.entries(row.statuses || {}).map(([status, qty]) => `${status}: ${qty}`).join(", "))} |`
+))}
+
+## Raw finished-goods snapshot
+
+\`\`\`json
+${compactJson(finishedGoods)}
 \`\`\`
 `;
 
@@ -227,6 +262,7 @@ MILA is allowed to read ERP business data through MCP and summarize it for the o
 - erp_active_production: production dashboard.
 - erp_business_control: best tool for business-control questions.
 - erp_inventory_status: inventory dashboard.
+- erp_finished_goods_stock: ready product / finished goods warehouse stock.
 - erp_finance_summary: finance dashboard if permissions allow.
 - erp_search: global ERP search.
 - erp_send_notification / erp_create_task: write actions, confirmation required.
@@ -237,6 +273,7 @@ MILA is allowed to read ERP business data through MCP and summarize it for the o
     ["ERP/Production Control.md", productionNote],
     ["ERP/Sewing Flows.md", flowsNote],
     ["ERP/Warehouse ETA.md", warehouseNote],
+    ["ERP/Finished Goods.md", finishedGoodsNote],
     ["ERP/Inventory.md", inventoryNote],
     ["ERP/MILA ERP Playbook.md", playbook],
   ];
@@ -296,6 +333,7 @@ r.post("/wiki-sync", async (req, res) => {
     production: cards.erp_active_production,
     control: cards.erp_business_control,
     inventory: cards.erp_inventory_status,
+    finishedGoods: cards.erp_finished_goods_stock,
     finance: cards.erp_finance_summary,
   });
   const written = [];

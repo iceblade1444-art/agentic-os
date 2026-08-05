@@ -253,6 +253,136 @@ function businessControlSnapshot(rows, limit = 25) {
   };
 }
 
+function finishedGoodsMatches(item, query) {
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return true;
+  return [
+    item?.model_code,
+    item?.model_name,
+    item?.order_no,
+    item?.sales_order_no,
+    item?.color,
+    item?.status,
+    item?.section,
+    item?.cell,
+    item?.shelf,
+  ].some((value) => String(value || "").toLowerCase().includes(needle));
+}
+
+function finishedGoodsRow(item) {
+  return {
+    model_code: item?.model_code,
+    model_name: item?.model_name,
+    order_no: item?.order_no || item?.sales_order_no,
+    color: item?.color,
+    size: item?.size || item?.size_label,
+    quantity: item?.quantity ?? item?.total_quantity,
+    available_qty: item?.available_qty ?? item?.available_quantity,
+    reserved_qty: item?.reserved_qty ?? item?.reserved_quantity,
+    package_id: item?.package_id || item?.package_no || item?.package_code,
+    section: item?.section,
+    cell: item?.cell,
+    shelf: item?.shelf,
+    status: item?.status,
+  };
+}
+
+function cleanNumber(value) {
+  const number = numberValue(value);
+  return Number.isInteger(number) ? number : Number(number.toFixed(3));
+}
+
+function finishedGoodsSnapshot(rows, limit = 50, query = "") {
+  const filtered = (Array.isArray(rows) ? rows : []).filter((item) => item && typeof item === "object" && finishedGoodsMatches(item, query));
+  const models = new Map();
+  const packages = new Set();
+  const sections = new Set();
+  const statuses = new Map();
+  let totalPieces = 0;
+  let availablePieces = 0;
+  let reservedPieces = 0;
+
+  for (const item of filtered) {
+    const quantity = numberValue(item.quantity ?? item.total_quantity);
+    const available = numberValue(item.available_qty ?? item.available_quantity ?? quantity);
+    const reserved = numberValue(item.reserved_qty ?? item.reserved_quantity);
+    totalPieces += quantity;
+    availablePieces += available;
+    reservedPieces += reserved;
+
+    const packageId = item.package_id || item.package_no || item.package_code;
+    if (packageId !== undefined && packageId !== null) packages.add(String(packageId));
+    if (item.section) sections.add(String(item.section));
+    const status = String(item.status || "unknown");
+    statuses.set(status, (statuses.get(status) || 0) + quantity);
+
+    const modelCode = String(item.model_code || "").trim();
+    const modelName = String(item.model_name || "").trim();
+    const color = String(item.color || "").trim();
+    const orderNo = String(item.order_no || item.sales_order_no || "").trim();
+    const key = [modelCode, modelName, color, orderNo].join("\u0000");
+    const bucket = models.get(key) || {
+      model_code: modelCode,
+      model_name: modelName,
+      color,
+      order_no: orderNo,
+      total_pieces: 0,
+      available_pieces: 0,
+      reserved_pieces: 0,
+      packages: new Set(),
+      sections: new Set(),
+      sizes: new Map(),
+      statuses: new Map(),
+      sample_rows: [],
+    };
+    bucket.total_pieces += quantity;
+    bucket.available_pieces += available;
+    bucket.reserved_pieces += reserved;
+    if (packageId !== undefined && packageId !== null) bucket.packages.add(String(packageId));
+    if (item.section) bucket.sections.add(String(item.section));
+    bucket.statuses.set(status, (bucket.statuses.get(status) || 0) + quantity);
+    const size = String(item.size || item.size_label || "").trim() || "unknown";
+    bucket.sizes.set(size, (bucket.sizes.get(size) || 0) + quantity);
+    if (bucket.sample_rows.length < 5) bucket.sample_rows.push(finishedGoodsRow(item));
+    models.set(key, bucket);
+  }
+
+  const topModels = [...models.values()].map((bucket) => ({
+    model_code: bucket.model_code,
+    model_name: bucket.model_name,
+    color: bucket.color,
+    order_no: bucket.order_no,
+    total_pieces: cleanNumber(bucket.total_pieces),
+    available_pieces: cleanNumber(bucket.available_pieces),
+    reserved_pieces: cleanNumber(bucket.reserved_pieces),
+    packages: bucket.packages.size,
+    sections: [...bucket.sections].sort(),
+    sizes: Object.fromEntries([...bucket.sizes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([size, value]) => [size, cleanNumber(value)])),
+    statuses: Object.fromEntries([...bucket.statuses.entries()].map(([name, value]) => [name, cleanNumber(value)])),
+    sample_rows: bucket.sample_rows,
+  })).sort((a, b) => b.total_pieces - a.total_pieces).slice(0, limit);
+
+  return {
+    source: "/api/finished-goods",
+    meaning: "Finished goods / ready product warehouse stock. Do not confuse with fabric/material inventory or production output.",
+    query: query || null,
+    total_rows: filtered.length,
+    total_models: models.size,
+    total_packages: packages.size,
+    total_pieces: cleanNumber(totalPieces),
+    available_pieces: cleanNumber(availablePieces),
+    reserved_pieces: cleanNumber(reservedPieces),
+    sections: [...sections].sort(),
+    statuses: Object.fromEntries([...statuses.entries()].map(([name, value]) => [name, cleanNumber(value)])),
+    top_models: topModels,
+    answer_hints: {
+      ready_goods_total_pieces: cleanNumber(totalPieces),
+      ready_goods_packages: packages.size,
+      top_ready_goods_model: topModels[0] || null,
+    },
+  };
+}
+
 async function businessControlTool(args = {}) {
   const response = await fetchErpPath("/api/process-tracking", args);
   const parsed = JSON.parse(response.content[0].text);
@@ -261,6 +391,17 @@ async function businessControlTool(args = {}) {
     ok: true,
     data: businessControlSnapshot(parsed.data, Math.min(100, Math.max(1, Number(args?.limit) || 25))),
     source: "/api/process-tracking",
+  });
+}
+
+async function finishedGoodsTool(args = {}) {
+  const response = await fetchErpPath("/api/finished-goods", {});
+  const parsed = JSON.parse(response.content[0].text);
+  if (!parsed.ok || !Array.isArray(parsed.data)) return response;
+  return jsonText({
+    ok: true,
+    data: finishedGoodsSnapshot(parsed.data, Math.min(200, Math.max(1, Number(args?.limit) || 50)), args?.query || ""),
+    source: "/api/finished-goods",
   });
 }
 
@@ -307,9 +448,17 @@ server.registerTool("erp_late_orders", {
 }, async (args) => callErpTool("erp_late_orders", args));
 
 server.registerTool("erp_inventory_status", {
-  description: "Inventory dashboard summary: stock risk, fast moving items and low inventory.",
+  description: "Fabric/material inventory dashboard summary. Not finished-goods/ready-product stock.",
   inputSchema: {},
 }, async () => callErpTool("erp_inventory_status", {}, "GET"));
+
+server.registerTool("erp_finished_goods_stock", {
+  description: "Finished-goods warehouse stock from /api/finished-goods: ready product pieces, packages, models, colors, sizes and availability.",
+  inputSchema: {
+    query: z.string().optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+}, async (args) => finishedGoodsTool(args));
 
 server.registerTool("erp_finance_summary", {
   description: "Finance dashboard summary when ERP permissions allow it.",
