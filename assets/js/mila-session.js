@@ -77,25 +77,6 @@ ${safeJson(context)}
 `.trim();
 }
 
-function buildErpBaselinePrompt(context) {
-  if (!context) return "";
-  return `
-LIVE ERP BASELINE FOR THIS VOICE CALL:
-${context.answer_summary || "ERP baseline is loaded, but finished-goods facts are missing."}
-
-Strict rules:
-- This baseline comes from the Agentic OS ERP panel at call start.
-- For finished-goods / ready-product warehouse questions, use facts.ready_goods_total_pieces or finished_goods_stock.total_pieces.
-- Finished-goods source of truth is /warehouse-stock + /warehouse-map, backed by /api/packages/storage-map.
-- Do not use production output, sewing output, packaging output, material inventory, GM summary, old memory, or guesses as finished-goods warehouse stock.
-- If a live ERP tool result is available later, prefer that newer tool result over this baseline.
-- If neither this baseline nor a tool result contains the required field, say the ERP value is not available instead of inventing it.
-
-Live ERP baseline payload:
-${safeJson(context)}
-`.trim();
-}
-
 function unwrapErpCard(card) {
   if (!card || typeof card !== "object") return card || null;
   return card.data || card.result?.data || card.result || card;
@@ -234,15 +215,6 @@ class MilaSessionHub {
     });
   }
 
-  async liveSystemInstruction() {
-    try {
-      const baseline = erpContextFromSnapshot("voice call ERP baseline", await api.erp.snapshot());
-      return [this.systemInstruction("voice"), buildErpBaselinePrompt(baseline)].filter(Boolean).join("\n\n");
-    } catch {
-      return this.systemInstruction("voice");
-    }
-  }
-
   async erpContextFor(text) {
     const value = String(text || "");
     if (!ERP_INTENT_RE.test(value)) return "";
@@ -329,7 +301,7 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
       listeningProfile: this.state.preferences.listeningProfile,
       transcriptionLanguage: this.state.language,
       inputDeviceId: this.state.preferences.inputDeviceId,
-      systemInstruction: await this.liveSystemInstruction(),
+      systemInstruction: this.systemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {
         const body = { language: this.state.language };

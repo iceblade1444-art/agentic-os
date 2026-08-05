@@ -262,15 +262,6 @@ test("written ERP questions are enriched with live Agentic OS context", () => {
   assert.match(session, /systemPrompt: \[this\.systemInstruction\("text"\), erpContext\]/);
 });
 
-test("voice calls start with the live ERP baseline", () => {
-  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
-  assert.match(session, /buildErpBaselinePrompt/);
-  assert.match(session, /LIVE ERP BASELINE FOR THIS VOICE CALL/);
-  assert.match(session, /liveSystemInstruction/);
-  assert.match(session, /systemInstruction: await this\.liveSystemInstruction\(\)/);
-  assert.match(session, /If a live ERP tool result is available later, prefer that newer tool result/);
-});
-
 test("the chat route bounds history, image types and payload size", async () => {
   const route = fs.readFileSync(new URL("../server/routes/integrations.js", import.meta.url), "utf8");
   const limit = /const MAX_IMAGE_CHARS = ([^;]+);/.exec(route)[0];
