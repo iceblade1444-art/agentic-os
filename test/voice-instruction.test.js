@@ -27,11 +27,16 @@ test("the served instruction is the one the browser builds", () => {
     agentContext: "",
     mode: "voice",
   });
-  const withoutContext = served.slice(0, served.indexOf("Workspace context"));
-  assert.ok(withoutContext.length > 500, "the instruction should be substantial");
+  // The prompt carries a clock, so two composals a millisecond apart differ on
+  // that line alone. Pin it before comparing rather than comparing a prefix.
+  const stamp = (text) => text.replace(/^Current local time: .*$/m, "Current local time: <pinned>");
+  const upToContext = (text) => stamp(text).slice(0, stamp(text).indexOf("Workspace context")).trim();
+
+  assert.ok(served.includes("Workspace context"), "the context section must exist to slice at");
+  assert.ok(upToContext(served).length > 500, "the instruction should be substantial");
   assert.equal(
-    withoutContext.trim(),
-    browser.slice(0, browser.indexOf("Workspace context")).trim(),
+    upToContext(served),
+    upToContext(browser),
     "a phone call and a browser call must get identical wording",
   );
 });
