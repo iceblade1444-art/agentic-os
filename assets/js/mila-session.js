@@ -46,6 +46,37 @@ function formatElapsed(seconds = 0) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+const ERP_INTENT_RE = /(erp|склад|готов(ых|ая|ое|ые)?\s*(издел|продукц|товар)|готовая\s+продукция|warehouse|finished\s*goods|ready\s*product|остатк|производств|раскрой|закрой|пошив|упаковк|швейн|поток|заказ|срок|когда.*склад|inventory|stock|production|cutting|sewing|packag)/i;
+const FINISHED_GOODS_RE = /(готов(ых|ая|ое|ые)?\s*(издел|продукц|товар)|готовая\s+продукция|склад\s+готов|finished\s*goods|ready\s*product|warehouse\s*stock)/i;
+
+function safeJson(value, max = 9000) {
+  try { return JSON.stringify(value, null, 2).slice(0, max); }
+  catch { return String(value || "").slice(0, max); }
+}
+
+function buildErpContextPrompt(userText, context) {
+  if (!context) return "";
+  const facts = context.facts || context.finished_goods_facts || context.finished_goods_stock?.answer_hints || {};
+  const summary = context.answer_summary || facts.answer_summary || "";
+  return `
+LIVE ERP CONTEXT FOR THE USER'S CURRENT QUESTION:
+${summary}
+
+Strict rules:
+- Use ONLY this live ERP payload for ERP facts in the next answer.
+- For finished-goods / ready-product warehouse questions, answer from facts.ready_goods_total_pieces or finished_goods_stock.total_pieces only.
+- Finished-goods source of truth is /warehouse-stock + /warehouse-map, backed by /api/packages/storage-map.
+- Do not use production output, sewing output, packaging output, material inventory, GM summary, old memory, or guesses as finished-goods warehouse stock.
+- If the required field is absent or ok=false, say that the ERP value is not available instead of inventing it.
+
+User question:
+${String(userText || "").slice(0, 1000)}
+
+Live ERP payload:
+${safeJson(context)}
+`.trim();
+}
+
 class MilaSessionHub {
   constructor() {
     this.session = null;
@@ -136,6 +167,22 @@ class MilaSessionHub {
     });
   }
 
+  async erpContextFor(text) {
+    const value = String(text || "");
+    if (!ERP_INTENT_RE.test(value)) return "";
+    try {
+      const action = FINISHED_GOODS_RE.test(value) ? "get_finished_goods_stock" : "get_erp_business_context";
+      const context = await api.mila.action(action, { limit: 50 });
+      return buildErpContextPrompt(value, context);
+    } catch (error) {
+      return `
+LIVE ERP CONTEXT FOR THE USER'S CURRENT QUESTION:
+Agentic OS tried to read live ERP data, but the ERP tool failed: ${error.message || "unknown error"}.
+Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be verified live and suggest retrying from the ERP panel.
+`.trim();
+    }
+  }
+
   // Writing does not use the Live socket: live models answer in audio only, so
   // the written channel goes to MILA's Gemini chat endpoint, which takes text
   // and inline images in one request.
@@ -161,8 +208,9 @@ class MilaSessionHub {
       this.state.textError = "";
       this.notify();
 
+      const erpContext = await this.erpContextFor(text);
       const result = await api.integrations.milaChat({
-        systemPrompt: this.systemInstruction("text"),
+        systemPrompt: [this.systemInstruction("text"), erpContext].filter(Boolean).join("\n\n"),
         messages: [
           ...this.state.history.slice(-13, -1)
             .filter((item) => item.role !== "system")

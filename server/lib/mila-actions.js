@@ -42,6 +42,66 @@ function publicMcpTool(server, tool = {}) {
   };
 }
 
+function firstNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function listValue(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.rows)) return value.rows;
+  if (Array.isArray(value?.models)) return value.models;
+  return [];
+}
+
+function finishedGoodsFacts(data = {}) {
+  const hints = data.answer_hints || {};
+  const rows = listValue(data).slice(0, 12).map((item = {}) => ({
+    model: bounded(item.model || item.sku || item.model_no || item.code, 80),
+    name: bounded(item.name || item.title || item.product || item.item_name, 120),
+    order: bounded(item.order_no || item.order || item.order_number || item.production_order, 80),
+    color: bounded(item.color || item.color_name, 80),
+    section: bounded(item.section || item.zone, 40),
+    cell: bounded(item.cell || item.bin || item.location, 60),
+    shelf: bounded(item.shelf || item.rack, 60),
+    packages: firstNumber(item.packages, item.package_count, item.total_packages),
+    pieces: firstNumber(item.total_pieces, item.pieces, item.quantity, item.qty, item.available_quantity),
+    status: bounded(item.status || item.state, 80),
+  }));
+  const totalPieces = firstNumber(
+    data.total_pieces,
+    data.ready_goods_total_pieces,
+    data.pieces,
+    hints.ready_goods_total_pieces,
+    hints.total_pieces,
+  );
+  const totalPackages = firstNumber(data.total_packages, data.packages, hints.total_packages);
+  const totalModels = firstNumber(data.total_models, data.models_count, hints.total_models);
+  const sourcePage = data.source_page || "/warehouse-stock";
+  const mapPage = data.map_page || "/warehouse-map";
+  const source = data.source || "/api/packages/storage-map";
+  const parts = [];
+  if (totalPieces !== null) parts.push(`${totalPieces} pcs`);
+  if (totalPackages !== null) parts.push(`${totalPackages} packages`);
+  if (totalModels !== null) parts.push(`${totalModels} models`);
+  return {
+    ready_goods_total_pieces: totalPieces,
+    total_packages: totalPackages,
+    total_models: totalModels,
+    source,
+    source_page: sourcePage,
+    map_page: mapPage,
+    rows,
+    answer_summary: totalPieces === null
+      ? `Finished-goods stock is unavailable from ${sourcePage} + ${mapPage}; do not guess.`
+      : `Finished-goods warehouse stock: ${parts.join(", ")}. Source: ${sourcePage} + ${mapPage}.`,
+  };
+}
+
 function actionSummary(name, args) {
   if (name === "create_kanban_task") return `Create Kanban task “${bounded(args.title, 120)}”`;
   if (name === "delegate_to_hermes") return `Send “${bounded(args.title || args.goal, 120)}” to Hermes`;
@@ -204,12 +264,16 @@ export function createMilaActions(options = {}) {
         .catch((error) => ({ ok: false, tool, error: { message: error.message } }));
       const finishedGoods = await safeCallTool("erp_finished_goods_stock", { limit: Math.max(limit, 50) });
       const finishedGoodsData = finishedGoods?.data || finishedGoods;
+      const finishedFacts = finishedGoodsFacts(finishedGoodsData);
       if (name === "get_finished_goods_stock") {
         return {
+          ok: finishedGoods?.ok !== false,
+          facts: finishedFacts,
+          answer_summary: finishedFacts.answer_summary,
           source_policy: "This is the only live source for finished-goods / ready-product warehouse questions. Answer only from this payload. If ok is false or total_pieces is absent, say the ERP finished-goods data is missing. Do not use production output or old memory.",
-          source: finishedGoods.source || "/api/packages/storage-map",
-          source_page: finishedGoods.source_page || "/warehouse-stock",
-          map_page: finishedGoods.map_page || "/warehouse-map",
+          source: finishedFacts.source,
+          source_page: finishedFacts.source_page,
+          map_page: finishedFacts.map_page,
           finished_goods_stock: finishedGoodsData,
           answer_hints: finishedGoodsData?.answer_hints || null,
         };
@@ -229,6 +293,7 @@ export function createMilaActions(options = {}) {
         cutting_department: control?.data?.cutting_department || null,
         material_inventory: inventory?.data || inventory,
         finished_goods_stock: finishedGoodsData,
+        finished_goods_facts: finishedFacts,
         finance: finance?.data || finance,
         answer_hints: {
           ...(control?.data?.answer_hints || {}),

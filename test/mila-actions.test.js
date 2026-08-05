@@ -148,6 +148,11 @@ test("MILA tool declarations expose all four Agentic OS control surfaces", async
 test("MILA reads finished goods from the dedicated ERP warehouse source", async () => {
   const { actions, mcpCalls } = fixture();
   const result = await actions.call("get_finished_goods_stock", { limit: 10 }, { actor: "Creator" });
+  assert.equal(result.ok, true);
+  assert.equal(result.facts.ready_goods_total_pieces, 535);
+  assert.equal(result.facts.total_packages, 9);
+  assert.match(result.answer_summary, /535 pcs/);
+  assert.match(result.answer_summary, /\/warehouse-stock \+ \/warehouse-map/);
   assert.equal(result.finished_goods_stock.total_pieces, 535);
   assert.equal(result.finished_goods_stock.total_packages, 9);
   assert.equal(result.source_page, "/warehouse-stock");
@@ -156,5 +161,6 @@ test("MILA reads finished goods from the dedicated ERP warehouse source", async 
 
   const context = await actions.call("get_erp_business_context", { limit: 10 }, { actor: "Creator" });
   assert.equal(context.finished_goods_stock.total_pieces, 535);
+  assert.equal(context.finished_goods_facts.ready_goods_total_pieces, 535);
   assert.equal(context.business_control.ok, false);
 });

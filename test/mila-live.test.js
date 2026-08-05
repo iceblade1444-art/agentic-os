@@ -249,6 +249,18 @@ test("writing goes to the Gemini chat endpoint, not the live socket", () => {
   assert.match(milaLib, /\/v1\/gemini\/chat/);
 });
 
+test("written ERP questions are enriched with live Agentic OS context", () => {
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  assert.match(session, /ERP_INTENT_RE/);
+  assert.match(session, /FINISHED_GOODS_RE/);
+  assert.match(session, /get_finished_goods_stock/);
+  assert.match(session, /get_erp_business_context/);
+  assert.match(session, /this\.erpContextFor\(text\)/);
+  assert.match(session, /\/warehouse-stock \+ \/warehouse-map/);
+  assert.match(session, /Do not use production output/);
+  assert.match(session, /systemPrompt: \[this\.systemInstruction\("text"\), erpContext\]/);
+});
+
 test("the chat route bounds history, image types and payload size", async () => {
   const route = fs.readFileSync(new URL("../server/routes/integrations.js", import.meta.url), "utf8");
   const limit = /const MAX_IMAGE_CHARS = ([^;]+);/.exec(route)[0];
