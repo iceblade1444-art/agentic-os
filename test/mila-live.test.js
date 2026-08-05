@@ -287,12 +287,14 @@ test("the direct socket is the default transport because LiveKit cannot speak ty
   // compatible with gemini-3.1-flash-live-preview", while the direct socket
   // answered the same typed turn with 117 KB of audio.
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const prompt = fs.readFileSync(new URL("../assets/js/mila-prompt.js", import.meta.url), "utf8");
   assert.deepEqual(MILA_TRANSPORTS.map((item) => item.id), ["direct", "livekit"]);
   assert.equal(normalizeMilaPreferences({}).transport, "direct");
   assert.equal(normalizeMilaPreferences({ transport: "livekit" }).transport, "livekit");
   assert.equal(normalizeMilaPreferences({ transport: "carrier-pigeon" }).transport, "direct");
   // The stale boolean must not linger and quietly force LiveKit.
   assert.doesNotMatch(session, /directConnection/);
+  assert.doesNotMatch(prompt, /directConnection/);
 
   // Direct must never silently end up on LiveKit, where a typed turn is lost.
   assert.deepEqual(milaTokenPlan("direct"), ["direct"]);
@@ -325,7 +327,9 @@ test("video rides the call and needs the direct connection", () => {
   assert.match(page, /shareVideo\("camera"\)/);
   assert.match(page, /shareVideo\("screen"\)/);
   assert.match(page, /milaTransport/);
-  assert.match(session, /transport === "livekit"/);
+  // The choice is honoured by the token plan, which lives with the prompt now.
+  assert.match(session, /milaTokenPlan\(this\.state\.preferences\.transport\)/);
+  assert.deepEqual(milaTokenPlan("livekit"), ["livekit", "direct"]);
 });
 
 test("typed turns reach the LiveKit chat topic, and only images fall back to writing", () => {

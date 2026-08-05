@@ -110,7 +110,7 @@ test("all primary execution paths receive server-owned shared context", () => {
   const orchestrator = fs.readFileSync(new URL("../server/lib/orchestrator.js", import.meta.url), "utf8");
   const claudeRoute = fs.readFileSync(new URL("../server/routes/claude-code.js", import.meta.url), "utf8");
   const llmRoute = fs.readFileSync(new URL("../server/routes/llm.js", import.meta.url), "utf8");
-  const mila = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const mila = fs.readFileSync(new URL("../assets/js/mila-prompt.js", import.meta.url), "utf8");
   assert.match(orchestrator, /context: sharedAgentContext\(user\)/);
   assert.match(claudeRoute, /agentContext: sharedAgentContext\(authenticatedUser\(req\)\)/);
   assert.match(llmRoute, /contextualMessages/);
