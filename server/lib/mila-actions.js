@@ -9,7 +9,6 @@ import { knowledge } from "./knowledge.js";
 import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
-const ERP_TOOL_TIMEOUT_MS = 10000;
 const WRITE_ACTIONS = new Set([
   "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool",
 ]);
@@ -57,16 +56,6 @@ function listValue(value) {
   if (Array.isArray(value?.rows)) return value.rows;
   if (Array.isArray(value?.models)) return value.models;
   return [];
-}
-
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise.finally(() => clearTimeout(timer)),
-    new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    }),
-  ]);
 }
 
 function finishedGoodsFacts(data = {}) {
@@ -267,7 +256,7 @@ export function createMilaActions(options = {}) {
       }
       const limit = integer(args.limit, 1, 100, 25);
       const callTool = async (tool, toolArgs = {}) => {
-        const result = await withTimeout(mcp.callTool(server.id, tool, toolArgs), ERP_TOOL_TIMEOUT_MS, tool);
+        const result = await mcp.callTool(server.id, tool, toolArgs);
         const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
         try { return JSON.parse(text); } catch { return { ok: true, text }; }
       };

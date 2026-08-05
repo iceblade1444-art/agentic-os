@@ -77,54 +77,6 @@ ${safeJson(context)}
 `.trim();
 }
 
-function unwrapErpCard(card) {
-  if (!card || typeof card !== "object") return card || null;
-  return card.data || card.result?.data || card.result || card;
-}
-
-function erpContextFromSnapshot(userText, snapshot = {}) {
-  const cards = snapshot.cards || {};
-  const finishedGoods = unwrapErpCard(cards.erp_finished_goods_stock);
-  const control = unwrapErpCard(cards.erp_business_control);
-  const production = unwrapErpCard(cards.erp_active_production);
-  const inventory = unwrapErpCard(cards.erp_inventory_status);
-  const finance = unwrapErpCard(cards.erp_finance_summary);
-  const finished = finishedGoods?.answer_hints || {};
-  const finishedFacts = {
-    ready_goods_total_pieces: finishedGoods?.total_pieces ?? finished.ready_goods_total_pieces ?? null,
-    total_packages: finishedGoods?.total_packages ?? finished.ready_goods_packages ?? null,
-    total_models: finishedGoods?.total_models ?? null,
-    source: finishedGoods?.source || "/api/packages/storage-map",
-    source_page: finishedGoods?.source_page || "/warehouse-stock",
-    map_page: finishedGoods?.map_page || "/warehouse-map",
-    top_ready_goods_model: finished.top_ready_goods_model || finishedGoods?.top_models?.[0] || null,
-  };
-  const context = {
-    ok: !!snapshot.ok,
-    source_policy: "This payload is the Agentic OS ERP panel live snapshot. Answer ERP questions only from these fields. For finished-goods warehouse questions use finished_goods_facts.ready_goods_total_pieces or finished_goods_stock.total_pieces only.",
-    facts: finishedFacts,
-    answer_summary: finishedFacts.ready_goods_total_pieces == null
-      ? "Finished-goods warehouse stock is missing from the live ERP snapshot; do not guess."
-      : `Finished-goods warehouse stock: ${finishedFacts.ready_goods_total_pieces} pcs, ${finishedFacts.total_packages ?? "-"} packages, ${finishedFacts.total_models ?? "-"} models. Source: /warehouse-stock + /warehouse-map.`,
-    finished_goods_stock: finishedGoods,
-    business_control: control,
-    production,
-    material_inventory: inventory,
-    finance,
-    errors: snapshot.errors || {},
-    server: snapshot.server || {},
-  };
-  if (FINISHED_GOODS_RE.test(String(userText || ""))) return context;
-  return {
-    ...context,
-    answer_hints: {
-      busiest_sewing_flow: control?.answer_hints?.busiest_sewing_flow || null,
-      next_warehouse_order: control?.answer_hints?.next_warehouse_order || null,
-      finished_goods_stock: finishedGoods?.answer_hints || null,
-    },
-  };
-}
-
 class MilaSessionHub {
   constructor() {
     this.session = null;
@@ -219,7 +171,8 @@ class MilaSessionHub {
     const value = String(text || "");
     if (!ERP_INTENT_RE.test(value)) return "";
     try {
-      const context = erpContextFromSnapshot(value, await api.erp.snapshot());
+      const action = FINISHED_GOODS_RE.test(value) ? "get_finished_goods_stock" : "get_erp_business_context";
+      const context = await api.mila.action(action, { limit: 50 });
       return buildErpContextPrompt(value, context);
     } catch (error) {
       return `

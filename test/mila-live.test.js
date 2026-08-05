@@ -253,9 +253,8 @@ test("written ERP questions are enriched with live Agentic OS context", () => {
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
   assert.match(session, /ERP_INTENT_RE/);
   assert.match(session, /FINISHED_GOODS_RE/);
-  assert.match(session, /api\.erp\.snapshot/);
-  assert.match(session, /erpContextFromSnapshot/);
-  assert.match(session, /erp_finished_goods_stock/);
+  assert.match(session, /get_finished_goods_stock/);
+  assert.match(session, /get_erp_business_context/);
   assert.match(session, /this\.erpContextFor\(text\)/);
   assert.match(session, /\/warehouse-stock \+ \/warehouse-map/);
   assert.match(session, /Do not use production output/);
