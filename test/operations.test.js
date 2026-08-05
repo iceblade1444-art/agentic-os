@@ -178,3 +178,32 @@ test("host backup can be restore-drilled without touching source data", { skip: 
   assert.ok(state.restoreDrill.archives.includes("hermes-control.tgz"));
   assert.equal(fs.existsSync(path.join(dir, "data", "db.json")), true);
 });
+
+test("a backup still completes where the Docker CLI is absent", { skip: !hasPython }, (t) => {
+  // The suite also runs inside the application image, which has no docker
+  // binary, and the PostgreSQL dump shells out to it. Losing the whole archive
+  // over one optional probe would be far worse than skipping that dump.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-ops-nodocker-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, "data"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "data", "db.json"), "{}\n");
+
+  const stateDir = path.join(dir, "state");
+  const emptyPath = path.join(dir, "no-tools");
+  fs.mkdirSync(emptyPath, { recursive: true });
+  // An empty PATH keeps python itself resolvable by absolute call while making
+  // every helper binary, docker included, impossible to find.
+  const env = {
+    ...process.env,
+    OPS_STATE_DIR: stateDir,
+    OPS_BACKUP_DIR: path.join(dir, "backups"),
+    OPS_HERMES_HOME: path.join(dir, "hermes"),
+    PATH: emptyPath,
+  };
+  const backup = spawnSync("python3", ["scripts/agentic-os-operations.py", "backup", "--root", dir], {
+    cwd: repoRoot, env, encoding: "utf8",
+  });
+  assert.equal(backup.status, 0, backup.stderr || backup.stdout);
+  const state = JSON.parse(fs.readFileSync(path.join(stateDir, "operations.json"), "utf8"));
+  assert.equal(state.backup.status, "success", "a missing binary must not fail the backup");
+});
