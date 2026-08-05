@@ -5,7 +5,7 @@ import {
   attachmentDisplayText, composeAttachmentPrompt, publicAttachment,
 } from "./mila-attachments.js";
 import {
-  AGENT_CONTEXT_LIMIT, MILA_DEFAULT_PREFERENCES, MILA_LANGUAGES, buildMilaSystemInstruction, normalizeMilaPreferences,
+  AGENT_CONTEXT_LIMIT, MILA_DEFAULT_PREFERENCES, MILA_LANGUAGES, buildMilaSystemInstruction, milaTokenPlan, normalizeMilaPreferences,
 } from "./mila-prompt.js";
 
 // The prompt lives in mila-prompt.js so the server can serve the same one to the

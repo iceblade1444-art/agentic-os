@@ -297,6 +297,7 @@ test("the direct socket is the default transport because LiveKit cannot speak ty
   assert.doesNotMatch(prompt, /directConnection/);
 
   // Direct must never silently end up on LiveKit, where a typed turn is lost.
+  assert.match(session, /buildMilaSystemInstruction, milaTokenPlan, normalizeMilaPreferences/);
   assert.deepEqual(milaTokenPlan("direct"), ["direct"]);
   assert.deepEqual(milaTokenPlan(undefined), ["direct"]);
   // LiveKit may fall through when the room cannot be created, so a call happens.
