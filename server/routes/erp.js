@@ -67,6 +67,8 @@ function buildWikiNotes({ me, summary, production, control, inventory, finance }
   const flows = control?.busiest_sewing_flows || [];
   const warehouse = control?.warehouse_eta || [];
   const stages = control?.stage_summary || [];
+  const cutting = control?.cutting_department || {};
+  const cuttingItems = cutting?.items || [];
   const items = inventory?.items || [];
   const activeWork = Number(production?.active_work_orders || 0);
   const output = Number(production?.cutting_output || 0)
@@ -99,6 +101,7 @@ Milana ERP is the live business source for production, inventory, finance, plann
 ## Live headline
 
 - Active tracked orders: ${fmt(control?.total_orders)}
+- Cutting department: ${fmt(cutting?.orders)} orders, ${fmt(cutting?.planned_quantity)} planned qty, ${fmt(cutting?.overdue_orders)} overdue
 - Active work orders: ${fmt(activeWork)}
 - Total staged production output: ${fmt(output)}
 - Busiest sewing flow: ${fmt(busiest?.flow)} (${fmt(busiest?.orders)} orders, ${fmt(busiest?.planned_quantity)} planned qty)
@@ -124,6 +127,20 @@ Updated: ${now}
 
 ${table(["Stage", "Orders", "Planned qty", "Actual qty"], stages.slice(0, 20).map((row) =>
   `| ${fmt(row.stage)} | ${fmt(row.orders)} | ${fmt(row.planned_quantity)} | ${fmt(row.actual_quantity)} |`
+))}
+
+## Cutting department
+
+Use this section for questions about the cutting room / раскройный отдел.
+
+- Current cutting orders: ${fmt(cutting?.orders)}
+- Planned cutting quantity: ${fmt(cutting?.planned_quantity)}
+- Actual cutting quantity: ${fmt(cutting?.actual_quantity)}
+- Overdue cutting orders: ${fmt(cutting?.overdue_orders)}
+- Blocked cutting orders: ${fmt(cutting?.blocked_orders)}
+
+${table(["Production", "Order", "Model", "Qty", "Deadline", "Status", "Overdue"], cuttingItems.slice(0, 30).map((row) =>
+  `| ${fmt(row.production_no)} | ${fmt(row.order_no)} | ${fmt(row.model_code)} | ${fmt(row.planned_quantity)} | ${fmt(row.deadline)} | ${fmt(row.status)} | ${fmt(row.overdue)} |`
 ))}
 
 ## Raw production snapshot

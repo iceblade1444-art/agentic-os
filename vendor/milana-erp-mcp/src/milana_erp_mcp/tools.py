@@ -510,6 +510,7 @@ def _business_control_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[s
     blocked: list[dict[str, Any]] = []
     overdue: list[dict[str, Any]] = []
     storage_eta: list[dict[str, Any]] = []
+    cutting_orders: list[dict[str, Any]] = []
 
     for item in rows:
         if not isinstance(item, dict):
@@ -541,6 +542,17 @@ def _business_control_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[s
             blocked.append({**order, "stage": stage, "blocked_by": item.get("blocked_by")})
         if item.get("po_overdue") or any(stage_item.get("overdue") for stage_item in item.get("stages") or [] if isinstance(stage_item, dict)):
             overdue.append({**order, "stage": stage, "deadline": item.get("po_deadline")})
+        if stage == "cutting":
+            cutting_stage = _stage(item, "cutting")
+            cutting_orders.append(
+                {
+                    **order,
+                    "status": item.get("current_stage_status"),
+                    "deadline": item.get("po_deadline") or ((cutting_stage or {}).get("deadline")),
+                    "overdue": bool(item.get("po_overdue") or (cutting_stage or {}).get("overdue")),
+                    "blocked": bool(item.get("is_blocked")),
+                }
+            )
 
         storage_stage = _stage(item, "storage_transfer")
         if storage_stage:
@@ -556,15 +568,34 @@ def _business_control_snapshot(rows: list[dict[str, Any]], limit: int) -> dict[s
     stage_summary = sorted(stage_counts.values(), key=lambda value: value["planned_quantity"], reverse=True)
     busiest_flows = sorted(sewing_flows.values(), key=lambda value: (value["planned_quantity"], value["orders"]), reverse=True)
     storage_eta = sorted(storage_eta, key=lambda value: str(value.get("warehouse_eta") or ""))[:limit]
+    cutting_stage = next((stage for stage in stage_summary if stage.get("stage") == "cutting"), None)
+    cutting_orders = sorted(cutting_orders, key=lambda value: (not value.get("overdue"), str(value.get("deadline") or "")))[:limit]
 
     return {
         "total_orders": len(rows),
         "stage_summary": stage_summary,
+        "cutting_department": {
+            "source": "/api/process-tracking",
+            "stage": "cutting",
+            "orders": cutting_stage.get("orders", 0) if cutting_stage else 0,
+            "planned_quantity": cutting_stage.get("planned_quantity", 0) if cutting_stage else 0,
+            "actual_quantity": cutting_stage.get("actual_quantity", 0) if cutting_stage else 0,
+            "overdue_orders": sum(1 for order in cutting_orders if order.get("overdue")),
+            "blocked_orders": sum(1 for order in cutting_orders if order.get("blocked")),
+            "items": cutting_orders,
+        },
         "busiest_sewing_flows": busiest_flows[:limit],
         "blocked_orders": blocked[:limit],
         "overdue_orders": overdue[:limit],
         "warehouse_eta": storage_eta,
         "answer_hints": {
+            "cutting_department": {
+                "orders": cutting_stage.get("orders", 0) if cutting_stage else 0,
+                "planned_quantity": cutting_stage.get("planned_quantity", 0) if cutting_stage else 0,
+                "actual_quantity": cutting_stage.get("actual_quantity", 0) if cutting_stage else 0,
+                "overdue_orders": sum(1 for order in cutting_orders if order.get("overdue")),
+                "top_orders": cutting_orders[:5],
+            },
             "busiest_sewing_flow": busiest_flows[0] if busiest_flows else None,
             "next_warehouse_order": storage_eta[0] if storage_eta else None,
         },

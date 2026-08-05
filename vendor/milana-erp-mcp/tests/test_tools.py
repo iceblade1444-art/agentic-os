@@ -200,6 +200,22 @@ async def test_erp_business_control_builds_process_snapshot() -> None:
                         {"operation": "storage_transfer", "status": "waiting", "deadline": "2026-08-11T10:00:00+00:00"},
                     ],
                 },
+                {
+                    "production_order_id": 3,
+                    "production_no": "PO-3",
+                    "order_no": "SO-3",
+                    "model_code": "M-3",
+                    "model_name": "Model 3",
+                    "planned_quantity": 300,
+                    "actual_quantity": 0,
+                    "current_stage": "cutting",
+                    "current_stage_status": "waiting",
+                    "po_overdue": True,
+                    "po_deadline": "2026-08-07T10:00:00+00:00",
+                    "stages": [
+                        {"operation": "cutting", "status": "waiting", "deadline": "2026-08-07T10:00:00+00:00", "overdue": True},
+                    ],
+                },
             ],
         )
 
@@ -209,7 +225,10 @@ async def test_erp_business_control_builds_process_snapshot() -> None:
     result = await _with_client(handler, callback)
     assert result["ok"] is True
     assert result["source"] == "/api/process-tracking"
-    assert result["data"]["total_orders"] == 2
+    assert result["data"]["total_orders"] == 3
+    assert result["data"]["cutting_department"]["orders"] == 1
+    assert result["data"]["cutting_department"]["planned_quantity"] == 300
+    assert result["data"]["answer_hints"]["cutting_department"]["top_orders"][0]["production_no"] == "PO-3"
     assert result["data"]["answer_hints"]["busiest_sewing_flow"]["flow"] == "Line A"
     assert result["data"]["answer_hints"]["busiest_sewing_flow"]["planned_quantity"] == 1000
     assert result["data"]["answer_hints"]["next_warehouse_order"]["production_no"] == "PO-1"

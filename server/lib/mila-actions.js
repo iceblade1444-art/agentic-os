@@ -207,9 +207,11 @@ export function createMilaActions(options = {}) {
         callTool("erp_finance_summary").catch((error) => ({ ok: false, error: { message: error.message } })),
       ]);
       return {
+        source_policy: "Answer ERP business questions only from these live ERP tool results. If a needed field is missing, say the ERP data is missing instead of guessing.",
         erp_user: me?.data || me,
         production: production?.data || production,
         business_control: control?.data || control,
+        cutting_department: control?.data?.cutting_department || null,
         inventory: inventory?.data || inventory,
         finance: finance?.data || finance,
         answer_hints: control?.data?.answer_hints || {},

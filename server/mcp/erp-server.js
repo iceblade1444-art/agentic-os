@@ -165,6 +165,7 @@ function businessControlSnapshot(rows, limit = 25) {
   const blocked = [];
   const overdue = [];
   const warehouse = [];
+  const cuttingOrders = [];
 
   for (const item of Array.isArray(rows) ? rows : []) {
     if (!item || typeof item !== "object") continue;
@@ -192,6 +193,16 @@ function businessControlSnapshot(rows, limit = 25) {
     if (item.po_overdue || (Array.isArray(item.stages) && item.stages.some((stageItem) => stageItem?.overdue))) {
       overdue.push({ ...brief, stage, deadline: item.po_deadline });
     }
+    if (stage === "cutting") {
+      const cutting = findStage(item, "cutting");
+      cuttingOrders.push({
+        ...brief,
+        status: item.current_stage_status,
+        deadline: item.po_deadline || cutting?.deadline,
+        overdue: Boolean(item.po_overdue || cutting?.overdue),
+        blocked: Boolean(item.is_blocked),
+      });
+    }
 
     const storage = findStage(item, "storage_transfer");
     if (storage) {
@@ -204,16 +215,38 @@ function businessControlSnapshot(rows, limit = 25) {
     }
   }
 
+  const stageSummary = [...stageCounts.values()].sort((a, b) => b.planned_quantity - a.planned_quantity);
+  const cuttingStage = stageSummary.find((item) => item.stage === "cutting") || null;
   const busiest = [...flows.values()].sort((a, b) => (b.planned_quantity - a.planned_quantity) || (b.orders - a.orders));
   const warehouseEta = warehouse.sort((a, b) => String(a.warehouse_eta || "").localeCompare(String(b.warehouse_eta || ""))).slice(0, limit);
+  const cuttingItems = cuttingOrders
+    .sort((a, b) => Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) || String(a.deadline || "").localeCompare(String(b.deadline || "")))
+    .slice(0, limit);
   return {
     total_orders: Array.isArray(rows) ? rows.length : 0,
-    stage_summary: [...stageCounts.values()].sort((a, b) => b.planned_quantity - a.planned_quantity),
+    stage_summary: stageSummary,
+    cutting_department: {
+      source: "/api/process-tracking",
+      stage: "cutting",
+      orders: cuttingStage?.orders || 0,
+      planned_quantity: cuttingStage?.planned_quantity || 0,
+      actual_quantity: cuttingStage?.actual_quantity || 0,
+      overdue_orders: cuttingItems.filter((item) => item.overdue).length,
+      blocked_orders: cuttingItems.filter((item) => item.blocked).length,
+      items: cuttingItems,
+    },
     busiest_sewing_flows: busiest.slice(0, limit),
     blocked_orders: blocked.slice(0, limit),
     overdue_orders: overdue.slice(0, limit),
     warehouse_eta: warehouseEta,
     answer_hints: {
+      cutting_department: {
+        orders: cuttingStage?.orders || 0,
+        planned_quantity: cuttingStage?.planned_quantity || 0,
+        actual_quantity: cuttingStage?.actual_quantity || 0,
+        overdue_orders: cuttingItems.filter((item) => item.overdue).length,
+        top_orders: cuttingItems.slice(0, 5),
+      },
       busiest_sewing_flow: busiest[0] || null,
       next_warehouse_order: warehouseEta[0] || null,
     },
