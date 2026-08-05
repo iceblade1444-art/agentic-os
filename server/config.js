@@ -28,6 +28,8 @@ export const config = {
   erp: {
     baseUrl: strip(env.ERP_API_BASE_URL, "https://erp.milanapremium.uz"),
     bearerToken: env.ERP_MCP_BEARER_TOKEN || "",
+    username: env.ERP_MCP_USERNAME || "",
+    password: env.ERP_MCP_PASSWORD || "",
     authMode: env.ERP_MCP_AUTH_MODE || "bearer",
     requireConfirmation: env.ERP_MCP_REQUIRE_CONFIRMATION !== "false",
     maxBulkRecipients: Math.max(1, Number(env.ERP_MCP_MAX_BULK_RECIPIENTS) || 25),

@@ -38,6 +38,10 @@ def _settings() -> Settings:
     return Settings(erp_api_base_url="http://erp.test", bearer_token="real-user-token")
 
 
+def _login_settings() -> Settings:
+    return Settings(erp_api_base_url="http://erp.test", bearer_token="", username="agentic-os", password="service-password")
+
+
 async def _with_client(
     handler: Callable[[httpx.Request, list[httpx.Request]], httpx.Response],
     callback: Callable[[ERPApiClient, list[httpx.Request], Settings], Any],
@@ -67,6 +71,28 @@ async def test_erp_me_returns_authenticated_user() -> None:
     result = await _with_client(handler, callback)
     assert result["ok"] is True
     assert result["data"]["id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_erp_client_can_login_for_short_lived_bearer_token() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/api/auth/login":
+            assert request.method == "POST"
+            return httpx.Response(200, json={"message": "logged_in"}, headers={"set-cookie": "erp_access_token=fresh-token; Path=/"})
+        assert request.url.path == "/api/auth/me"
+        assert request.headers["authorization"] == "Bearer fresh-token"
+        return _json_response(200, ME)
+
+    settings = _login_settings()
+    async with httpx.AsyncClient(base_url=settings.erp_api_base_url, transport=httpx.MockTransport(handler)) as raw:
+        client = ERPApiClient(settings=settings, http_client=raw)
+        result = await erp_me_tool(settings=settings, client=client)
+
+    assert result["ok"] is True
+    assert [request.url.path for request in seen] == ["/api/auth/login", "/api/auth/me"]
 
 
 @pytest.mark.asyncio

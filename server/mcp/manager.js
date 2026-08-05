@@ -43,6 +43,8 @@ function erpEnv() {
     ERP_API_BASE_URL: config.erp.baseUrl,
     ERP_MCP_AUTH_MODE: config.erp.authMode,
     ERP_MCP_BEARER_TOKEN: config.erp.bearerToken,
+    ERP_MCP_USERNAME: config.erp.username,
+    ERP_MCP_PASSWORD: config.erp.password,
     ERP_MCP_REQUIRE_CONFIRMATION: String(config.erp.requireConfirmation),
     ERP_MCP_MAX_BULK_RECIPIENTS: String(config.erp.maxBulkRecipients),
   };

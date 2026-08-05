@@ -68,6 +68,7 @@ function head() {
   return `<div class="page-head">
     <div><h1>${t("erp.title")}</h1><p>${t("erp.subtitle")}</p></div>
     <div class="spacer"></div>
+    <button class="btn btn-secondary" id="erpWikiSync">${icon("knowledge")}Sync wiki</button>
     <button class="btn btn-secondary" id="erpRefresh">${icon("refresh")}${t("erp.refresh")}</button>
   </div>`;
 }
@@ -370,6 +371,14 @@ async function load(root) {
 
 function bind(root) {
   root.querySelector("#erpRefresh")?.addEventListener("click", () => load(root));
+  root.querySelector("#erpWikiSync")?.addEventListener("click", async () => {
+    try {
+      const result = await api.erp.wikiSync();
+      toast("success", "ERP wiki", `${result.notes?.length || 0} Obsidian notes updated`);
+    } catch (err) {
+      toast("error", "ERP wiki", err.message);
+    }
+  });
   root.querySelectorAll("[data-erp-prompt]").forEach((button) => {
     button.addEventListener("click", async () => {
       const prompt = button.dataset.erpPrompt || "";

@@ -7,10 +7,14 @@ import { z } from "zod";
 const config = {
   baseUrl: (process.env.ERP_API_BASE_URL || "https://erp.milanapremium.uz").replace(/\/$/, ""),
   token: process.env.ERP_MCP_BEARER_TOKEN || "",
+  username: process.env.ERP_MCP_USERNAME || "",
+  password: process.env.ERP_MCP_PASSWORD || "",
   authMode: process.env.ERP_MCP_AUTH_MODE || "bearer",
   requireConfirmation: process.env.ERP_MCP_REQUIRE_CONFIRMATION !== "false",
   maxBulkRecipients: Math.max(1, Number(process.env.ERP_MCP_MAX_BULK_RECIPIENTS) || 25),
 };
+
+let sessionToken = "";
 
 const jsonText = (value) => ({ content: [{ type: "text", text: JSON.stringify(value, null, 2) }] });
 
@@ -19,7 +23,7 @@ function notConfigured(tool) {
     ok: false,
     status: "not_configured",
     tool,
-    message: "Set ERP_MCP_BEARER_TOKEN in Agentic OS .env to enable Milana ERP access.",
+    message: "Set ERP_MCP_BEARER_TOKEN or ERP_MCP_USERNAME/ERP_MCP_PASSWORD in Agentic OS .env to enable Milana ERP access.",
     baseUrl: config.baseUrl,
   });
 }
@@ -29,12 +33,13 @@ function normalizeArgs(args = {}) {
 }
 
 async function callErpTool(tool, args = {}, preferredMethod = "POST") {
-  if (!config.token) return notConfigured(tool);
+  const auth = await erpAuthHeader();
+  if (!auth) return notConfigured(tool);
   const payload = normalizeArgs(args);
   const headers = {
     Accept: "application/json",
     "Content-Type": "application/json",
-    Authorization: `${config.authMode === "bearer" ? "Bearer" : config.authMode} ${config.token}`,
+    Authorization: auth,
   };
 
   const endpoint = `${config.baseUrl}/api/mcp/${encodeURIComponent(tool)}`;
@@ -68,7 +73,8 @@ async function callErpTool(tool, args = {}, preferredMethod = "POST") {
 }
 
 async function fetchErpPath(pathname, args = {}) {
-  if (!config.token) return notConfigured(pathname);
+  const auth = await erpAuthHeader();
+  if (!auth) return notConfigured(pathname);
   const payload = normalizeArgs(args);
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(payload)) {
@@ -78,7 +84,7 @@ async function fetchErpPath(pathname, args = {}) {
     method: "GET",
     headers: {
       Accept: "application/json",
-      Authorization: `${config.authMode === "bearer" ? "Bearer" : config.authMode} ${config.token}`,
+      Authorization: auth,
     },
   });
   const text = await response.text();
@@ -86,6 +92,38 @@ async function fetchErpPath(pathname, args = {}) {
   try { data = text ? JSON.parse(text) : {}; } catch { data = { text }; }
   if (!response.ok) return jsonText({ ok: false, status: "erp_error", tool: pathname, httpStatus: response.status, message: data.error || data.message || text.slice(0, 600) || "ERP request failed" });
   return jsonText({ ok: true, data, source: pathname });
+}
+
+async function erpAuthHeader() {
+  if (config.token) return `${config.authMode === "bearer" ? "Bearer" : config.authMode} ${config.token}`;
+  if (!config.username || !config.password) return "";
+  if (!sessionToken) sessionToken = await loginErp();
+  return `Bearer ${sessionToken}`;
+}
+
+async function loginErp() {
+  const body = new URLSearchParams();
+  body.set("username", config.username);
+  body.set("password", config.password);
+  const response = await fetch(`${config.baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const setCookie = response.headers.get("set-cookie") || "";
+  const match = setCookie.match(/(?:^|;\s*)erp_access_token=([^;]+)/) || setCookie.match(/erp_access_token=([^;]+)/);
+  let token = match?.[1] ? decodeURIComponent(match[1]) : "";
+  if (!token) {
+    const text = await response.text();
+    try {
+      const data = text ? JSON.parse(text) : {};
+      token = data.access_token || "";
+    } catch {
+      token = "";
+    }
+  }
+  if (!response.ok || !token) throw new Error("ERP login failed");
+  return token;
 }
 
 function numberValue(value) {

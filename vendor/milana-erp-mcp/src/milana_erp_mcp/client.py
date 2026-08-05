@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from http.cookies import SimpleCookie
 from typing import Any
 
 import httpx
@@ -39,6 +40,7 @@ class ERPApiClient:
             timeout=self.settings.http_timeout_seconds,
             follow_redirects=False,
         )
+        self._session_token: str | None = None
 
     async def __aenter__(self) -> "ERPApiClient":
         return self
@@ -63,7 +65,7 @@ class ERPApiClient:
             headers = {
                 "Accept": "application/json",
                 "User-Agent": "milana-erp-mcp/0.1",
-                **auth_headers(self.settings),
+                **(await self._auth_headers()),
             }
             response = await self._client.request(method, api_path, params=params, json=json_body, headers=headers)
         except MCPAuthConfigError as exc:
@@ -92,6 +94,41 @@ class ERPApiClient:
         data = await self.get("/api/auth/me")
         return data if isinstance(data, dict) else {"raw": data}
 
+    async def _auth_headers(self) -> dict[str, str]:
+        if self.settings.bearer_token_value:
+            return auth_headers(self.settings)
+        username = self.settings.login_username_value
+        password = self.settings.login_password_value
+        if not username or not password:
+            return auth_headers(self.settings)
+        if not self._session_token:
+            await self._login(username, password)
+        return {"Authorization": f"Bearer {self._session_token}"}
+
+    async def _login(self, username: str, password: str) -> None:
+        try:
+            response = await self._client.post(
+                "/api/auth/login",
+                data={"username": username, "password": password},
+                headers={"Accept": "application/json", "User-Agent": "milana-erp-mcp/0.1"},
+            )
+        except httpx.TimeoutException as exc:
+            raise ERPApiError(504, "ERP login timed out", path="/api/auth/login") from exc
+        except httpx.RequestError as exc:
+            raise ERPApiError(502, "ERP login request failed", path="/api/auth/login") from exc
+        if response.status_code >= 400:
+            raise ERPApiError(response.status_code, _error_detail(response), path="/api/auth/login")
+        token = response.cookies.get("erp_access_token") or _cookie_value(response, "erp_access_token")
+        if not token:
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = {}
+            token = payload.get("access_token") if isinstance(payload, dict) else None
+        if not token:
+            raise ERPApiError(401, "ERP login did not return an access token", path="/api/auth/login")
+        self._session_token = str(token)
+
 
 def _error_detail(response: httpx.Response) -> str:
     try:
@@ -104,3 +141,12 @@ def _error_detail(response: httpx.Response) -> str:
         detail = payload
     return str(detail)[:500]
 
+
+def _cookie_value(response: httpx.Response, name: str) -> str | None:
+    raw_cookie = response.headers.get("set-cookie")
+    if not raw_cookie:
+        return None
+    parsed = SimpleCookie()
+    parsed.load(raw_cookie)
+    value = parsed.get(name)
+    return value.value if value else None

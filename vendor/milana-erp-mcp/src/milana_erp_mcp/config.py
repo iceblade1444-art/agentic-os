@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     erp_api_base_url: str = Field(default="http://localhost:8000", alias="ERP_API_BASE_URL")
     auth_mode: Literal["bearer"] = Field(default="bearer", alias="ERP_MCP_AUTH_MODE")
     bearer_token: SecretStr | None = Field(default=None, alias="ERP_MCP_BEARER_TOKEN")
+    username: str | None = Field(default=None, alias="ERP_MCP_USERNAME")
+    password: SecretStr | None = Field(default=None, alias="ERP_MCP_PASSWORD")
     require_confirmation: bool = Field(default=True, alias="ERP_MCP_REQUIRE_CONFIRMATION")
     max_bulk_recipients: int = Field(default=25, ge=1, le=250, alias="ERP_MCP_MAX_BULK_RECIPIENTS")
     http_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0, alias="ERP_MCP_HTTP_TIMEOUT_SECONDS")
@@ -39,8 +41,19 @@ class Settings(BaseSettings):
         token = self.bearer_token.get_secret_value().strip()
         return token or None
 
+    @property
+    def login_username_value(self) -> str | None:
+        value = (self.username or "").strip()
+        return value or None
+
+    @property
+    def login_password_value(self) -> str | None:
+        if self.password is None:
+            return None
+        value = self.password.get_secret_value().strip()
+        return value or None
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

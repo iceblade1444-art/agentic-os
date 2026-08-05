@@ -73,6 +73,13 @@ export const MILA_TOOLS = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "get_erp_business_context",
+    description: "Read live Milana ERP business context for questions about production, sewing flow load, warehouse ETA, inventory, finance and operational risks.",
+    parameters: { type: "object", properties: {
+      limit: { type: "integer", minimum: 1, maximum: 100, description: "Maximum rows for ERP control sections" },
+    } },
+  },
+  {
     name: "call_mcp_tool",
     description: "Stage or confirm a call to any connected Agentic OS MCP tool. This always uses two-step confirmation because MCP tools can read, write or control external systems.",
     parameters: { type: "object", properties: {

@@ -186,6 +186,35 @@ export function createMilaActions(options = {}) {
   }
 
   async function executeRead(name, args, context) {
+    if (name === "get_erp_business_context") {
+      const server = db.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
+      if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
+      if (!mcpManager.isLive(server.id)) {
+        const connected = await mcpManager.connect(server);
+        db.mcp.update(server.id, { status: "active", tools: connected.tools });
+      }
+      const limit = integer(args.limit, 1, 100, 25);
+      const callTool = async (tool, toolArgs = {}) => {
+        const result = await mcpManager.callTool(server.id, tool, toolArgs);
+        const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
+        try { return JSON.parse(text); } catch { return { ok: true, text }; }
+      };
+      const [me, production, control, inventory, finance] = await Promise.all([
+        callTool("erp_me"),
+        callTool("erp_active_production", { limit }),
+        callTool("erp_business_control", { limit }),
+        callTool("erp_inventory_status"),
+        callTool("erp_finance_summary").catch((error) => ({ ok: false, error: { message: error.message } })),
+      ]);
+      return {
+        erp_user: me?.data || me,
+        production: production?.data || production,
+        business_control: control?.data || control,
+        inventory: inventory?.data || inventory,
+        finance: finance?.data || finance,
+        answer_hints: control?.data?.answer_hints || {},
+      };
+    }
     if (name === "list_mcp_tools") {
       const servers = db.mcp.list();
       return {

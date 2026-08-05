@@ -189,6 +189,7 @@ export const api = {
   erp: {
     snapshot: () => j("/api/erp"),
     tool: (tool, args = {}) => j("/api/erp/tool", { method: "POST", body: { tool, args } }),
+    wikiSync: () => j("/api/erp/wiki-sync", { method: "POST" }),
   },
   missions: {
     list: () => j("/api/missions"),
