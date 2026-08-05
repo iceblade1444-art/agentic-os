@@ -11,8 +11,8 @@ if (!server) {
 }
 
 console.log(`ERP base URL: ${config.erp.baseUrl}`);
-if (!config.erp.bearerToken) {
-  console.error("ERP_MCP_BEARER_TOKEN is missing. Add it to .env before running a live ERP check.");
+if (!config.erp.bearerToken && (!config.erp.username || !config.erp.password)) {
+  console.error("ERP credentials are missing. Add ERP_MCP_BEARER_TOKEN or ERP_MCP_USERNAME/ERP_MCP_PASSWORD to .env before running a live ERP check.");
   process.exit(1);
 }
 
