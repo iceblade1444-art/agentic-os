@@ -37,6 +37,12 @@ export const config = {
     args: env.ERP_MCP_ARGS || "",
     pythonModule: env.ERP_MCP_PYTHON_MODULE || "",
   },
+  higgsfield: {
+    apiKey: env.HIGGSFIELD_API_KEY || "",
+    apiSecret: env.HIGGSFIELD_API_SECRET || "",
+    baseUrl: strip(env.HIGGSFIELD_BASE_URL, "https://platform.higgsfield.ai"),
+    imageModels: env.HIGGSFIELD_IMAGE_MODELS || "",
+  },
   autoConnectObsidian: env.AUTO_CONNECT_OBSIDIAN !== "false",
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),

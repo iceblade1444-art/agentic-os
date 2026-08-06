@@ -156,16 +156,6 @@ function designContent() {
       <div class="studio-card-foot"><button class="btn btn-secondary sm" data-edit-model="${esc(item.id)}">${icon("edit")}${t("system.edit")}</button><button class="btn btn-ghost sm" data-generate-image="${esc(item.id)}">${icon("sparkles")}${t("studio.design.generateImage")}</button></div></div>
     </article>`;
   }).join("");
-  const imageJobs = snapshot.generationJobs.filter((item) => item.type === "image").map((item) => {
-    const model = snapshot.models.find((entry) => entry.id === item.modelId);
-    return `<article class="studio-job">
-      <span class="studio-job-icon">${item.outputUrl ? `<img src="${esc(item.outputUrl)}" alt=""/>` : icon("image")}</span>
-      <div><div class="row gap-2">${status("job", item.status)}<code>${esc(item.aspectRatio)}</code>${model ? `<span class="studio-kicker">${esc(model.name)}</span>` : ""}</div><h3>${esc(item.brief)}</h3>
-      <p>Higgsfield MCP · Hermes${item.kanbanTaskId ? ` · ${esc(item.kanbanTaskId)}` : ""}</p></div>
-      <div class="row gap-1"><button class="icon-btn tip" data-sync-image="${esc(item.id)}" data-tip="${t("studio.media.sync")}">${icon("refresh")}</button>
-      ${item.outputUrl ? `<a class="icon-btn" href="${esc(item.outputUrl)}" target="_blank" rel="noopener">${icon("external")}</a>` : `<a class="icon-btn" href="#/kanban">${icon("arrowright")}</a>`}</div>
-    </article>`;
-  }).join("");
   return `<div class="studio-metrics">${metric(t("studio.design.collections"), snapshot.collections.length)}${metric(t("studio.design.models"), snapshot.models.length)}${metric(t("studio.design.approved"), snapshot.models.filter((item) => ["approved","production","released"].includes(item.status)).length)}${metric(t("studio.design.avgForecast"), `${snapshot.analytics.avgForecast}%`)}</div>
     <section class="studio-band"><header><div><h2>${t("studio.design.collections")}</h2><p>${t("studio.design.collectionsHint")}</p></div></header>
       <div class="studio-collection-grid">${collections || empty("layers", t("studio.design.emptyCollections"), t("studio.design.emptyCollectionsText"), `<button class="btn btn-primary sm" id="emptyCollection">${icon("plus")}${t("studio.design.newCollection")}</button>`)}</div>
@@ -173,9 +163,117 @@ function designContent() {
     <section class="studio-band"><header><div><h2>${t("studio.design.models")}</h2><p>${t("studio.design.modelsHint")}</p></div></header>
       <div class="studio-model-grid">${models || empty("image", t("studio.design.emptyModels"), t("studio.design.emptyModelsText"), `<button class="btn btn-primary sm" id="emptyModel">${icon("plus")}${t("studio.design.newModel")}</button>`)}</div>
     </section>
-    <section class="studio-band"><header><div><h2>${t("studio.design.imageGeneration")}</h2><p>${t("studio.design.imageGenerationHint")}</p></div><button class="btn btn-primary sm" id="newImageJob">${icon("sparkles")}${t("studio.design.newImage")}</button></header>
-      <div class="studio-job-list">${imageJobs || empty("sparkles", t("studio.design.emptyImages"), t("studio.design.emptyImagesText"))}</div>
-    </section>`;
+    ${imageStudio()}`;
+}
+
+function imageFeedItem(item) {
+  const style = snapshot.models.find((entry) => entry.id === item.modelId);
+  const engine = (snapshot.higgsfield?.models || []).find((entry) => entry.id === item.engine);
+  const running = ["queued", "running"].includes(item.status);
+  return `<article class="studio-genitem">
+    <div class="studio-genitem-head">${status("job", item.status)}<code>${esc(item.aspectRatio)}</code>${engine ? `<code>${esc(engine.label)}</code>` : ""}${style ? `<span class="studio-kicker">${esc(style.name)}</span>` : ""}
+      <span class="studio-genitem-actions">${item.kanbanTaskId && !item.outputUrl ? `<button class="icon-btn tip" data-sync-image="${esc(item.id)}" data-tip="${t("studio.media.sync")}">${icon("refresh")}</button>` : ""}${item.outputUrl ? `<a class="icon-btn" href="${esc(item.outputUrl)}" target="_blank" rel="noopener">${icon("external")}</a>` : ""}</span></div>
+    <p>${esc(item.brief)}</p>
+    ${item.outputUrl ? `<a class="studio-genitem-media" href="${esc(item.outputUrl)}" target="_blank" rel="noopener"><img src="${esc(item.outputUrl)}" alt="" loading="lazy"/></a>`
+      : running ? `<div class="studio-genitem-wait">${icon("refresh")}<span>${t("studio.design.waiting")}</span></div>`
+      : item.error ? `<div class="studio-genitem-error">${esc(item.error)}</div>` : ""}
+  </article>`;
+}
+
+function imageFeed() {
+  const jobs = snapshot.generationJobs.filter((item) => item.type === "image");
+  return jobs.map(imageFeedItem).join("") || empty("sparkles", t("studio.design.emptyImages"), t("studio.design.emptyImagesText"));
+}
+
+function imageStudio() {
+  const hf = snapshot.higgsfield || {};
+  const engines = (hf.models || []).map((item) => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
+  const styles = snapshot.models.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
+  return `<section class="studio-band" id="imageStudio"><header><div><h2>${t("studio.design.imageGeneration")}</h2><p>${t(hf.direct ? "studio.design.imageGenerationHintDirect" : "studio.design.imageGenerationHint")}</p></div></header>
+    <div class="studio-genbar">
+      <div class="studio-genbar-controls">
+        ${hf.direct ? `<label class="field"><span class="label">${t("studio.design.engine")}</span><select class="select" id="genEngine">${engines}</select></label>` : ""}
+        <label class="field"><span class="label">${t("studio.media.aspect")}</span><select class="select" id="genAspect"><option>4:5</option><option>1:1</option><option>3:4</option><option>2:3</option><option>16:9</option><option>9:16</option></select></label>
+        ${hf.direct ? `<label class="field"><span class="label">${t("studio.design.quality")}</span><select class="select" id="genQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></label>` : ""}
+        <label class="field"><span class="label">${t("studio.design.styleLink")}</span><select class="select" id="genStyle"><option value="">—</option>${styles}</select></label>
+      </div>
+      <div class="studio-genbar-input">
+        <textarea class="textarea" id="genPrompt" rows="2" placeholder="${t("studio.design.promptPlaceholder")}"></textarea>
+        <button class="btn btn-primary" id="genRun">${icon("sparkles")}${t("studio.design.generate")}</button>
+      </div>
+    </div>
+    <div class="studio-genfeed" id="genFeed">${imageFeed()}</div>
+  </section>`;
+}
+
+function wireImageFeed() {
+  root.querySelectorAll("[data-sync-image]").forEach((button) => button.onclick = async () => {
+    button.classList.add("loading");
+    try {
+      await api.studio.syncGeneration(button.dataset.syncImage);
+      toast("success", t("studio.media.synced"), t("studio.media.syncedText"));
+      await refreshDesign();
+    } catch (error) { toast("error", t("studio.media.syncFailed"), error.message); }
+    finally { button.classList.remove("loading"); }
+  });
+}
+
+async function refreshImageFeed() {
+  await load();
+  const feed = root?.querySelector("#genFeed");
+  if (!feed) return;
+  feed.innerHTML = imageFeed();
+  wireImageFeed();
+  scheduleImagePolling();
+}
+
+let imagePollTimer = null;
+function scheduleImagePolling() {
+  clearTimeout(imagePollTimer);
+  if (!root?.isConnected) return;
+  const running = snapshot.generationJobs.filter((item) =>
+    item.type === "image" && item.higgsfieldRequestId && ["queued", "running"].includes(item.status));
+  if (!running.length) return;
+  imagePollTimer = setTimeout(async () => {
+    if (!root?.isConnected) return;
+    let finished = false;
+    for (const job of running) {
+      try {
+        const { job: updated } = await api.studio.pollGeneration(job.id);
+        if (["complete", "failed"].includes(updated.status)) finished = true;
+      } catch { /* transient — keep polling */ }
+    }
+    if (!root?.isConnected) return;
+    if (finished) await refreshDesign();
+    else await refreshImageFeed();
+  }, 4000);
+}
+
+async function runImageGeneration() {
+  const promptBox = root.querySelector("#genPrompt");
+  const brief = promptBox.value.trim();
+  if (!brief) { promptBox.focus(); return; }
+  const button = root.querySelector("#genRun");
+  button.classList.add("loading");
+  button.disabled = true;
+  try {
+    const created = await api.studio.create("generations", {
+      type: "image",
+      brief,
+      aspectRatio: root.querySelector("#genAspect").value,
+      modelId: root.querySelector("#genStyle")?.value || "",
+      engine: root.querySelector("#genEngine")?.value || "",
+    });
+    if (snapshot.higgsfield?.direct) {
+      await api.studio.runGeneration(created.id, { quality: root.querySelector("#genQuality")?.value || "" });
+    } else {
+      await api.studio.queueGeneration(created.id);
+      toast("success", t("studio.media.queued"), t("studio.media.queuedText"));
+    }
+    promptBox.value = "";
+    await refreshImageFeed();
+  } catch (error) { toast("error", t("studio.media.queueFailed"), error.message); }
+  finally { button.classList.remove("loading"); button.disabled = false; }
 }
 
 function wireDesign() {
@@ -187,18 +285,18 @@ function wireDesign() {
     collectionModal(snapshot.collections.find((item) => item.id === button.dataset.editCollection)));
   root.querySelectorAll("[data-edit-model]").forEach((button) => button.onclick = () =>
     modelModal(snapshot.models.find((item) => item.id === button.dataset.editModel)));
-  const imageModal = (modelId = "") => generationModal({ type: "image", modelId, onDone: refreshDesign });
-  root.querySelector("#newImageJob")?.addEventListener("click", () => imageModal());
-  root.querySelectorAll("[data-generate-image]").forEach((button) => button.onclick = () => imageModal(button.dataset.generateImage));
-  root.querySelectorAll("[data-sync-image]").forEach((button) => button.onclick = async () => {
-    button.classList.add("loading");
-    try {
-      await api.studio.syncGeneration(button.dataset.syncImage);
-      toast("success", t("studio.media.synced"), t("studio.media.syncedText"));
-      await refreshDesign();
-    } catch (error) { toast("error", t("studio.media.syncFailed"), error.message); }
-    finally { button.classList.remove("loading"); }
+  root.querySelector("#genRun")?.addEventListener("click", runImageGeneration);
+  root.querySelector("#genPrompt")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); runImageGeneration(); }
   });
+  root.querySelectorAll("[data-generate-image]").forEach((button) => button.onclick = () => {
+    const select = root.querySelector("#genStyle");
+    if (select) select.value = button.dataset.generateImage;
+    root.querySelector("#imageStudio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    root.querySelector("#genPrompt")?.focus({ preventScroll: true });
+  });
+  wireImageFeed();
+  scheduleImagePolling();
 }
 
 async function refreshDesign() {

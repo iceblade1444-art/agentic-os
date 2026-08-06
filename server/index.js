@@ -114,7 +114,7 @@ app.set("trust proxy", 1); // behind nginx — correct req.ip / req.secure
 // Security headers + CSP
 const CSP = [
   "default-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https:", // https: — generated media (Higgsfield CDN) renders in Studio
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "connect-src 'self' https://api.openai.com https://api.anthropic.com wss://agent.milanapremium.uz wss://generativelanguage.googleapis.com",

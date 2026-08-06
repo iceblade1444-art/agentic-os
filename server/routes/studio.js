@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { authenticatedUser } from "../lib/auth.js";
 import { governance } from "../lib/governance.js";
 import { hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
+import { pollRequest, submitImage } from "../lib/higgsfield.js";
 import { studio } from "../lib/studio.js";
 
 const r = Router();
@@ -50,6 +51,39 @@ for (const [bucket, service] of Object.entries(buckets)) {
     res.status(204).end();
   }));
 }
+
+r.post("/generations/:id/run", handle(async (req, res) => {
+  const job = studio.snapshot().generationJobs.find((item) => item.id === req.params.id);
+  if (!job) return res.status(404).json({ error: "Generation job not found" });
+  const submitted = await submitImage({
+    model: job.engine,
+    prompt: job.brief,
+    aspectRatio: job.aspectRatio,
+    quality: String(req.body?.quality || ""),
+  });
+  const updated = studio.generations.update(job.id, {
+    status: "running",
+    engine: submitted.model,
+    higgsfieldRequestId: submitted.requestId,
+    error: "",
+  });
+  audit(req, "studio.higgsfield.run", job.id, `${submitted.model}; ${submitted.requestId}`);
+  res.json({ job: updated });
+}));
+
+r.post("/generations/:id/poll", handle(async (req, res) => {
+  const job = studio.snapshot().generationJobs.find((item) => item.id === req.params.id);
+  if (!job) return res.status(404).json({ error: "Generation job not found" });
+  if (!job.higgsfieldRequestId) return res.status(409).json({ error: "Job has no Higgsfield request" });
+  const state = await pollRequest(job.higgsfieldRequestId);
+  const updated = studio.generations.update(job.id, {
+    status: state.done ? "complete" : state.failed ? "failed" : "running",
+    outputUrl: state.outputUrl || job.outputUrl,
+    error: state.error,
+  });
+  if (updated.status === "complete" && updated.outputUrl) studio.generations.attachOutput(updated.id);
+  res.json({ job: updated });
+}));
 
 r.post("/generations/:id/queue", handle(async (req, res) => {
   const snapshot = studio.snapshot();

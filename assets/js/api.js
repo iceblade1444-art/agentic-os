@@ -261,6 +261,8 @@ export const api = {
     remove: (bucket, id) => j(`/api/studio/${encodeURIComponent(bucket)}/${encodeURIComponent(id)}`, { method: "DELETE" }),
     queueGeneration: (id, priority = 1) => j(`/api/studio/generations/${encodeURIComponent(id)}/queue`, { method: "POST", body: { priority } }),
     syncGeneration: (id) => j(`/api/studio/generations/${encodeURIComponent(id)}/sync`, { method: "POST" }),
+    runGeneration: (id, body = {}) => j(`/api/studio/generations/${encodeURIComponent(id)}/run`, { method: "POST", body }),
+    pollGeneration: (id) => j(`/api/studio/generations/${encodeURIComponent(id)}/poll`, { method: "POST" }),
   },
   claude: {
     status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),

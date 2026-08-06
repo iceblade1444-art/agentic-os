@@ -45,7 +45,10 @@ test("Studio persists a complete product-to-media workflow and explains recommen
 
   const imageJob = studio.generations.create({
     type: "image", brief: "Hero image on a beige studio backdrop.", modelId: model.id,
+    engine: "reve/text-to-image", higgsfieldRequestId: "req_local",
   });
+  assert.equal(imageJob.engine, "reve/text-to-image");
+  assert.equal(imageJob.higgsfieldRequestId, "req_local");
   assert.equal(studio.generations.attachOutput(imageJob.id), null);
   studio.generations.update(imageJob.id, { status: "complete", outputUrl: "https://cdn.higgsfield.ai/renders/coat-hero.png" });
   const attached = studio.generations.attachOutput(imageJob.id);
@@ -80,6 +83,8 @@ test("Studio pages are operator-only and generation jobs route through Hermes", 
   assert.match(route, /assignee:\s*"reach"/);
   assert.match(route, /config\.hermesKanbanBoard/);
   assert.match(route, /attachOutput/);
+  assert.match(route, /generations\/:id\/run/);
+  assert.match(route, /generations\/:id\/poll/);
   assert.match(app, /\{\s*group:\s*"Studio"/);
   assert.match(app, /design,\s*media,\s*analytics/);
   assert.match(page, /studio\.design\.imageGeneration/);

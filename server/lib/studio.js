@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { config } from "../config.js";
+import { higgsfieldEnabled, higgsfieldImageModels } from "./higgsfield.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 
 const FILE = path.join(path.resolve(config.dataDir), "studio.json");
@@ -185,6 +186,8 @@ function generationInput(input = {}, current = {}) {
     modelId: text(input.modelId ?? current.modelId, 100),
     campaignId: text(input.campaignId ?? current.campaignId, 100),
     aspectRatio: text(input.aspectRatio ?? current.aspectRatio, 20) || (type === "video" ? "9:16" : "4:5"),
+    engine: text(input.engine ?? current.engine, 120),
+    higgsfieldRequestId: text(input.higgsfieldRequestId ?? current.higgsfieldRequestId, 120),
     outputUrl: text(input.outputUrl ?? current.outputUrl, 2000),
     kanbanTaskId: text(input.kanbanTaskId ?? current.kanbanTaskId, 100),
     provider: "higgsfield",
@@ -247,6 +250,8 @@ export const studio = {
         transport: "mcp",
         endpoint: "https://mcp.higgsfield.ai/mcp",
         orchestrator: "hermes",
+        direct: higgsfieldEnabled(),
+        models: higgsfieldImageModels(),
       },
     };
   },
