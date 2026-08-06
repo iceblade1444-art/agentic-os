@@ -77,6 +77,74 @@ ${safeJson(context)}
 `.trim();
 }
 
+function unwrapErpCard(card) {
+  if (!card || typeof card !== "object") return card || null;
+  return card.data || card.result?.data || card.result || card;
+}
+
+function erpContextFromSnapshot(userText, snapshot = {}) {
+  const cards = snapshot.cards || {};
+  const finishedGoods = unwrapErpCard(cards.erp_finished_goods_stock);
+  const control = unwrapErpCard(cards.erp_business_control);
+  const production = unwrapErpCard(cards.erp_active_production);
+  const inventory = unwrapErpCard(cards.erp_inventory_status);
+  const finance = unwrapErpCard(cards.erp_finance_summary);
+  const finishedHints = finishedGoods?.answer_hints || {};
+  const finishedFacts = {
+    ready_goods_total_pieces: finishedGoods?.total_pieces ?? finishedHints.ready_goods_total_pieces ?? null,
+    total_packages: finishedGoods?.total_packages ?? finishedHints.ready_goods_packages ?? null,
+    total_models: finishedGoods?.total_models ?? finishedGoods?.models_count ?? null,
+    source: finishedGoods?.source || "/api/packages/storage-map",
+    source_page: finishedGoods?.source_page || "/warehouse-stock",
+    map_page: finishedGoods?.map_page || "/warehouse-map",
+    top_ready_goods_model: finishedHints.top_ready_goods_model || finishedGoods?.top_models?.[0] || null,
+  };
+  const answerSummary = finishedFacts.ready_goods_total_pieces == null
+    ? "Finished-goods warehouse stock is missing from the live ERP snapshot; do not guess."
+    : `Finished-goods warehouse stock: ${finishedFacts.ready_goods_total_pieces} pcs, ${finishedFacts.total_packages ?? "-"} packages, ${finishedFacts.total_models ?? "-"} models. Source: /warehouse-stock + /warehouse-map.`;
+  const context = {
+    ok: !!snapshot.ok,
+    source_policy: "This payload is the Agentic OS ERP panel live snapshot. Answer ERP questions only from these fields. For finished-goods warehouse questions use finished_goods_facts.ready_goods_total_pieces or finished_goods_stock.total_pieces only.",
+    facts: finishedFacts,
+    answer_summary: answerSummary,
+    finished_goods_stock: finishedGoods,
+    business_control: control,
+    production,
+    material_inventory: inventory,
+    finance,
+    errors: snapshot.errors || {},
+    server: snapshot.server || {},
+  };
+  if (FINISHED_GOODS_RE.test(String(userText || ""))) return context;
+  return {
+    ...context,
+    answer_hints: {
+      busiest_sewing_flow: control?.answer_hints?.busiest_sewing_flow || null,
+      next_warehouse_order: control?.answer_hints?.next_warehouse_order || null,
+      finished_goods_stock: finishedGoods?.answer_hints || null,
+    },
+  };
+}
+
+function buildErpBaselinePrompt(context) {
+  if (!context) return "";
+  return `
+LIVE ERP BASELINE FOR THIS VOICE CALL:
+${context.answer_summary || "ERP baseline is loaded, but finished-goods facts are missing."}
+
+Strict rules:
+- This baseline comes from the Agentic OS ERP panel at call start.
+- For finished-goods / ready-product warehouse questions, use facts.ready_goods_total_pieces or finished_goods_stock.total_pieces.
+- Finished-goods source of truth is /warehouse-stock + /warehouse-map, backed by /api/packages/storage-map.
+- Do not use production output, sewing output, packaging output, material inventory, GM summary, old memory, or guesses as finished-goods warehouse stock.
+- If a live ERP tool result is available later, prefer that newer tool result over this baseline.
+- If neither this baseline nor a tool result contains the required field, say the ERP value is not available instead of inventing it.
+
+Live ERP baseline payload:
+${safeJson(context)}
+`.trim();
+}
+
 class MilaSessionHub {
   constructor() {
     this.session = null;
@@ -167,12 +235,20 @@ class MilaSessionHub {
     });
   }
 
+  async liveSystemInstruction() {
+    try {
+      const baseline = erpContextFromSnapshot("voice call ERP baseline", await api.erp.snapshot());
+      return [this.systemInstruction("voice"), buildErpBaselinePrompt(baseline)].filter(Boolean).join("\n\n");
+    } catch {
+      return this.systemInstruction("voice");
+    }
+  }
+
   async erpContextFor(text) {
     const value = String(text || "");
     if (!ERP_INTENT_RE.test(value)) return "";
     try {
-      const action = FINISHED_GOODS_RE.test(value) ? "get_finished_goods_stock" : "get_erp_business_context";
-      const context = await api.mila.action(action, { limit: 50 });
+      const context = erpContextFromSnapshot(value, await api.erp.snapshot());
       return buildErpContextPrompt(value, context);
     } catch (error) {
       return `
@@ -254,7 +330,7 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
       listeningProfile: this.state.preferences.listeningProfile,
       transcriptionLanguage: this.state.language,
       inputDeviceId: this.state.preferences.inputDeviceId,
-      systemInstruction: this.systemInstruction(),
+      systemInstruction: await this.liveSystemInstruction(),
       tools: MILA_TOOLS,
       getToken: async () => {
         const body = { language: this.state.language };

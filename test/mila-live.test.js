@@ -253,12 +253,21 @@ test("written ERP questions are enriched with live Agentic OS context", () => {
   const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
   assert.match(session, /ERP_INTENT_RE/);
   assert.match(session, /FINISHED_GOODS_RE/);
-  assert.match(session, /get_finished_goods_stock/);
-  assert.match(session, /get_erp_business_context/);
+  assert.match(session, /erpContextFromSnapshot/);
+  assert.match(session, /api\.erp\.snapshot\(\)/);
   assert.match(session, /this\.erpContextFor\(text\)/);
   assert.match(session, /\/warehouse-stock \+ \/warehouse-map/);
   assert.match(session, /Do not use production output/);
   assert.match(session, /systemPrompt: \[this\.systemInstruction\("text"\), erpContext\]/);
+});
+
+test("Mila live calls receive ERP baseline before the voice session starts", () => {
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  assert.match(session, /async liveSystemInstruction\(\)/);
+  assert.match(session, /LIVE ERP BASELINE FOR THIS VOICE CALL/);
+  assert.match(session, /finished_goods_stock\.total_pieces/);
+  assert.match(session, /systemInstruction: await this\.liveSystemInstruction\(\)/);
+  assert.match(session, /Finished-goods source of truth is \/warehouse-stock \+ \/warehouse-map/);
 });
 
 test("the chat route bounds history, image types and payload size", async () => {
