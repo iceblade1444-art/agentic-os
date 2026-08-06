@@ -263,6 +263,7 @@ export const api = {
     syncGeneration: (id) => j(`/api/studio/generations/${encodeURIComponent(id)}/sync`, { method: "POST" }),
     runGeneration: (id, body = {}) => j(`/api/studio/generations/${encodeURIComponent(id)}/run`, { method: "POST", body }),
     pollGeneration: (id) => j(`/api/studio/generations/${encodeURIComponent(id)}/poll`, { method: "POST" }),
+    higgsfieldConnect: () => j("/api/studio/higgsfield/connect", { method: "POST" }),
   },
   claude: {
     status: (probe = false) => j(`/api/claude-code/status${probe ? "?probe=true" : ""}`),

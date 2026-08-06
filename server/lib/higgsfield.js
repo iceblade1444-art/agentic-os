@@ -8,18 +8,25 @@ const DEFAULT_IMAGE_MODELS = [
   { id: "higgsfield-ai/soul/standard", label: "Higgsfield Soul" },
   { id: "reve/text-to-image", label: "Reve" },
 ];
+// Model ids differ between the Platform API and the MCP connector catalog.
+const DEFAULT_MCP_IMAGE_MODELS = [
+  { id: "soul_2", label: "Higgsfield Soul 2" },
+  { id: "nano_banana_pro", label: "Nano Banana Pro" },
+  { id: "marketing_studio_image", label: "Marketing Studio" },
+];
 const FAILED_STATUSES = new Set(["failed", "error", "nsfw", "canceled", "cancelled"]);
 
 export function higgsfieldEnabled(higgsfield = config.higgsfield) {
   return !!(higgsfield.apiKey && higgsfield.apiSecret);
 }
 
-export function higgsfieldImageModels(higgsfield = config.higgsfield) {
+export function higgsfieldImageModels(higgsfield = config.higgsfield, mode = "api") {
   const configured = String(higgsfield.imageModels || "").split(",").map((entry) => {
     const [id, label] = entry.split("|").map((part) => part.trim());
     return id ? { id, label: label || id } : null;
   }).filter(Boolean);
-  return configured.length ? configured : DEFAULT_IMAGE_MODELS;
+  if (configured.length) return configured;
+  return mode === "mcp" ? DEFAULT_MCP_IMAGE_MODELS : DEFAULT_IMAGE_MODELS;
 }
 
 async function request(path, options, higgsfield, fetchImpl) {

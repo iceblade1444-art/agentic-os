@@ -5,7 +5,10 @@ import { authenticatedUser } from "../lib/auth.js";
 import { governance } from "../lib/governance.js";
 import { hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 import { pollRequest, submitImage } from "../lib/higgsfield.js";
-import { studio } from "../lib/studio.js";
+import {
+  connectHiggsfieldMcp, disconnectHiggsfieldMcp, finishHiggsfieldAuth, mcpGenerateImage, mcpPollJob,
+} from "../lib/higgsfield-mcp.js";
+import { higgsfieldMode, studio } from "../lib/studio.js";
 
 const r = Router();
 const BOARD = config.hermesKanbanBoard;
@@ -52,22 +55,54 @@ for (const [bucket, service] of Object.entries(buckets)) {
   }));
 }
 
+r.post("/higgsfield/connect", handle(async (req, res) => {
+  try {
+    const entry = await connectHiggsfieldMcp();
+    audit(req, "studio.higgsfield.connect", "mcp", `${entry.tools.length} tools`);
+    res.json({ ok: true, authorized: true, tools: entry.tools.length });
+  } catch (error) {
+    if (error.code === "higgsfield_auth_required" && error.authUrl) {
+      audit(req, "studio.higgsfield.connect", "mcp", "authorization requested");
+      return res.json({ ok: false, authorized: false, authUrl: error.authUrl });
+    }
+    throw error;
+  }
+}));
+
+r.get("/higgsfield/oauth/callback", handle(async (req, res) => {
+  const code = String(req.query.code || "");
+  if (!code) return res.status(400).send("Missing authorization code");
+  await finishHiggsfieldAuth(code);
+  audit(req, "studio.higgsfield.authorize", "mcp");
+  res.redirect("/#/design");
+}));
+
+r.post("/higgsfield/logout", handle(async (req, res) => {
+  await disconnectHiggsfieldMcp({ forget: true });
+  audit(req, "studio.higgsfield.logout", "mcp");
+  res.json({ ok: true });
+}));
+
 r.post("/generations/:id/run", handle(async (req, res) => {
   const job = studio.snapshot().generationJobs.find((item) => item.id === req.params.id);
   if (!job) return res.status(404).json({ error: "Generation job not found" });
-  const submitted = await submitImage({
-    model: job.engine,
-    prompt: job.brief,
-    aspectRatio: job.aspectRatio,
-    quality: String(req.body?.quality || ""),
-  });
+  const mode = higgsfieldMode();
+  if (mode === "hermes") {
+    return res.status(503).json({ error: "Direct Higgsfield mode is not configured", code: "higgsfield_disabled" });
+  }
+  const submitted = mode === "api"
+    ? await submitImage({
+      model: job.engine, prompt: job.brief, aspectRatio: job.aspectRatio, quality: String(req.body?.quality || ""),
+    })
+    : await mcpGenerateImage({ model: job.engine, prompt: job.brief, aspectRatio: job.aspectRatio });
   const updated = studio.generations.update(job.id, {
     status: "running",
     engine: submitted.model,
+    via: mode,
     higgsfieldRequestId: submitted.requestId,
     error: "",
   });
-  audit(req, "studio.higgsfield.run", job.id, `${submitted.model}; ${submitted.requestId}`);
+  audit(req, "studio.higgsfield.run", job.id, `${mode}; ${submitted.model}; ${submitted.requestId}`);
   res.json({ job: updated });
 }));
 
@@ -75,7 +110,9 @@ r.post("/generations/:id/poll", handle(async (req, res) => {
   const job = studio.snapshot().generationJobs.find((item) => item.id === req.params.id);
   if (!job) return res.status(404).json({ error: "Generation job not found" });
   if (!job.higgsfieldRequestId) return res.status(409).json({ error: "Job has no Higgsfield request" });
-  const state = await pollRequest(job.higgsfieldRequestId);
+  const state = (job.via || higgsfieldMode()) === "mcp"
+    ? await mcpPollJob(job.higgsfieldRequestId)
+    : await pollRequest(job.higgsfieldRequestId);
   const updated = studio.generations.update(job.id, {
     status: state.done ? "complete" : state.failed ? "failed" : "running",
     outputUrl: state.outputUrl || job.outputUrl,

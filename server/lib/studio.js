@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { higgsfieldEnabled, higgsfieldImageModels } from "./higgsfield.js";
+import { higgsfieldMcpAuthorized } from "./higgsfield-mcp.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 
 const FILE = path.join(path.resolve(config.dataDir), "studio.json");
@@ -187,6 +188,7 @@ function generationInput(input = {}, current = {}) {
     campaignId: text(input.campaignId ?? current.campaignId, 100),
     aspectRatio: text(input.aspectRatio ?? current.aspectRatio, 20) || (type === "video" ? "9:16" : "4:5"),
     engine: text(input.engine ?? current.engine, 120),
+    via: text(input.via ?? current.via, 10),
     higgsfieldRequestId: text(input.higgsfieldRequestId ?? current.higgsfieldRequestId, 120),
     outputUrl: text(input.outputUrl ?? current.outputUrl, 2000),
     kanbanTaskId: text(input.kanbanTaskId ?? current.kanbanTaskId, 100),
@@ -237,6 +239,26 @@ function analyticsSummary() {
   };
 }
 
+// Direct generation prefers Platform API keys, then the OAuth-authorized MCP
+// connector, and finally falls back to the Hermes Kanban route.
+export function higgsfieldMode() {
+  if (higgsfieldEnabled()) return "api";
+  if (higgsfieldMcpAuthorized()) return "mcp";
+  return "hermes";
+}
+
+function higgsfieldSnapshot() {
+  const mode = higgsfieldMode();
+  return {
+    transport: "mcp",
+    endpoint: "https://mcp.higgsfield.ai/mcp",
+    orchestrator: "hermes",
+    mode,
+    direct: mode !== "hermes",
+    models: higgsfieldImageModels(config.higgsfield, mode),
+  };
+}
+
 export const studio = {
   snapshot() {
     return {
@@ -246,13 +268,7 @@ export const studio = {
       signals: data.signals,
       generationJobs: data.generationJobs,
       analytics: analyticsSummary(),
-      higgsfield: {
-        transport: "mcp",
-        endpoint: "https://mcp.higgsfield.ai/mcp",
-        orchestrator: "hermes",
-        direct: higgsfieldEnabled(),
-        models: higgsfieldImageModels(),
-      },
+      higgsfield: higgsfieldSnapshot(),
     };
   },
   collections: {

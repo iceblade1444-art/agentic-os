@@ -41,6 +41,7 @@ export const config = {
     apiKey: env.HIGGSFIELD_API_KEY || "",
     apiSecret: env.HIGGSFIELD_API_SECRET || "",
     baseUrl: strip(env.HIGGSFIELD_BASE_URL, "https://platform.higgsfield.ai"),
+    mcpUrl: strip(env.HIGGSFIELD_MCP_URL, "https://mcp.higgsfield.ai/mcp"),
     imageModels: env.HIGGSFIELD_IMAGE_MODELS || "",
   },
   autoConnectObsidian: env.AUTO_CONNECT_OBSIDIAN !== "false",

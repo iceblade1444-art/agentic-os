@@ -187,14 +187,16 @@ function imageFeed() {
 
 function imageStudio() {
   const hf = snapshot.higgsfield || {};
+  const hint = hf.mode === "api" ? "studio.design.imageGenerationHintDirect"
+    : hf.mode === "mcp" ? "studio.design.imageGenerationHintMcp" : "studio.design.imageGenerationHint";
   const engines = (hf.models || []).map((item) => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
   const styles = snapshot.models.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
-  return `<section class="studio-band" id="imageStudio"><header><div><h2>${t("studio.design.imageGeneration")}</h2><p>${t(hf.direct ? "studio.design.imageGenerationHintDirect" : "studio.design.imageGenerationHint")}</p></div></header>
+  return `<section class="studio-band" id="imageStudio"><header><div><h2>${t("studio.design.imageGeneration")}</h2><p>${t(hint)}</p></div>${hf.direct ? "" : `<button class="btn btn-secondary sm" id="hfConnect">${icon("sparkles")}${t("studio.design.connect")}</button>`}</header>
     <div class="studio-genbar">
       <div class="studio-genbar-controls">
         ${hf.direct ? `<label class="field"><span class="label">${t("studio.design.engine")}</span><select class="select" id="genEngine">${engines}</select></label>` : ""}
         <label class="field"><span class="label">${t("studio.media.aspect")}</span><select class="select" id="genAspect"><option>4:5</option><option>1:1</option><option>3:4</option><option>2:3</option><option>16:9</option><option>9:16</option></select></label>
-        ${hf.direct ? `<label class="field"><span class="label">${t("studio.design.quality")}</span><select class="select" id="genQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></label>` : ""}
+        ${hf.mode === "api" ? `<label class="field"><span class="label">${t("studio.design.quality")}</span><select class="select" id="genQuality"><option value="720p">720p</option><option value="1080p">1080p</option></select></label>` : ""}
         <label class="field"><span class="label">${t("studio.design.styleLink")}</span><select class="select" id="genStyle"><option value="">—</option>${styles}</select></label>
       </div>
       <div class="studio-genbar-input">
@@ -285,6 +287,21 @@ function wireDesign() {
     collectionModal(snapshot.collections.find((item) => item.id === button.dataset.editCollection)));
   root.querySelectorAll("[data-edit-model]").forEach((button) => button.onclick = () =>
     modelModal(snapshot.models.find((item) => item.id === button.dataset.editModel)));
+  root.querySelector("#hfConnect")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.classList.add("loading");
+    try {
+      const result = await api.studio.higgsfieldConnect();
+      if (result.authorized) {
+        toast("success", t("studio.design.connected"), "");
+        await refreshDesign();
+      } else if (result.authUrl) {
+        window.open(result.authUrl, "_blank", "noopener");
+        toast("success", t("studio.design.connectStarted"), t("studio.design.connectText"));
+      }
+    } catch (error) { toast("error", t("studio.design.connectFailed"), error.message); }
+    finally { button.classList.remove("loading"); }
+  });
   root.querySelector("#genRun")?.addEventListener("click", runImageGeneration);
   root.querySelector("#genPrompt")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); runImageGeneration(); }
