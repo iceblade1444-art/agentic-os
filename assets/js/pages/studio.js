@@ -153,7 +153,17 @@ function designContent() {
       <div class="studio-model-body"><div class="row between"><span class="studio-kicker">${esc(item.sku || item.category || t("studio.design.concept"))}</span>${status("model", item.status)}</div>
       <h3>${esc(item.name)}</h3><p>${esc(collection?.name || t("studio.design.noCollection"))}</p>
       <div class="studio-specs"><span>${t("studio.design.priceShort")} ${money(item.price)}</span><span>${t("studio.design.forecastShort")} ${item.forecastScore}%</span><span>${item.targetUnits || 0} ${t("studio.design.unitsShort")}</span></div>
-      <div class="studio-card-foot"><button class="btn btn-secondary sm" data-edit-model="${esc(item.id)}">${icon("edit")}${t("system.edit")}</button><a class="btn btn-ghost sm" href="#/media">${icon("sparkles")}${t("studio.design.createMedia")}</a></div></div>
+      <div class="studio-card-foot"><button class="btn btn-secondary sm" data-edit-model="${esc(item.id)}">${icon("edit")}${t("system.edit")}</button><button class="btn btn-ghost sm" data-generate-image="${esc(item.id)}">${icon("sparkles")}${t("studio.design.generateImage")}</button></div></div>
+    </article>`;
+  }).join("");
+  const imageJobs = snapshot.generationJobs.filter((item) => item.type === "image").map((item) => {
+    const model = snapshot.models.find((entry) => entry.id === item.modelId);
+    return `<article class="studio-job">
+      <span class="studio-job-icon">${item.outputUrl ? `<img src="${esc(item.outputUrl)}" alt=""/>` : icon("image")}</span>
+      <div><div class="row gap-2">${status("job", item.status)}<code>${esc(item.aspectRatio)}</code>${model ? `<span class="studio-kicker">${esc(model.name)}</span>` : ""}</div><h3>${esc(item.brief)}</h3>
+      <p>Higgsfield MCP · Hermes${item.kanbanTaskId ? ` · ${esc(item.kanbanTaskId)}` : ""}</p></div>
+      <div class="row gap-1"><button class="icon-btn tip" data-sync-image="${esc(item.id)}" data-tip="${t("studio.media.sync")}">${icon("refresh")}</button>
+      ${item.outputUrl ? `<a class="icon-btn" href="${esc(item.outputUrl)}" target="_blank" rel="noopener">${icon("external")}</a>` : `<a class="icon-btn" href="#/kanban">${icon("arrowright")}</a>`}</div>
     </article>`;
   }).join("");
   return `<div class="studio-metrics">${metric(t("studio.design.collections"), snapshot.collections.length)}${metric(t("studio.design.models"), snapshot.models.length)}${metric(t("studio.design.approved"), snapshot.models.filter((item) => ["approved","production","released"].includes(item.status)).length)}${metric(t("studio.design.avgForecast"), `${snapshot.analytics.avgForecast}%`)}</div>
@@ -162,6 +172,9 @@ function designContent() {
     </section>
     <section class="studio-band"><header><div><h2>${t("studio.design.models")}</h2><p>${t("studio.design.modelsHint")}</p></div></header>
       <div class="studio-model-grid">${models || empty("image", t("studio.design.emptyModels"), t("studio.design.emptyModelsText"), `<button class="btn btn-primary sm" id="emptyModel">${icon("plus")}${t("studio.design.newModel")}</button>`)}</div>
+    </section>
+    <section class="studio-band"><header><div><h2>${t("studio.design.imageGeneration")}</h2><p>${t("studio.design.imageGenerationHint")}</p></div><button class="btn btn-primary sm" id="newImageJob">${icon("sparkles")}${t("studio.design.newImage")}</button></header>
+      <div class="studio-job-list">${imageJobs || empty("sparkles", t("studio.design.emptyImages"), t("studio.design.emptyImagesText"))}</div>
     </section>`;
 }
 
@@ -174,6 +187,18 @@ function wireDesign() {
     collectionModal(snapshot.collections.find((item) => item.id === button.dataset.editCollection)));
   root.querySelectorAll("[data-edit-model]").forEach((button) => button.onclick = () =>
     modelModal(snapshot.models.find((item) => item.id === button.dataset.editModel)));
+  const imageModal = (modelId = "") => generationModal({ type: "image", modelId, onDone: refreshDesign });
+  root.querySelector("#newImageJob")?.addEventListener("click", () => imageModal());
+  root.querySelectorAll("[data-generate-image]").forEach((button) => button.onclick = () => imageModal(button.dataset.generateImage));
+  root.querySelectorAll("[data-sync-image]").forEach((button) => button.onclick = async () => {
+    button.classList.add("loading");
+    try {
+      await api.studio.syncGeneration(button.dataset.syncImage);
+      toast("success", t("studio.media.synced"), t("studio.media.syncedText"));
+      await refreshDesign();
+    } catch (error) { toast("error", t("studio.media.syncFailed"), error.message); }
+    finally { button.classList.remove("loading"); }
+  });
 }
 
 async function refreshDesign() {
@@ -226,14 +251,16 @@ function campaignModal(item = null) {
   });
 }
 
-function generationModal() {
+function generationModal(options = {}) {
+  const fixedType = options.type || "";
+  const onDone = options.onDone || refreshMedia;
   openModal({
-    title: t("studio.media.newGeneration"),
+    title: t(fixedType === "image" ? "studio.design.newImage" : "studio.media.newGeneration"),
     width: 700,
     body: `<div class="studio-form-grid">
-      <label class="field"><span class="label">${t("studio.media.assetType")}</span><select class="select" id="stType"><option value="image">${t("studio.media.image")}</option><option value="video">${t("studio.media.video")}</option></select></label>
+      <label class="field"><span class="label">${t("studio.media.assetType")}</span><select class="select" id="stType"${fixedType ? " disabled" : ""}><option value="image"${fixedType === "image" ? " selected" : ""}>${t("studio.media.image")}</option><option value="video">${t("studio.media.video")}</option></select></label>
       <label class="field"><span class="label">${t("studio.media.aspect")}</span><select class="select" id="stAspect"><option>4:5</option><option>1:1</option><option>9:16</option><option>16:9</option></select></label>
-      <label class="field"><span class="label">${t("studio.media.model")}</span><select class="select" id="stModel"><option value="">—</option>${snapshot.models.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("")}</select></label>
+      <label class="field"><span class="label">${t("studio.media.model")}</span><select class="select" id="stModel"><option value="">—</option>${snapshot.models.map((item) => `<option value="${esc(item.id)}"${item.id === options.modelId ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select></label>
       <label class="field"><span class="label">${t("studio.media.campaign")}</span><select class="select" id="stCampaign"><option value="">—</option>${snapshot.campaigns.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("")}</select></label>
       <label class="field span-2"><span class="label">${t("studio.media.generationBrief")}</span><textarea class="textarea" id="stBrief" rows="7" placeholder="${t("studio.media.generationPlaceholder")}"></textarea></label>
       <div class="studio-provider span-2">${icon("sparkles")}<div><strong>Higgsfield MCP</strong><span>${t("studio.media.higgsfieldRoute")}</span></div></div>
@@ -243,7 +270,7 @@ function generationModal() {
       modal.querySelector("#stSave").onclick = async () => {
         try {
           const created = await api.studio.create("generations", {
-            type: modal.querySelector("#stType").value,
+            type: fixedType || modal.querySelector("#stType").value,
             aspectRatio: modal.querySelector("#stAspect").value,
             modelId: modal.querySelector("#stModel").value,
             campaignId: modal.querySelector("#stCampaign").value,
@@ -252,7 +279,7 @@ function generationModal() {
           await api.studio.queueGeneration(created.id);
           modal.remove();
           toast("success", t("studio.media.queued"), t("studio.media.queuedText"));
-          await refreshMedia();
+          await onDone();
         } catch (error) { toast("error", t("studio.media.queueFailed"), error.message); }
       };
     },
@@ -284,7 +311,7 @@ function mediaContent() {
 
 function wireMedia() {
   root.querySelector("#newCampaign").onclick = () => campaignModal();
-  root.querySelector("#newGeneration").onclick = generationModal;
+  root.querySelector("#newGeneration").onclick = () => generationModal();
   root.querySelector("#emptyCampaign")?.addEventListener("click", () => campaignModal());
   root.querySelectorAll("[data-edit-campaign]").forEach((button) => button.onclick = () =>
     campaignModal(snapshot.campaigns.find((item) => item.id === button.dataset.editCampaign)));

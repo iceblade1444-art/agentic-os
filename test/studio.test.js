@@ -42,6 +42,16 @@ test("Studio persists a complete product-to-media workflow and explains recommen
   assert.equal(snapshot.analytics.recommendations[0].action, "increase");
   assert.equal(snapshot.analytics.recommendations[0].evidenceCount, 1);
   assert.equal(fs.existsSync(path.join(directory, "studio.json")), true);
+
+  const imageJob = studio.generations.create({
+    type: "image", brief: "Hero image on a beige studio backdrop.", modelId: model.id,
+  });
+  assert.equal(studio.generations.attachOutput(imageJob.id), null);
+  studio.generations.update(imageJob.id, { status: "complete", outputUrl: "https://cdn.higgsfield.ai/renders/coat-hero.png" });
+  const attached = studio.generations.attachOutput(imageJob.id);
+  assert.equal(attached.id, model.id);
+  assert.equal(attached.assets[0].url, "https://cdn.higgsfield.ai/renders/coat-hero.png");
+  assert.equal(studio.generations.attachOutput(imageJob.id).assets.length, 1);
 });
 
 test("Studio rejects broken references and unsafe lifecycle values", async (t) => {
@@ -63,11 +73,14 @@ test("Studio pages are operator-only and generation jobs route through Hermes", 
   const index = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   const route = fs.readFileSync(new URL("../server/routes/studio.js", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/studio.js", import.meta.url), "utf8");
 
   assert.match(index, /app\.use\("\/api\/studio", requireOperator, studio\)/);
   assert.match(route, /Use the official Higgsfield MCP connector/);
   assert.match(route, /assignee:\s*"reach"/);
   assert.match(route, /config\.hermesKanbanBoard/);
+  assert.match(route, /attachOutput/);
   assert.match(app, /\{\s*group:\s*"Studio"/);
   assert.match(app, /design,\s*media,\s*analytics/);
+  assert.match(page, /studio\.design\.imageGeneration/);
 });

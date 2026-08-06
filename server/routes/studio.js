@@ -99,6 +99,7 @@ r.post("/generations/:id/sync", handle(async (req, res) => {
     outputUrl,
     error: task.status === "blocked" ? task.block_reason || task.latest_summary || "Hermes task blocked" : "",
   });
+  if (updated.status === "complete" && updated.outputUrl) studio.generations.attachOutput(updated.id);
   audit(req, "studio.higgsfield.sync", job.id, `kanban ${job.kanbanTaskId}; ${status}`);
   res.json({ job: updated, taskStatus: task.status, hasOutput: Boolean(outputUrl) });
 }));

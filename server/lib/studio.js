@@ -283,6 +283,16 @@ export const studio = {
     create: (input) => create("generationJobs", "gen", input, generationInput),
     update: (itemId, patch) => update("generationJobs", itemId, patch, generationInput),
     remove: (itemId) => remove("generationJobs", itemId),
+    attachOutput(itemId) {
+      const job = find("generationJobs", itemId);
+      if (!job?.outputUrl || !job.modelId) return null;
+      const model = find("models", job.modelId);
+      if (!model) return null;
+      if ((model.assets || []).some((asset) => asset.url === job.outputUrl)) return model;
+      return update("models", model.id, {
+        assets: [...(model.assets || []), { type: job.type, url: job.outputUrl, label: job.brief }],
+      }, modelInput);
+    },
   },
 };
 
