@@ -33,7 +33,12 @@ function toSrt(segments) {
 
 function download(name, content, type) {
   const a = document.createElement("a");
-  a.href = typeof content === "string" ? URL.createObjectURL(new Blob([content], { type })) : content;
+  // a blob:/http:/data: string is already a link to the bytes — wrapping it in a
+  // Blob would save the address as text instead of the audio
+  const isUrl = typeof content === "string" && /^(blob:|https?:|data:)/.test(content);
+  a.href = typeof content === "string" && !isUrl
+    ? URL.createObjectURL(new Blob([content], { type }))
+    : content;
   a.download = name;
   a.click();
 }
@@ -280,7 +285,21 @@ export default {
       const text = q("#ttsText").value.trim();
       if (!text) { toast("Введите текст"); return; }
       const engine = q("#ttsEngine").value;
-      q("#ttsState").textContent = engine === "fast" ? "генерирую…" : "генерирую (займёт время)…";
+      const btn = q("#ttsBtn");
+      if (btn.disabled) return;                 // a second click would only queue
+      // premium runs a diffusion model on CPU: ~13x realtime, plus ~50 s the
+      // first time after a restart while the model loads
+      const eta = { premium: 40, clone: 40, quality: 6, emotion: 6, fast: 1 }[engine] || 5;
+      const started = Date.now();
+      btn.disabled = true;
+      const tick = () => {
+        const el = Math.round((Date.now() - started) / 1000);
+        q("#ttsState").textContent = eta > 3
+          ? `генерирую… ${el} с (обычно около ${eta} с)`
+          : "генерирую…";
+      };
+      tick();
+      const ttsTicker = setInterval(tick, 1000);
       try {
         let res;
         if (engine === "clone") {
@@ -320,8 +339,11 @@ export default {
         q("#ttsState").textContent = `готово (${Math.round(bytes.byteLength / 1024)} КБ)`;
         pushTtsHistory(text, engine, url);
       } catch (err) {
-        q("#ttsState").textContent = "ошибка";
+        q("#ttsState").textContent = `ошибка: ${err.message}`;
         toast(`TTS: ${esc(err.message)}`);
+      } finally {
+        clearInterval(ttsTicker);
+        btn.disabled = false;
       }
     });
     engineUI();
