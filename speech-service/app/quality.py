@@ -28,6 +28,10 @@ RESPELL_UZ = {
 _WORD = re.compile(r"[A-Za-zА-Яа-яЁё''`]+")
 
 
+_APOS_CER = dict.fromkeys(
+    map(ord, "\u2018\u2019\u02bb\u02bc\u00b4\u0060"), "'")
+
+
 def normalize_for_tts(text: str, language: str | None = None) -> str:
     """Respell known-hard words. Uzbek only — ru/en voices handle them fine."""
     if (language or "").lower() not in ("uzbek", "uz"):
@@ -44,7 +48,7 @@ def normalize_for_tts(text: str, language: str | None = None) -> str:
 
 
 def _norm(s: str) -> str:
-    s = s.lower().replace("ʻ", "'").replace("’", "'").replace("`", "'")
+    s = s.lower().translate(_APOS_CER)
     return re.sub(r"\s+", " ", re.sub(r"[^a-zа-яё' ]+", " ", s)).strip()
 
 
