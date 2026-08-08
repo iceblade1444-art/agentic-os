@@ -161,10 +161,15 @@ function teamSection() {
   if (!teamUsers) return `<div class="card pad-lg"><div class="row gap-2">${icon("refresh")}<span>${t("settings.teamLoading")}</span></div></div>`;
   return `<div class="card pad-lg">
     <div class="row between mb-4"><div><div class="section-title">${t("settings.workspaceTeam")}</div><div class="hint">${t("settings.teamText")}</div></div><span class="badge info">${t("settings.accountCount", { count: teamUsers.length })}</span></div>
-    <div class="table-wrap"><table class="tbl"><thead><tr><th>${t("settings.user")}</th><th>${t("settings.role")}</th><th>${t("settings.access")}</th></tr></thead><tbody>
+    ${teamUsers.some((user) => user.approved === false) ? `<div class="alert warning mb-4"><span class="a-ico">${icon("alert")}</span><div class="a-body"><div class="a-title">${t("settings.pendingTitle")}</div><div class="a-desc">${t("settings.pendingText")}</div></div></div>` : ""}
+    <div class="table-wrap"><table class="tbl"><thead><tr><th>${t("settings.user")}</th><th>${t("settings.role")}</th><th>${t("settings.status")}</th><th>${t("settings.access")}</th></tr></thead><tbody>
       ${teamUsers.map((user) => `<tr>
         <td><div class="fw-600">${esc(user.name)}</div><div class="cell-sub">${esc(user.email || t("settings.serverOwner"))}</div></td>
-        <td>${user.id === "creator" ? `<span class="badge primary">Creator</span>` : `<select class="select sm team-role" data-user-id="${esc(user.id)}" ${user.disabled ? "disabled" : ""}>${["Admin", "Member", "Viewer"].map((role) => `<option ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}</select>`}</td>
+        <td>${user.id === "creator" ? `<span class="badge primary">Creator</span>` : `<select class="select sm team-role" data-user-id="${esc(user.id)}" ${user.disabled ? "disabled" : ""}>${["Admin", "Design", "Member", "Viewer"].map((role) => `<option ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}</select>`}</td>
+        <td>${user.id === "creator" ? `<span class="badge success">${t("settings.approved")}</span>`
+          : user.approved === false
+            ? `<button class="btn btn-primary sm team-approval" data-user-id="${esc(user.id)}" data-approved="false">${icon("check")}${t("settings.approve")}</button>`
+            : `<div class="row gap-2"><span class="badge success">${t("settings.approved")}</span><button class="btn btn-ghost sm team-approval" data-user-id="${esc(user.id)}" data-approved="true">${t("settings.revokeApproval")}</button></div>`}</td>
         <td>${user.id === "creator" ? `<span class="badge success">${t("settings.permanent")}</span>` : `<button class="btn ${user.disabled ? "btn-secondary" : "btn-outline"} sm team-access" data-user-id="${esc(user.id)}" data-disabled="${user.disabled ? "true" : "false"}">${icon(user.disabled ? "check" : "lock")}${t(user.disabled ? "settings.enable" : "settings.disable")}</button>`}</td>
       </tr>`).join("")}
     </tbody></table></div>
@@ -264,6 +269,16 @@ function wire(root) {
     select.disabled = true;
     try { await api.auth.updateUser(select.dataset.userId, { role: select.value }); toast("success", t("settings.roleUpdated"), t("settings.sessionsRevoked")); teamUsers = null; loadTeam(); }
     catch (error) { toast("error", t("settings.roleFailed"), error.message); select.disabled = false; }
+  });
+  root.querySelectorAll(".team-approval").forEach((button) => button.onclick = async () => {
+    const approve = button.dataset.approved !== "true";
+    button.classList.add("loading");
+    try {
+      await api.auth.updateUser(button.dataset.userId, { approved: approve });
+      toast("success", t(approve ? "settings.userApproved" : "settings.approvalRevoked"), t(approve ? "settings.userApprovedHint" : "settings.sessionsRevoked"));
+      teamUsers = null;
+      loadTeam();
+    } catch (error) { toast("error", t("settings.approvalFailed"), error.message); button.classList.remove("loading"); }
   });
   root.querySelectorAll(".team-access").forEach((button) => button.onclick = async () => {
     button.classList.add("loading");

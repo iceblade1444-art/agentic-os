@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { config } from "../config.js";
 
-import { authenticatedUser } from "../lib/auth.js";
+import { authenticatedUser, requireRoles } from "../lib/auth.js";
 import { governance } from "../lib/governance.js";
 import { hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 import { pollRequest, submitImage } from "../lib/higgsfield.js";
@@ -23,6 +23,10 @@ const buckets = {
   signals: studio.signals,
   generations: studio.generations,
 };
+// Design may run the creative buckets; analytics signals and the Higgsfield
+// account connection stay with operators.
+const requireOperator = requireRoles("Creator", "Admin");
+const OPERATOR_BUCKETS = new Set(["signals"]);
 
 const audit = (req, action, target, detail = "") =>
   governance.recordAudit(action, authenticatedUser(req)?.name, target, detail);
@@ -37,25 +41,26 @@ function handle(handler) {
 r.get("/", (req, res) => res.json(studio.snapshot()));
 
 for (const [bucket, service] of Object.entries(buckets)) {
-  r.post(`/${bucket}`, handle(async (req, res) => {
+  const guard = OPERATOR_BUCKETS.has(bucket) ? [requireOperator] : [];
+  r.post(`/${bucket}`, ...guard, handle(async (req, res) => {
     const item = service.create({ ...req.body, requestedBy: authenticatedUser(req)?.name });
     audit(req, `studio.${bucket}.create`, item.id, item.name || item.title || item.brief);
     res.status(201).json(item);
   }));
-  r.patch(`/${bucket}/:id`, handle(async (req, res) => {
+  r.patch(`/${bucket}/:id`, ...guard, handle(async (req, res) => {
     const item = service.update(req.params.id, req.body);
     if (!item) return res.status(404).json({ error: "Not found" });
     audit(req, `studio.${bucket}.update`, item.id);
     res.json(item);
   }));
-  r.delete(`/${bucket}/:id`, handle(async (req, res) => {
+  r.delete(`/${bucket}/:id`, ...guard, handle(async (req, res) => {
     if (!service.remove(req.params.id)) return res.status(404).json({ error: "Not found" });
     audit(req, `studio.${bucket}.delete`, req.params.id);
     res.status(204).end();
   }));
 }
 
-r.post("/higgsfield/connect", handle(async (req, res) => {
+r.post("/higgsfield/connect", requireOperator, handle(async (req, res) => {
   try {
     const entry = await connectHiggsfieldMcp();
     audit(req, "studio.higgsfield.connect", "mcp", `${entry.tools.length} tools`);
@@ -77,7 +82,7 @@ r.get("/higgsfield/oauth/callback", handle(async (req, res) => {
   res.redirect("/#/design");
 }));
 
-r.post("/higgsfield/logout", handle(async (req, res) => {
+r.post("/higgsfield/logout", requireOperator, handle(async (req, res) => {
   await disconnectHiggsfieldMcp({ forget: true });
   audit(req, "studio.higgsfield.logout", "mcp");
   res.json({ ok: true });

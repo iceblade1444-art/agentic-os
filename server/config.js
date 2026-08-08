@@ -83,6 +83,8 @@ export const config = {
   sessionSecret: env.SESSION_SECRET || env.AUTH_TOKEN || "agentic-os-dev-secret",
   secureCookie: env.SECURE_COOKIE === "true",            // set true behind HTTPS
   allowRegistration: env.ALLOW_REGISTRATION === "true", // public sign-up creates Member accounts
+  // New accounts stay pending until Creator/Admin approves them in Settings > Team.
+  requireAccountApproval: env.REQUIRE_ACCOUNT_APPROVAL !== "false",
   publicUrl: strip(env.PUBLIC_URL, "http://localhost:8787"),
   googleWorkspace: {
     clientId: env.GOOGLE_OAUTH_CLIENT_ID || "",

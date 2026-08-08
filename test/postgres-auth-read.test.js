@@ -42,6 +42,9 @@ const sessionUser = {
   createdAt: rawUser.createdAt,
   updatedAt: rawUser.updatedAt,
   emailVerified: true,
+  // No approvedAt on the record: accounts that predate approval stay approved.
+  approved: true,
+  approvedAt: "",
   sessionVersion: 2,
 };
 const publicSession = {

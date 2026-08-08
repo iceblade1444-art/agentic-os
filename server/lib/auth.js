@@ -32,6 +32,16 @@ const touchSession = (id, userId) =>
 
 export function authEnabled() { return !!config.authToken; }
 
+// A pending account authenticates but gets no session until the owner approves it.
+function approvalPending(user, res) {
+  if (!user || user.id === "creator" || user.approved !== false) return false;
+  res.status(403).json({
+    error: "Your account is waiting for approval from the workspace owner",
+    code: "approval_pending",
+  });
+  return true;
+}
+
 function sign(payload) {
   const body = b64(JSON.stringify(payload));
   const mac = crypto.createHmac("sha256", config.sessionSecret).update(body).digest("base64url");
@@ -117,15 +127,16 @@ export function requireRoles(...allowed) {
 
 export function requireWriteAccess(req, res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-  return requireRoles("Creator", "Admin", "Member")(req, res, next);
+  return requireRoles("Creator", "Admin", "Design", "Member")(req, res, next);
 }
 
 export function capabilities(user) {
   const role = user?.role || "Viewer";
   return {
-    canWrite: ["Creator", "Admin", "Member"].includes(role),
+    canWrite: ["Creator", "Admin", "Design", "Member"].includes(role),
     canAdmin: ["Creator", "Admin"].includes(role),
     canManageUsers: ["Creator", "Admin"].includes(role),
+    canStudio: ["Creator", "Admin", "Design"].includes(role),
   };
 }
 
@@ -256,6 +267,7 @@ export async function loginHandler(req, res) {
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
   }
+  if (approvalPending(user, res)) return;
   if (requireMfa(user, "web", res)) return;
   const session = createTrackedSession(req, user, "web");
   try {
@@ -273,19 +285,28 @@ export async function registerHandler(req, res) {
   if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
   let createdUser = null;
   try {
-    const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    const user = users.register({
+      ...(req.body || {}),
+      emailVerified: !config.emailVerificationRequired,
+      requiresApproval: config.requireAccountApproval,
+    });
     createdUser = user;
     if (config.emailVerificationRequired) {
       try {
         await sendVerification(user);
         await commitAuthGroups("users", "accountTokens");
-        return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
+        return res.status(201).json({ ok: true, verificationRequired: true, approvalRequired: config.requireAccountApproval, user: userFromSession({ user }) });
       } catch (error) {
         accountTokens.removeUser(user.id);
         users.remove(user.id);
         await commitAuthGroups("users", "accountTokens").catch(() => {});
         return res.status(503).json({ error: "Could not send verification email. Try again later." });
       }
+    }
+    if (config.requireAccountApproval) {
+      await commitAuthGroups("users");
+      governance.recordAudit("account.registered", user.name, user.id, "waiting for owner approval");
+      return res.status(201).json({ ok: true, approvalRequired: true, user: userFromSession({ user }) });
     }
     const session = createTrackedSession(req, user, "web");
     await commitAuthGroups("users", "sessions");
@@ -310,6 +331,7 @@ export async function mobileLoginHandler(req, res) {
   if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
     return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
   }
+  if (approvalPending(user, res)) return;
   if (requireMfa(user, "mobile", res)) return;
   const session = createTrackedSession(req, user, "mobile");
   try {
@@ -333,19 +355,28 @@ export async function mobileRegisterHandler(req, res) {
   if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
   let createdUser = null;
   try {
-    const user = users.register({ ...(req.body || {}), emailVerified: !config.emailVerificationRequired });
+    const user = users.register({
+      ...(req.body || {}),
+      emailVerified: !config.emailVerificationRequired,
+      requiresApproval: config.requireAccountApproval,
+    });
     createdUser = user;
     if (config.emailVerificationRequired) {
       try {
         await sendVerification(user);
         await commitAuthGroups("users", "accountTokens");
-        return res.status(201).json({ ok: true, verificationRequired: true, user: userFromSession({ user }) });
+        return res.status(201).json({ ok: true, verificationRequired: true, approvalRequired: config.requireAccountApproval, user: userFromSession({ user }) });
       } catch (error) {
         accountTokens.removeUser(user.id);
         users.remove(user.id);
         await commitAuthGroups("users", "accountTokens").catch(() => {});
         return res.status(503).json({ error: "Could not send verification email. Try again later." });
       }
+    }
+    if (config.requireAccountApproval) {
+      await commitAuthGroups("users");
+      governance.recordAudit("account.registered", user.name, user.id, "waiting for owner approval");
+      return res.status(201).json({ ok: true, approvalRequired: true, user: userFromSession({ user }) });
     }
     const session = createTrackedSession(req, user, "mobile");
     await commitAuthGroups("users", "sessions");
@@ -457,6 +488,7 @@ export async function updateUserHandler(req, res) {
     const changes = [];
     if (previous?.role !== user.role) changes.push(`role ${previous.role} -> ${user.role}`);
     if (previous?.disabled !== user.disabled) changes.push(user.disabled ? "account disabled" : "account enabled");
+    if (previous?.approved !== user.approved) changes.push(user.approved ? "account approved" : "approval revoked");
     if (changes.length) sessions.removeUser(user.id);
     await commitAuthGroups("users", ...(changes.length ? ["sessions"] : []));
     if (changes.length) governance.recordAudit("account.update", req.user?.name, user.id, changes.join("; "));

@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { MilaLiveSession } from "./mila-live.js";
-import { MILA_TOOLS } from "./mila-tools.js";
+import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "./mila-tools.js";
 import {
   attachmentDisplayText, composeAttachmentPrompt, publicAttachment,
 } from "./mila-attachments.js";
@@ -331,7 +331,7 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
       transcriptionLanguage: this.state.language,
       inputDeviceId: this.state.preferences.inputDeviceId,
       systemInstruction: await this.liveSystemInstruction(),
-      tools: MILA_TOOLS,
+      tools: api.auth.canAdmin ? MILA_TOOLS : MILA_MEMBER_TOOLS,
       getToken: async () => {
         const body = { language: this.state.language };
         const mint = {

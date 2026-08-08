@@ -72,13 +72,14 @@ test("Studio rejects broken references and unsafe lifecycle values", async (t) =
   assert.throws(() => studio.collections.remove(collection.id), /Move or delete/);
 });
 
-test("Studio pages are operator-only and generation jobs route through Hermes", () => {
+test("Studio pages are operator- or Design-only and generation jobs route through Hermes", () => {
   const index = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   const route = fs.readFileSync(new URL("../server/routes/studio.js", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("../assets/js/pages/studio.js", import.meta.url), "utf8");
 
-  assert.match(index, /app\.use\("\/api\/studio", requireOperator, studio\)/);
+  assert.match(index, /app\.use\("\/api\/studio", requireStudio, studio\)/);
+  assert.match(index, /const requireStudio = requireRoles\("Creator", "Admin", "Design"\)/);
   assert.match(route, /Use the official Higgsfield MCP connector/);
   assert.match(route, /assignee:\s*"reach"/);
   assert.match(route, /config\.hermesKanbanBoard/);

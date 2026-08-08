@@ -2,6 +2,7 @@ import { Router } from "express";
 import { config } from "../config.js";
 import { db } from "../store.js";
 import * as mcp from "../mcp/manager.js";
+import { authenticatedUser, requireRoles } from "../lib/auth.js";
 import { knowledge } from "../lib/knowledge.js";
 
 const r = Router();
@@ -17,6 +18,11 @@ const READ_TOOLS = [
   ["erp_finance_summary", {}],
   ["erp_list_employee_tasks", { limit: 20 }],
 ];
+// Every signed-in role may read the ERP. Tools with a side effect in the ERP
+// itself (erp_create_task, erp_send_notification) stay with operators.
+const READ_ONLY_TOOLS = new Set([...READ_TOOLS.map(([tool]) => tool), "erp_search"]);
+const requireOperator = requireRoles("Creator", "Admin");
+const isOperator = (req) => ["Creator", "Admin"].includes(authenticatedUser(req)?.role);
 
 function parseMcp(result) {
   const text = result?.content?.find((item) => item.type === "text")?.text || "";
@@ -316,11 +322,14 @@ r.get("/", async (req, res) => {
 r.post("/tool", async (req, res) => {
   const { tool, args } = req.body || {};
   if (!tool || !String(tool).startsWith("erp_")) return res.status(400).json({ error: "ERP tool name is required" });
+  if (!READ_ONLY_TOOLS.has(String(tool)) && !isOperator(req)) {
+    return res.status(403).json({ error: "forbidden", code: "erp_read_only", requiredRoles: ["Creator", "Admin"] });
+  }
   const result = await call(tool, args || {});
   res.json({ ok: true, result });
 });
 
-r.post("/wiki-sync", async (req, res) => {
+r.post("/wiki-sync", requireOperator, async (req, res) => {
   const cards = {};
   const errors = {};
   for (const [tool, args] of READ_TOOLS) {

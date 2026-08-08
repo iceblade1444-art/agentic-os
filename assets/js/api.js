@@ -54,6 +54,7 @@ export const api = {
     get accountRecovery() { return state.accountRecovery || {}; },
     get capabilities() { return state.capabilities; },
     get canAdmin() { return !!state.capabilities.canAdmin; },
+    get canStudio() { return !!state.capabilities.canStudio; },
     get canWrite() { return state.capabilities.canWrite !== false; },
     login: async (body) => {
       const credentials = typeof body === "string" ? { password: body } : body;
@@ -73,6 +74,8 @@ export const api = {
     },
     register: async (body) => {
       const result = await j("/api/auth/register", { method: "POST", body });
+      // No session is issued while the account waits for verification or approval.
+      if (result.verificationRequired || result.approvalRequired) return result;
       state.authed = true;
       state.user = result.user || null;
       state.capabilities = result.capabilities || {};

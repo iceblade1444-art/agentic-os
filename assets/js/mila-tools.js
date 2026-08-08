@@ -106,3 +106,10 @@ export const MILA_TOOLS = [
     }, required: ["request"] },
   },
 ];
+
+// Everything a Member's Mila Live call is allowed to do: read the same live ERP
+// data the ERP panel already shows. No Kanban, Hermes, Obsidian, Claude Code or
+// MCP tool — the server enforces this too (server/routes/mila-actions.js), this
+// list only keeps the model from offering actions it cannot actually perform.
+export const MILA_MEMBER_TOOLS = MILA_TOOLS.filter((tool) =>
+  ["get_erp_business_context", "get_finished_goods_stock"].includes(tool.name));
