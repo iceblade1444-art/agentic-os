@@ -5,7 +5,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 
-const ROLES = new Set(["Admin", "Member", "Viewer"]);
+const ROLES = new Set(["Admin", "Design", "Member", "Viewer"]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function publicUser(user) {
@@ -20,6 +20,9 @@ function publicUser(user) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     emailVerified: user.emailVerifiedAt !== "",
+    // Accounts created before approval existed have no approvedAt and stay approved.
+    approved: user.approvedAt !== "",
+    approvedAt: user.approvedAt || "",
   };
 }
 
@@ -65,7 +68,7 @@ export class UserStore {
 
   sessionUser(id) {
     const user = this.users.find((item) => item.id === id);
-    if (!user || user.disabled) return null;
+    if (!user || user.disabled || user.approvedAt === "") return null;
     return { ...publicUser(user), sessionVersion: Number(user.sessionVersion) || 1 };
   }
 
@@ -93,14 +96,17 @@ export class UserStore {
       passwordHash,
       sessionVersion: 1,
       emailVerifiedAt: input.emailVerified === false ? "" : now,
+      approvedAt: input.requiresApproval ? "" : now,
       createdAt: now,
       updatedAt: now,
     };
     this.users.push(user);
     this.#save();
-    return this.sessionUser(user.id);
+    return { ...publicUser(user), sessionVersion: 1 };
   }
 
+  // Returns a pending account too, so the caller can say "waiting for approval"
+  // instead of "wrong password". Only sessionUser() gates on approval.
   authenticate(emailInput, passwordInput) {
     const email = String(emailInput || "").trim().toLowerCase();
     const password = String(passwordInput || "");
@@ -109,7 +115,7 @@ export class UserStore {
     const actual = crypto.scryptSync(password, user.salt, 64);
     const expected = Buffer.from(user.passwordHash, "base64url");
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
-    return this.sessionUser(user.id);
+    return { ...publicUser(user), sessionVersion: Number(user.sessionVersion) || 1 };
   }
 
   findByEmail(emailInput) {
@@ -146,12 +152,19 @@ export class UserStore {
     let revokeSessions = false;
     if (patch.role !== undefined) {
       const role = String(patch.role);
-      if (!ROLES.has(role)) fail("Role must be Admin, Member, or Viewer", "invalid_role");
+      if (!ROLES.has(role)) fail("Role must be Admin, Design, Member, or Viewer", "invalid_role");
       if (role !== user.role) { user.role = role; revokeSessions = true; }
     }
     if (patch.disabled !== undefined && !!patch.disabled !== !!user.disabled) {
       user.disabled = !!patch.disabled;
       revokeSessions = true;
+    }
+    if (patch.approved !== undefined) {
+      const approved = !!patch.approved;
+      if (approved !== (user.approvedAt !== "")) {
+        user.approvedAt = approved ? new Date().toISOString() : "";
+        revokeSessions = true;
+      }
     }
     if (revokeSessions) user.sessionVersion = (Number(user.sessionVersion) || 1) + 1;
     user.updatedAt = new Date().toISOString();

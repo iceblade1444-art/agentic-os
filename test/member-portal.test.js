@@ -102,9 +102,121 @@ test("frontend and server expose distinct member and operator surfaces", () => {
   assert.match(server, /app\.use\("\/api\/member", member\)/);
   assert.match(server, /\/api\/auth\/mobile\/login/);
   assert.match(server, /\/api\/auth\/mobile\/register/);
-  for (const route of ["mcp", "integrations", "kanban", "claude-code", "operations", "skills"]) {
+  // integrations and mila are intentionally NOT in this list — Mila voice/chat
+  // inside them is open to every signed-in role; see the Mila Live test below.
+  for (const route of ["mcp", "kanban", "claude-code", "operations", "skills"]) {
     assert.equal(server.includes(`app.use("/api/${route}", requireOperator`), true);
   }
   assert.match(proxy, /requireRoles\("Creator", "Admin"\)/);
   assert.match(proxy, /hasHermesAccess/);
+});
+
+test("Design gets the studio surface without operator controls", () => {
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
+  const studioRoutes = fs.readFileSync(new URL("../server/routes/studio.js", import.meta.url), "utf8");
+
+  assert.match(app, /const DESIGN_NAV/);
+  assert.match(app, /const DESIGN_PAGES/);
+  assert.match(app, /api\.auth\.canStudio \? DESIGN_NAV : MEMBER_NAV/);
+  // Design must not reach the operator-only surfaces through the router.
+  const designNav = app.slice(app.indexOf("const DESIGN_NAV"), app.indexOf("const OPERATOR_PAGES"));
+  for (const route of ["hermes", "kanban", "secrets", "integrations", "mcp", "analytics", "agents"]) {
+    assert.equal(designNav.includes(`route: "${route}"`), false, `DESIGN_NAV must not expose ${route}`);
+  }
+
+  assert.match(server, /const requireStudio = requireRoles\("Creator", "Admin", "Design"\)/);
+  assert.match(server, /app\.use\("\/api\/studio", requireStudio, studio\)/);
+  assert.match(server, /app\.use\("\/api\/knowledge", requireStudio, knowledge\)/);
+  for (const route of ["mcp", "kanban", "operations"]) {
+    assert.equal(server.includes(`app.use("/api/${route}", requireOperator`), true);
+  }
+  // Analytics signals and the Higgsfield account connection stay with operators.
+  assert.match(studioRoutes, /OPERATOR_BUCKETS = new Set\(\["signals"\]\)/);
+  assert.match(studioRoutes, /r\.post\("\/higgsfield\/connect", requireOperator/);
+});
+
+test("registration waits for owner approval end to end", () => {
+  const auth = fs.readFileSync(new URL("../server/lib/auth.js", import.meta.url), "utf8");
+  const config = fs.readFileSync(new URL("../server/config.js", import.meta.url), "utf8");
+  const readAdapter = fs.readFileSync(new URL("../server/lib/postgres-auth-read.js", import.meta.url), "utf8");
+  const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
+  const settings = fs.readFileSync(new URL("../assets/js/pages/settings.js", import.meta.url), "utf8");
+
+  // On by default; REQUIRE_ACCOUNT_APPROVAL=false is the only way out.
+  assert.match(config, /requireAccountApproval: env\.REQUIRE_ACCOUNT_APPROVAL !== "false"/);
+  assert.match(auth, /code: "approval_pending"/);
+  // Both sign-in paths and both registration paths go through the gate.
+  assert.equal(auth.split("approvalPending(user, res)").length - 1, 3);
+  assert.equal(auth.split("requiresApproval: config.requireAccountApproval").length - 1, 2);
+  assert.equal(auth.split("approvalRequired: true").length - 1, 2);
+  // The Postgres read path rejects pending sessions exactly like the JSON store.
+  assert.match(readAdapter, /if \(!user \|\| user\.disabled \|\| user\.approvedAt === ""\) return null/);
+  assert.match(api, /if \(result\.verificationRequired \|\| result\.approvalRequired\) return result/);
+  assert.match(settings, /api\.auth\.updateUser\(button\.dataset\.userId, \{ approved: approve \}\)/);
+});
+
+test("ERP is readable by every role but its write tools stay with operators", () => {
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
+  const erpRoutes = fs.readFileSync(new URL("../server/routes/erp.js", import.meta.url), "utf8");
+  const erpPage = fs.readFileSync(new URL("../assets/js/pages/erp.js", import.meta.url), "utf8");
+
+  // Mounted without requireOperator — every signed-in role reaches the snapshot.
+  assert.match(server, /app\.use\("\/api\/erp", erp\)/);
+  const memberNav = app.slice(app.indexOf("const MEMBER_NAV"), app.indexOf("const DESIGN_NAV"));
+  // ERP is Member's landing page: route "" renders it instead of a separate nav entry.
+  assert.match(memberNav, /route: "", navKey: "erp"/);
+  assert.match(app, /const MEMBER_PAGES = \{[^}]*erp[^}]*\}/);
+  // Design is unaffected: it keeps its own dashboard at "" plus a distinct ERP entry.
+  const designNav = app.slice(app.indexOf("const DESIGN_NAV"), app.indexOf("const OPERATOR_PAGES"));
+  assert.match(designNav, /route: "erp"/);
+  assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome/);
+
+  // erp_create_task and erp_send_notification are not read-only, so they 403.
+  assert.match(erpRoutes, /READ_ONLY_TOOLS = new Set\(\[\.\.\.READ_TOOLS\.map\(\(\[tool\]\) => tool\), "erp_search"\]\)/);
+  assert.match(erpRoutes, /!READ_ONLY_TOOLS\.has\(String\(tool\)\) && !isOperator\(req\)/);
+  assert.match(erpRoutes, /r\.post\("\/wiki-sync", requireOperator/);
+  assert.match(erpPage, /api\.auth\.canAdmin \? `<button class="btn btn-secondary" id="erpWikiSync"/);
+});
+
+test("Member gets Mila Live for conversation only, not the operator tool actions", () => {
+  const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
+  const integrations = fs.readFileSync(new URL("../server/routes/integrations.js", import.meta.url), "utf8");
+  const milaActionsRoute = fs.readFileSync(new URL("../server/routes/mila-actions.js", import.meta.url), "utf8");
+  const milaTools = fs.readFileSync(new URL("../assets/js/mila-tools.js", import.meta.url), "utf8");
+  const milaSession = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+
+  // Member has the nav entry and the page; Design explicitly does not inherit it.
+  const memberNav = app.slice(app.indexOf("const MEMBER_NAV"), app.indexOf("const DESIGN_NAV"));
+  assert.match(memberNav, /route: "mila", icon: "mic"/);
+  assert.match(app, /const MEMBER_PAGES = \{[^}]*mila[^}]*\}/);
+  assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome, mila: undefined/);
+
+  // Neither /api/integrations nor /api/mila carry the blanket operator gate anymore —
+  // authorization for the risky parts moved inside each router.
+  assert.match(server, /app\.use\("\/api\/integrations", integrations\)/);
+  assert.match(server, /app\.use\("\/api\/mila", milaActions\)/);
+
+  // Status, token minting and chat have no per-route admin gate — every signed-in
+  // role reaches them. Devices, pairing, subscription and app-update still require it.
+  assert.match(integrations, /r\.get\("\/", requireAdmin,/);
+  assert.match(integrations, /r\.get\("\/mila\/status", milaAction/);
+  assert.match(integrations, /r\.post\("\/mila\/voice-token", milaAction/);
+  assert.match(integrations, /r\.post\("\/mila\/livekit-token", milaAction/);
+  assert.match(integrations, /r\.post\("\/mila\/chat", milaAction/);
+  for (const route of ["/mila/devices\", requireAdmin", "/mila/connection-code\", requireAdmin", "/mila/subscription\", requireAdmin", "/mila/app-update\", requireAdmin"]) {
+    assert.equal(integrations.includes(route), true, `expected admin gate on ${route}`);
+  }
+
+  // The tool-calling endpoint enforces its own allowlist: only the two read-only
+  // ERP actions pass for a non-operator, everything else (Kanban, Hermes, Obsidian,
+  // Claude Code, MCP) 403s regardless of what the client declared.
+  assert.match(milaActionsRoute, /READ_ONLY_ERP_ACTIONS = new Set\(\["get_erp_business_context", "get_finished_goods_stock"\]\)/);
+  assert.match(milaActionsRoute, /!READ_ONLY_ERP_ACTIONS\.has\(name\) && !isOperator\(req\)/);
+
+  // The client mirrors the same allowlist so Mila never offers an action it cannot run.
+  assert.match(milaTools, /MILA_MEMBER_TOOLS = MILA_TOOLS\.filter/);
+  assert.match(milaSession, /tools: api\.auth\.canAdmin \? MILA_TOOLS : MILA_MEMBER_TOOLS/);
 });

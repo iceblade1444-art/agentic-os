@@ -68,7 +68,7 @@ function head() {
   return `<div class="page-head">
     <div><h1>${t("erp.title")}</h1><p>${t("erp.subtitle")}</p></div>
     <div class="spacer"></div>
-    <button class="btn btn-secondary" id="erpWikiSync">${icon("knowledge")}Sync wiki</button>
+    ${api.auth.canAdmin ? `<button class="btn btn-secondary" id="erpWikiSync">${icon("knowledge")}Sync wiki</button>` : ""}
     <button class="btn btn-secondary" id="erpRefresh">${icon("refresh")}${t("erp.refresh")}</button>
   </div>`;
 }

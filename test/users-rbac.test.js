@@ -58,10 +58,61 @@ test("removing an account revokes authentication and deletes the persisted user"
 });
 
 test("role capabilities enforce the documented access levels", () => {
-  assert.deepEqual(capabilities({ role: "Creator" }), { canWrite: true, canAdmin: true, canManageUsers: true });
-  assert.deepEqual(capabilities({ role: "Admin" }), { canWrite: true, canAdmin: true, canManageUsers: true });
-  assert.deepEqual(capabilities({ role: "Member" }), { canWrite: true, canAdmin: false, canManageUsers: false });
-  assert.deepEqual(capabilities({ role: "Viewer" }), { canWrite: false, canAdmin: false, canManageUsers: false });
+  assert.deepEqual(capabilities({ role: "Creator" }), { canWrite: true, canAdmin: true, canManageUsers: true, canStudio: true });
+  assert.deepEqual(capabilities({ role: "Admin" }), { canWrite: true, canAdmin: true, canManageUsers: true, canStudio: true });
+  assert.deepEqual(capabilities({ role: "Design" }), { canWrite: true, canAdmin: false, canManageUsers: false, canStudio: true });
+  assert.deepEqual(capabilities({ role: "Member" }), { canWrite: true, canAdmin: false, canManageUsers: false, canStudio: false });
+  assert.deepEqual(capabilities({ role: "Viewer" }), { canWrite: false, canAdmin: false, canManageUsers: false, canStudio: false });
+});
+
+test("Design is assignable and unknown roles stay rejected", (t) => {
+  const { store } = temporaryStore(t);
+  const created = store.register({ name: "Studio Lead", email: "studio@example.com", password: "long-safe-password" });
+  assert.equal(store.update(created.id, { role: "Design" }).role, "Design");
+  assert.throws(() => store.update(created.id, { role: "Analyst" }), (error) => error.code === "invalid_role");
+  assert.equal(store.get(created.id).role, "Design");
+});
+
+test("a pending account authenticates but gets no session until it is approved", (t) => {
+  const { store } = temporaryStore(t);
+  const created = store.register({
+    name: "Bahadir Yakubov",
+    email: "pending@example.com",
+    password: "long-safe-password",
+    requiresApproval: true,
+  });
+  assert.equal(created.approved, false);
+  // The password is right, so the login handler can say "waiting for approval"...
+  assert.equal(store.authenticate("pending@example.com", "long-safe-password").approved, false);
+  // ...but no session may exist for the account.
+  assert.equal(store.sessionUser(created.id), null);
+
+  const approved = store.update(created.id, { approved: true });
+  assert.equal(approved.approved, true);
+  assert.notEqual(approved.approvedAt, "");
+  assert.equal(store.sessionUser(created.id).approved, true);
+
+  // Revoking approval invalidates existing sessions the same way a role change does.
+  const before = store.sessionUser(created.id).sessionVersion;
+  store.update(created.id, { approved: false });
+  assert.equal(store.sessionUser(created.id), null);
+  assert.ok(store.get(created.id).approved === false);
+  assert.ok(before >= 1);
+});
+
+test("accounts created without the approval gate stay usable", (t) => {
+  const { store, file } = temporaryStore(t);
+  const created = store.register({ name: "Legacy", email: "legacy@example.com", password: "long-safe-password" });
+  assert.equal(created.approved, true);
+  assert.equal(store.sessionUser(created.id).approved, true);
+
+  // Simulate a record written before approvedAt existed at all.
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  delete raw.users[0].approvedAt;
+  fs.writeFileSync(file, JSON.stringify(raw));
+  const reloaded = new UserStore(file);
+  assert.equal(reloaded.sessionUser(created.id).approved, true);
+  assert.equal(reloaded.authenticate("legacy@example.com", "long-safe-password").approved, true);
 });
 
 test("frontend scopes personal browser state by authenticated user", () => {

@@ -21,10 +21,12 @@ const publicUser = (user) => user ? ({
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
   emailVerified: user.emailVerifiedAt !== "",
+  approved: user.approvedAt !== "",
+  approvedAt: user.approvedAt || "",
 }) : null;
 
 const sessionUser = (user) => {
-  if (!user || user.disabled) return null;
+  if (!user || user.disabled || user.approvedAt === "") return null;
   return { ...publicUser(user), sessionVersion: Number(user.sessionVersion) || 1 };
 };
 
@@ -139,7 +141,9 @@ export class PostgresAuthReadAdapter {
         const actual = crypto.scryptSync(password, user.salt, 64);
         const expected = Buffer.from(user.passwordHash, "base64url");
         if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
-        return sessionUser(user);
+        // Matches UserStore.authenticate: a pending account still authenticates,
+        // the login handler turns it into an "awaiting approval" answer.
+        return { ...publicUser(user), sessionVersion: Number(user.sessionVersion) || 1 };
       },
     );
   }

@@ -18,7 +18,7 @@ const view = (i) => {
   };
 };
 
-r.get("/", (req, res) => res.json(db.integrations.list().map(view)));
+r.get("/", requireAdmin, (req, res) => res.json(db.integrations.list().map(view)));
 
 r.post("/:provider/connect", requireAdmin, async (req, res) => {
   const conn = db.integrations.byProvider(req.params.provider);
@@ -75,6 +75,8 @@ function chatMessages(value) {
   })).filter((message) => message.content || message.attachments.length);
 }
 
+// Status, token minting and chat are open to every signed-in role — this is the
+// voice/text conversation any Member can have with Mila from the web dashboard.
 r.get("/mila/status", milaAction((cfg) => milaStatus(cfg)));
 r.get("/mila/devices", requireAdmin, milaAction((cfg) => milaDevices(cfg)));
 r.delete("/mila/devices/:id", requireAdmin, milaAction((cfg, _body, req) => milaRevokeDevice(cfg, req.params.id)));

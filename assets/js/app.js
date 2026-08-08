@@ -64,7 +64,26 @@ const OPERATOR_NAV = [
   ]},
 ];
 
+// ERP is the landing page for Member: it opens straight to the live business
+// snapshot instead of a personal dashboard that only duplicates Personal's brief.
 const MEMBER_NAV = [
+  { group: null, items: [
+    { route: "", navKey: "erp", icon: "mcp", label: "ERP" },
+    { route: "personal", icon: "user", label: "Personal" },
+    { route: "chat", icon: "chat", label: "Mila Assistant" },
+    { route: "mila", icon: "mic", label: "Mila Live" },
+    { route: "inbox", icon: "inbox", label: "Inbox" },
+    { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
+    { route: "my-notes", icon: "knowledge", label: "My Notes" },
+  ]},
+  { group: "Account", items: [
+    { route: "settings", icon: "settings", label: "Settings" },
+  ]},
+];
+
+// Design = the member surface plus the creative studio. No Operate group,
+// no Analytics, no agent controls.
+const DESIGN_NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
     { route: "personal", icon: "user", label: "Personal" },
@@ -72,6 +91,12 @@ const MEMBER_NAV = [
     { route: "inbox", icon: "inbox", label: "Inbox" },
     { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
     { route: "my-notes", icon: "knowledge", label: "My Notes" },
+    { route: "erp", icon: "mcp", label: "ERP" },
+  ]},
+  { group: "Studio", items: [
+    { route: "design", icon: "image", label: "Design" },
+    { route: "media", icon: "video", label: "Media" },
+    { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },
   ]},
   { group: "Account", items: [
     { route: "settings", icon: "settings", label: "Settings" },
@@ -87,8 +112,12 @@ const OPERATOR_PAGES = {
   design, media, analytics,
   erp,
 };
-const MEMBER_PAGES = { "": memberHome, personal, chat, inbox: memberInbox, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
-const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : MEMBER_NAV;
+const MEMBER_PAGES = { "": erp, personal, chat, mila, inbox: memberInbox, "my-tasks": memberTasks, "my-notes": memberNotes, settings, erp };
+// Design keeps the original personal dashboard as its landing page and has no Mila
+// Live nav entry — both stay scoped to Member only, undoing what the spread inherits.
+const DESIGN_PAGES = { ...MEMBER_PAGES, "": memberHome, mila: undefined, design, media, knowledge: misc.knowledge };
+const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : api.auth.canStudio ? DESIGN_NAV : MEMBER_NAV;
+const pages = () => api.auth.canAdmin ? OPERATOR_PAGES : api.auth.canStudio ? DESIGN_PAGES : MEMBER_PAGES;
 const NAV_KEYS = {
   "": "home", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
   mila: "mila", speech: "speech", agents: "agents", chat: "chat", kanban: "kanban",
@@ -99,7 +128,7 @@ const NAV_KEYS = {
   inbox: "inbox",
   design: "design", media: "media", analytics: "analytics", erp: "erp",
 };
-const navLabel = (item) => tr(`nav.${NAV_KEYS[item.route] || item.route}`) || item.label;
+const navLabel = (item) => tr(`nav.${item.navKey || NAV_KEYS[item.route] || item.route}`) || item.label;
 const navGroup = (group) => tr(`nav.${String(group || "").toLowerCase()}`);
 
 /* ---------------- Theme ---------------- */
@@ -305,7 +334,7 @@ let mountedPage = null;
 
 function route() {
   const r = currentRoute();
-  const page = api.auth.canAdmin ? (OPERATOR_PAGES[r] || notFound) : (MEMBER_PAGES[r] || forbidden);
+  const page = api.auth.canAdmin ? (OPERATOR_PAGES[r] || notFound) : (pages()[r] || forbidden);
   const view = qs("#view");
   if (!view) return;
   mountedPage?.unmount?.();
@@ -471,7 +500,12 @@ function renderLogin() {
         const result = await api.auth.register({ ...body, name: qs("#loginName").value.trim() });
         if (result.verificationRequired) {
           setMode("sent");
-          qs("#loginLead").textContent = tr("login.verificationSent");
+          qs("#loginLead").textContent = result.approvalRequired ? tr("login.verificationAndApproval") : tr("login.verificationSent");
+          return;
+        }
+        if (result.approvalRequired) {
+          setMode("sent");
+          qs("#loginLead").textContent = tr("login.approvalSent");
           return;
         }
       } else {
@@ -486,7 +520,8 @@ function renderLogin() {
       }
       location.reload();
     } catch (err) {
-      qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(err.message || tr("login.failed"))}</div>${err.code === "email_unverified" ? `<button class="btn btn-outline block" id="resendVerification" type="button">${tr("login.resend")}</button>` : ""}`;
+      const message = err.code === "approval_pending" ? tr("login.approvalPending") : (err.message || tr("login.failed"));
+      qs("#loginErr").innerHTML = `<div class="field-error" style="margin-bottom:10px">${esc(message)}</div>${err.code === "email_unverified" ? `<button class="btn btn-outline block" id="resendVerification" type="button">${tr("login.resend")}</button>` : ""}`;
       const resend = qs("#resendVerification");
       if (resend) resend.onclick = async () => { await api.auth.resendVerification(body.email); setMode("sent"); qs("#loginLead").textContent = tr("login.verificationSent"); };
       btn.classList.remove("loading");

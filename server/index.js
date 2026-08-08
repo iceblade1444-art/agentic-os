@@ -222,6 +222,8 @@ app.get("/api/auth/account/export", exportOwnDataHandler);
 app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
 app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin");
+// Design shares the studio surface with operators, nothing else.
+const requireStudio = requireRoles("Creator", "Admin", "Design");
 app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);
 app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHandler);
 app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin"), deleteUserHandler);
@@ -233,18 +235,23 @@ app.use("/api/telemetry", telemetry);
 app.use("/api/memory", memory);
 app.use("/api/speech", requireOperator, speech);
 app.use("/api/mcp", requireOperator, mcp);
-app.use("/api/integrations", requireOperator, integrations);
+// Mila voice/chat runs for every signed-in role; credential management and every
+// other provider stay operator-only via requireAdmin on each route inside.
+app.use("/api/integrations", integrations);
 app.use("/api/missions", requireOperator, missions);
-app.use("/api/knowledge", requireOperator, knowledge);
+app.use("/api/knowledge", requireStudio, knowledge);
 app.use("/api/kanban", requireOperator, kanban);
 app.use("/api/claude-code", requireOperator, claudeCode);
-app.use("/api/mila", requireOperator, milaActions);
+// Same split: read-only ERP voice actions are open, everything else (Kanban,
+// Hermes, Obsidian, Claude Code, MCP) is gated inside mila-actions.js.
+app.use("/api/mila", milaActions);
 app.use("/api/operations", requireOperator, operations);
 app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
-app.use("/api/studio", requireOperator, studio);
-app.use("/api/erp", requireOperator, erp);
+app.use("/api/studio", requireStudio, studio);
+// ERP is readable by every signed-in role; the router keeps its write tools operator-only.
+app.use("/api/erp", erp);
 app.use("/api/governance", requireOperator, governance);
 app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));

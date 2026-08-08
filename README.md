@@ -608,7 +608,9 @@ Dockerfile · .env.example · package.json
 The sidebar profile comes from `/api/auth/me`, never from demo browser data. The
 owner login is displayed as **Creator**; set `CREATOR_NAME` and `CREATOR_EMAIL`
 to customize it. Set `ALLOW_REGISTRATION=true` to let people create Member
-accounts. Creator/Admin can assign Admin, Member or Viewer access in
+accounts — with `REQUIRE_ACCOUNT_APPROVAL` (on by default) they cannot sign in
+until Creator/Admin approves them in **Settings > Team**.
+Creator/Admin can assign Admin, Design, Member or Viewer access in
 **Settings > Team**. Passwords are protected with `scrypt`, and role or account
 status changes revoke active sessions. See [Access control](docs/ACCESS_CONTROL.md)
 for the role matrix and shared/personal data boundaries.
