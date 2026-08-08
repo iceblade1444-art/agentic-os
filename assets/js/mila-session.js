@@ -148,6 +148,10 @@ ${safeJson(context)}
 class MilaSessionHub {
   constructor() {
     this.session = null;
+    // start() awaits the status probe and the ERP snapshot before it can claim
+    // this.session, so without this a second click during that window opened a
+    // second live socket that stop() could no longer reach.
+    this.startPromise = null;
     this.listeners = new Set();
     this.statusPromise = null;
     this.timer = null;
@@ -171,7 +175,7 @@ class MilaSessionHub {
   }
 
   snapshot() {
-    return { ...this.state, active: this.active };
+    return { ...this.state, active: this.active, starting: !!this.startPromise };
   }
 
   subscribe(listener) {
@@ -316,8 +320,18 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
     return this.session.startVideo(source);
   }
 
-  async start() {
-    if (this.session) return;
+  // Callers may click the mic repeatedly; every one of them awaits the single
+  // in-flight attempt instead of opening a socket of its own.
+  start() {
+    if (this.session) return Promise.resolve();
+    if (!this.startPromise) {
+      this.startPromise = this.#start().finally(() => { this.startPromise = null; this.notify(); });
+      this.notify();
+    }
+    return this.startPromise;
+  }
+
+  async #start() {
     if (this.state.phase === "checking") await this.loadStatus();
     if (!this.state.backendReady) throw new Error(this.state.error || "Mila Live is not configured");
 
@@ -468,6 +482,9 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
   }
 
   async stop() {
+    // "End call" pressed while the socket is still opening: wait for the attempt
+    // to claim this.session, otherwise it would connect just after we cleared it.
+    if (this.startPromise) await this.startPromise.catch(() => {});
     const live = this.session;
     this.session = null;
     if (live) await live.stop();

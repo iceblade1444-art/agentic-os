@@ -387,7 +387,9 @@ async function boot() {
     }
   }
   renderShell();
-  if (api.auth.canAdmin) mountMilaDock();
+  // Anyone whose nav has Mila Live keeps the floating call widget while they
+  // browse other tabs — otherwise leaving the page would strand a live call.
+  if (pages().mila) mountMilaDock();
   route();
 }
 

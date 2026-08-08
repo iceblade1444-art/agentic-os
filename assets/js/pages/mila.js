@@ -347,9 +347,12 @@ export default {
       language.disabled = state.active;
       preferencesButton.disabled = state.active;
       language.value = state.language;
-      mic.dataset.tip = state.active ? (state.phase === "muted" ? "Unmute" : "Mute") : "Start live call";
+      mic.dataset.tip = state.starting ? "Connecting…" : state.active ? (state.phase === "muted" ? "Unmute" : "Mute") : "Start live call";
       mic.setAttribute("aria-label", mic.dataset.tip);
       mic.classList.toggle("muted", state.phase === "muted");
+      // A dead-looking button is what made people click it three times in a row.
+      mic.disabled = state.starting;
+      mic.classList.toggle("loading", state.starting);
       send.disabled = state.sendingTurn;
       errorBox.classList.toggle("hidden", !state.error);
       root.querySelector("#milaErrorText").textContent = state.error;

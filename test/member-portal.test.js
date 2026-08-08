@@ -97,7 +97,8 @@ test("frontend and server expose distinct member and operator surfaces", () => {
 
   assert.match(app, /const MEMBER_NAV/);
   assert.match(app, /const MEMBER_PAGES/);
-  assert.match(app, /if \(api\.auth\.canAdmin\) mountMilaDock\(\)/);
+  // The dock follows the Mila Live page, not the operator flag — Member has both.
+  assert.match(app, /if \(pages\(\)\.mila\) mountMilaDock\(\)/);
   assert.match(api, /\/api\/member\/tasks/);
   assert.match(server, /app\.use\("\/api\/member", member\)/);
   assert.match(server, /\/api\/auth\/mobile\/login/);
@@ -219,4 +220,27 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // The client mirrors the same allowlist so Mila never offers an action it cannot run.
   assert.match(milaTools, /MILA_MEMBER_TOOLS = MILA_TOOLS\.filter/);
   assert.match(milaSession, /tools: api\.auth\.canAdmin \? MILA_TOOLS : MILA_MEMBER_TOOLS/);
+
+  // Member keeps the floating dock, so leaving #/mila cannot strand a live call
+  // with no way to end it.
+  assert.match(app, /if \(pages\(\)\.mila\) mountMilaDock\(\)/);
+  assert.match(app, /const pages = \(\) =>/);
+});
+
+test("a second mic click joins the in-flight call instead of opening another socket", () => {
+  const session = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
+  const page = fs.readFileSync(new URL("../assets/js/pages/mila.js", import.meta.url), "utf8");
+
+  // start() awaits loadStatus() and the ERP snapshot before it can assign
+  // this.session; the shared promise is what closes that window.
+  assert.match(session, /this\.startPromise = null;/);
+  assert.match(session, /if \(!this\.startPromise\) \{/);
+  assert.match(session, /this\.startPromise = this\.#start\(\)\.finally/);
+  assert.match(session, /return this\.startPromise;/);
+  // stop() must not race a connect that has not claimed this.session yet.
+  const stopBody = /async stop\(\) \{[\s\S]*?\n  \}/.exec(session)[0];
+  assert.match(stopBody, /if \(this\.startPromise\) await this\.startPromise\.catch/);
+  // The button reports the attempt rather than looking inert.
+  assert.match(session, /starting: !!this\.startPromise/);
+  assert.match(page, /mic\.disabled = state\.starting/);
 });
