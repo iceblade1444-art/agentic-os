@@ -16,18 +16,27 @@ import { sharedAgentContext } from "./onboarding.js";
 
 const LANGUAGES = new Set(["ru-RU", "uz-UZ", "en-US", "auto"]);
 const KNOWN_TOOLS = new Set(MILA_TOOLS.map((tool) => tool.name));
-// What every shipped build of the mobile app declares today. When a newer build
-// sends its own list, this stops being used for that caller.
-export const MOBILE_BASELINE_TOOLS = ["delegate_to_hermes"];
+// The only caller of this endpoint is the LiveKit phone agent, and this mirrors
+// the @function_tool set it registers in voice-agent/agent.py. It is a fallback
+// for older agent builds: a build that sends its own list is believed instead,
+// so this list stops mattering the moment the agent is updated.
+//
+// Keep it in step with that file. Too narrow strips the agent of ERP rules it
+// genuinely needs; too wide puts back the promises this gating exists to stop.
+export const LIVEKIT_BASELINE_TOOLS = [
+  "get_finished_goods_stock", "get_erp_business_context", "get_system_status",
+  "list_kanban_tasks", "create_kanban_task", "delegate_to_hermes",
+  "search_obsidian_notes", "read_obsidian_note", "write_obsidian_note", "ask_claude_code",
+];
 
 function requestedTools(value) {
-  if (!Array.isArray(value)) return MOBILE_BASELINE_TOOLS;
+  if (!Array.isArray(value)) return LIVEKIT_BASELINE_TOOLS;
   const names = value
     .map((item) => (typeof item === "string" ? item : item?.name))
     .filter((name) => KNOWN_TOOLS.has(name));
   // An empty or entirely unrecognised list means the caller told us nothing
   // usable, which is not the same as "no tools at all".
-  return names.length ? [...new Set(names)] : MOBILE_BASELINE_TOOLS;
+  return names.length ? [...new Set(names)] : LIVEKIT_BASELINE_TOOLS;
 }
 
 export function voiceInstruction(user, requested = {}) {
