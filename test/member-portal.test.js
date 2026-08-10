@@ -228,7 +228,11 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
 
   // The client mirrors the same allowlist so Mila never offers an action it cannot run.
   assert.match(milaTools, /MILA_MEMBER_TOOLS = MILA_TOOLS\.filter/);
-  assert.match(milaSession, /tools: api\.auth\.canAdmin \? MILA_TOOLS : MILA_MEMBER_TOOLS/);
+  // One place decides the session's tools, and both the live socket and the
+  // prompt read it, so the two can never describe different capabilities.
+  assert.match(milaSession, /get declaredTools\(\) \{\s*return api\.auth\.canAdmin \? MILA_TOOLS : MILA_MEMBER_TOOLS;/);
+  assert.match(milaSession, /tools: this\.declaredTools,/);
+  assert.match(milaSession, /tools: this\.declaredTools\.map\(\(tool\) => tool\.name\)/);
 
   // Member keeps the floating dock, so leaving #/mila cannot strand a live call
   // with no way to end it.

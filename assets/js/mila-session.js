@@ -229,6 +229,12 @@ class MilaSessionHub {
     return true;
   }
 
+  // The tools this surface actually declares to the model, so the prompt never
+  // describes an action the session cannot perform.
+  get declaredTools() {
+    return api.auth.canAdmin ? MILA_TOOLS : MILA_MEMBER_TOOLS;
+  }
+
   systemInstruction(mode = "voice") {
     return buildMilaSystemInstruction({
       language: this.state.language,
@@ -236,6 +242,7 @@ class MilaSessionHub {
       history: this.state.history,
       agentContext: this.state.agentContext,
       mode,
+      tools: this.declaredTools.map((tool) => tool.name),
     });
   }
 
@@ -345,7 +352,7 @@ Strict rule: do not invent ERP numbers. Tell the user the ERP data could not be 
       transcriptionLanguage: this.state.language,
       inputDeviceId: this.state.preferences.inputDeviceId,
       systemInstruction: await this.liveSystemInstruction(),
-      tools: api.auth.canAdmin ? MILA_TOOLS : MILA_MEMBER_TOOLS,
+      tools: this.declaredTools,
       getToken: async () => {
         const body = { language: this.state.language };
         const mint = {
