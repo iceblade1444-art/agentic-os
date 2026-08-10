@@ -6,11 +6,34 @@ import { claudeCode } from "./claude-code.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { knowledge } from "./knowledge.js";
+import { googleWorkspace } from "./google-workspace.js";
+import { memberWorkspaces } from "./member-workspace.js";
+import { dayPlanFor } from "./personal-day.js";
+import { spokenPlan } from "./personal-planner.js";
+import { reminders } from "./reminders.js";
 import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const WRITE_ACTIONS = new Set([
   "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool",
+  "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
+  "create_erp_task", "send_erp_notification",
+]);
+const ERP_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
+const ERP_TARGETS = new Set(["user", "department", "safe_group"]);
+
+// The owner's own desk: tasks, notes, reminders and the day plan. These are not
+// operator privileges — they touch nothing but the caller's private workspace, so
+// every signed-in user may use them on their own data.
+//
+// Capture actions run immediately on purpose. "Добавь задачу" has to be one step
+// or the assistant is slower than a notepad, and everything they create is visible
+// and removable in one click. Calendar writes stay behind confirmation: an event
+// can carry guests, and moving or cancelling one reaches other people.
+export const PERSONAL_ACTIONS = new Set([
+  "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
+  "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
+  "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
 ]);
 const STATUSES = new Set(["triage", "todo", "ready"]);
 const PROFILES = new Set(["default", "scout", "scribe", "reach", "dev"]);
@@ -102,7 +125,18 @@ function finishedGoodsFacts(data = {}) {
   };
 }
 
+function erpTargetLabel(args = {}) {
+  if (args.targetType === "department") return `department ${bounded(args.department, 80)}`;
+  if (args.targetType === "safe_group") return `group ${bounded(args.safeGroup, 80)}`;
+  return `user ${bounded(args.userId, 40)}`;
+}
+
 function actionSummary(name, args) {
+  if (name === "create_erp_task") return `Create ERP task “${bounded(args.title, 120)}” for ${args.assigneeUserId ? `user ${args.assigneeUserId}` : `department ${bounded(args.department, 80)}`}`;
+  if (name === "send_erp_notification") return `Send ERP notification “${bounded(args.title, 120)}” to ${erpTargetLabel(args)}`;
+  if (name === "create_calendar_event") return `Create calendar event “${bounded(args.title, 120)}” at ${bounded(args.start, 40)}`;
+  if (name === "reschedule_calendar_event") return `Move calendar event ${bounded(args.eventId, 60)} to ${bounded(args.start, 40)}`;
+  if (name === "cancel_calendar_event") return `Cancel calendar event ${bounded(args.eventId, 60)}`;
   if (name === "create_kanban_task") return `Create Kanban task “${bounded(args.title, 120)}”`;
   if (name === "delegate_to_hermes") return `Send “${bounded(args.title || args.goal, 120)}” to Hermes`;
   if (name === "write_obsidian_note") return `${args.mode === "append" ? "Append to" : "Create"} Obsidian note “${bounded(args.path, 160)}”`;
@@ -112,6 +146,31 @@ function actionSummary(name, args) {
 }
 
 function cleanMutationArgs(name, args = {}) {
+  if (name === "create_erp_task") return {
+    title: bounded(args.title, 240), description: bounded(args.description, 4000),
+    assigneeUserId: Number.parseInt(args.assigneeUserId, 10) || null,
+    department: bounded(args.department, 120),
+    priority: ERP_PRIORITIES.has(args.priority) ? args.priority : "medium",
+    dueDate: bounded(args.dueDate, 10),
+  };
+  if (name === "send_erp_notification") return {
+    targetType: ERP_TARGETS.has(args.targetType) ? args.targetType : "user",
+    userId: Number.parseInt(args.userId, 10) || null,
+    department: bounded(args.department, 120),
+    safeGroup: bounded(args.safeGroup, 120),
+    title: bounded(args.title, 240), message: bounded(args.message, 4000),
+    link: bounded(args.link, 400),
+  };
+  if (name === "create_calendar_event") return {
+    title: bounded(args.title, 300), description: bounded(args.description, 4000),
+    location: bounded(args.location, 300), start: bounded(args.start, 40), end: bounded(args.end, 40),
+    timeZone: bounded(args.timeZone, 80), allDay: !!args.allDay,
+  };
+  if (name === "reschedule_calendar_event") return {
+    eventId: bounded(args.eventId, 200), start: bounded(args.start, 40), end: bounded(args.end, 40),
+    title: bounded(args.title, 300), timeZone: bounded(args.timeZone, 80),
+  };
+  if (name === "cancel_calendar_event") return { eventId: bounded(args.eventId, 200) };
   if (name === "create_kanban_task") return {
     title: bounded(args.title, 240), body: bounded(args.body, 20000),
     initialStatus: STATUSES.has(args.initialStatus) ? args.initialStatus : "triage",
@@ -139,6 +198,21 @@ function cleanMutationArgs(name, args = {}) {
 }
 
 function requireFields(name, args) {
+  if (name === "create_erp_task") {
+    if (!args.title) throw Object.assign(new Error("ERP task title is required"), { status: 400 });
+    if (!args.assigneeUserId && !args.department) {
+      throw Object.assign(new Error("An ERP task needs an assignee user id or a department"), { status: 400 });
+    }
+  }
+  if (name === "send_erp_notification") {
+    if (!args.title) throw Object.assign(new Error("Notification title is required"), { status: 400 });
+    const target = args.targetType === "department" ? args.department
+      : args.targetType === "safe_group" ? args.safeGroup : args.userId;
+    if (!target) throw Object.assign(new Error("Name who receives this ERP notification"), { status: 400 });
+  }
+  if (name === "create_calendar_event" && (!args.title || !args.start)) throw Object.assign(new Error("Event title and start time are required"), { status: 400 });
+  if (name === "reschedule_calendar_event" && (!args.eventId || !args.start)) throw Object.assign(new Error("Event id and new start time are required"), { status: 400 });
+  if (name === "cancel_calendar_event" && !args.eventId) throw Object.assign(new Error("Event id is required"), { status: 400 });
   if (name === "create_kanban_task" && !args.title) throw Object.assign(new Error("Task title is required"), { status: 400 });
   if (name === "delegate_to_hermes" && !args.goal) throw Object.assign(new Error("Hermes task goal is required"), { status: 400 });
   if (name === "write_obsidian_note" && (!args.path || !args.content)) throw Object.assign(new Error("Note path and content are required"), { status: 400 });
@@ -153,9 +227,34 @@ export function createMilaActions(options = {}) {
   const claude = options.claude || claudeCode;
   const hermesStatus = options.hermesStatus || hermesDashboardStatus;
   const mcp = options.mcpManager || mcpManager;
+  const store = options.db || db;
+  const workspaces = options.memberWorkspaces || memberWorkspaces;
+  const calendar = options.googleWorkspace || googleWorkspace;
+  const reminderStore = options.reminders || reminders;
+  const dayPlan = options.dayPlanFor || dayPlanFor;
   const now = options.now || Date.now;
   const makeToken = options.makeToken || (() => crypto.randomBytes(24).toString("base64url"));
   const pending = new Map();
+
+  // One way into the ERP MCP server for everything outside the big context read,
+  // so a tool call cannot quietly skip the connect step.
+  async function erpCall(tool, args = {}) {
+    const server = store.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
+    if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
+    if (!mcp.isLive(server.id)) {
+      const connected = await mcp.connect(server);
+      store.mcp.update(server.id, { status: "active", tools: connected.tools });
+    }
+    const result = await mcp.callTool(server.id, tool, args);
+    const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
+    try { return JSON.parse(text); } catch { return { ok: true, text }; }
+  }
+
+  function requireUser(context) {
+    const user = context?.user;
+    if (!user?.id) throw Object.assign(new Error("This action needs a signed-in user"), { status: 401 });
+    return user;
+  }
 
   function cleanupConfirmations() {
     const time = now();
@@ -206,6 +305,51 @@ export function createMilaActions(options = {}) {
   }
 
   async function executeWrite(name, args, context) {
+    // ERP writes reach colleagues, so the confirmed call also carries ERP's own
+    // confirm flag: without it the server would only return a preview and MILA
+    // would report a task that was never actually created.
+    if (name === "create_erp_task") {
+      const result = await erpCall("erp_create_task", {
+        title: args.title,
+        description: args.description || undefined,
+        assignee_user_id: args.assigneeUserId || undefined,
+        department: args.department || undefined,
+        priority: args.priority,
+        due_date: args.dueDate || undefined,
+        confirm: true,
+      });
+      if (result?.ok === false) throw Object.assign(new Error(bounded(result.error?.message || "ERP rejected the task", 240)), { status: 502 });
+      return { ok: true, action: name, task: result?.data || result, requires_confirmation: false };
+    }
+    if (name === "send_erp_notification") {
+      const result = await erpCall("erp_send_notification", {
+        target_type: args.targetType,
+        user_id: args.userId || undefined,
+        department: args.department || undefined,
+        safe_group: args.safeGroup || undefined,
+        title: args.title,
+        message: args.message || undefined,
+        link: args.link || undefined,
+        confirm: true,
+      });
+      if (result?.ok === false) throw Object.assign(new Error(bounded(result.error?.message || "ERP rejected the notification", 240)), { status: 502 });
+      return { ok: true, action: name, delivery: result?.data || result, recipients: result?.recipients || null };
+    }
+    if (name === "create_calendar_event") {
+      const user = requireUser(context);
+      const { event } = await calendar.createEvent(user.id, args);
+      return { ok: true, action: name, event };
+    }
+    if (name === "reschedule_calendar_event") {
+      const user = requireUser(context);
+      const { event } = await calendar.updateEvent(user.id, args.eventId, args);
+      return { ok: true, action: name, event };
+    }
+    if (name === "cancel_calendar_event") {
+      const user = requireUser(context);
+      await calendar.deleteEvent(user.id, args.eventId);
+      return { ok: true, action: name, eventId: args.eventId };
+    }
     if (name === "create_kanban_task") return createTask(args, false);
     if (name === "delegate_to_hermes") return createTask(args, true);
     if (name === "write_obsidian_note") {
@@ -228,11 +372,11 @@ export function createMilaActions(options = {}) {
       return { ok: true, action: name, status: "started", sessionId: session.id, title: session.title, mode: args.mode };
     }
     if (name === "call_mcp_tool") {
-      const server = db.mcp.list().find((item) => item.id === args.server || item.name === args.server);
+      const server = store.mcp.list().find((item) => item.id === args.server || item.name === args.server);
       if (!server) throw Object.assign(new Error(`MCP server not found: ${args.server}`), { status: 404 });
       if (!mcp.isLive(server.id)) {
         const connected = await mcp.connect(server);
-        db.mcp.update(server.id, { status: "active", tools: connected.tools });
+        store.mcp.update(server.id, { status: "active", tools: connected.tools });
       }
       const result = await mcp.callTool(server.id, args.tool, args.args || {});
       return {
@@ -246,13 +390,141 @@ export function createMilaActions(options = {}) {
     throw Object.assign(new Error("Unsupported MILA write action"), { status: 400 });
   }
 
+  // The owner's own desk. Capture is immediate; nothing here reaches anyone else.
+  async function executePersonal(name, args, context) {
+    const user = requireUser(context);
+
+    if (name === "get_my_day_plan") {
+      const plan = await dayPlan(user, { force: !!args.refresh });
+      return {
+        ok: true,
+        plan: {
+          date: plan.date, timezone: plan.timezone, summary: plan.summary,
+          workday: plan.workday, agenda: plan.agenda, alerts: plan.alerts,
+          next: plan.next, unplaced: plan.unplaced, stats: plan.stats,
+          calendar: plan.calendar, erp: plan.erp,
+        },
+        spoken: spokenPlan(plan),
+        source_policy: "This is the live plan. Read it out or answer from it; never invent meetings, tasks or times that are not in agenda or alerts.",
+      };
+    }
+
+    if (name === "list_my_tasks") {
+      const status = bounded(args.status, 20);
+      const tasks = workspaces.listTasks(user.id)
+        .filter((task) => (status ? task.status === status : task.status !== "done"))
+        .slice(0, integer(args.limit, 1, 50, 20));
+      return { count: tasks.length, tasks };
+    }
+
+    if (name === "create_my_task") {
+      const task = workspaces.createTask(user.id, {
+        title: bounded(args.title, 160),
+        detail: bounded(args.detail, 4000),
+        priority: ["low", "normal", "high"].includes(args.priority) ? args.priority : "normal",
+        dueDate: bounded(args.dueDate, 10),
+        status: args.status === "doing" ? "doing" : "todo",
+      });
+      return { ok: true, action: name, task };
+    }
+
+    if (name === "update_my_task") {
+      const id = bounded(args.taskId || args.id, 160);
+      if (!id) throw Object.assign(new Error("Task id is required"), { status: 400 });
+      const patch = {};
+      if (args.title !== undefined) patch.title = bounded(args.title, 160);
+      if (args.detail !== undefined) patch.detail = bounded(args.detail, 4000);
+      if (args.status !== undefined) patch.status = bounded(args.status, 20);
+      if (args.priority !== undefined) patch.priority = bounded(args.priority, 20);
+      if (args.dueDate !== undefined) patch.dueDate = bounded(args.dueDate, 10);
+      const task = workspaces.updateTask(user.id, id, patch);
+      if (!task) throw Object.assign(new Error("Task not found"), { status: 404 });
+      return { ok: true, action: name, task };
+    }
+
+    if (name === "list_my_notes") {
+      const query = bounded(args.query, 200).toLowerCase();
+      const notes = workspaces.listNotes(user.id)
+        .filter((note) => !query || `${note.title} ${note.content}`.toLowerCase().includes(query))
+        .slice(0, integer(args.limit, 1, 20, 8))
+        .map((note) => ({ id: note.id, title: note.title, content: bounded(note.content, 2000), updatedAt: note.updatedAt }));
+      return { count: notes.length, notes };
+    }
+
+    if (name === "save_my_note") {
+      const note = workspaces.createNote(user.id, {
+        title: bounded(args.title, 160),
+        content: bounded(args.content, 20000),
+      });
+      return { ok: true, action: name, note };
+    }
+
+    if (name === "remind_me") {
+      const reminder = reminderStore.create(user.id, {
+        title: bounded(args.title, 160),
+        body: bounded(args.body, 600),
+        dueAt: bounded(args.dueAt, 40),
+        priority: args.priority === "high" ? "high" : "normal",
+        route: bounded(args.route, 200),
+      });
+      return { ok: true, action: name, reminder };
+    }
+
+    if (name === "list_my_reminders") {
+      return { reminders: reminderStore.list(user.id).slice(0, 20) };
+    }
+
+    if (name === "cancel_reminder") {
+      const id = bounded(args.reminderId || args.id, 160);
+      if (!id) throw Object.assign(new Error("Reminder id is required"), { status: 400 });
+      const removed = reminderStore.cancel(user.id, id);
+      if (!removed) throw Object.assign(new Error("Reminder not found"), { status: 404 });
+      return { ok: true, action: name, reminderId: id };
+    }
+
+    if (name === "list_my_calendar") {
+      const status = calendar.status(user.id);
+      if (!status.connected) return { connected: false, events: [], note: "Google Calendar is not connected. Ask the owner to connect it on the Personal page." };
+      const from = args.from ? new Date(args.from) : new Date();
+      const to = args.to ? new Date(args.to) : new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const result = await calendar.calendarEvents(user.id, { from, to, limit: integer(args.limit, 1, 50, 20) });
+      return { connected: true, canWrite: !!status.canWrite, ...result };
+    }
+
+    throw Object.assign(new Error("Unsupported personal action"), { status: 400 });
+  }
+
   async function executeRead(name, args, context) {
+    if (PERSONAL_ACTIONS.has(name)) return executePersonal(name, args, context);
+
+    if (name === "get_erp_late_orders") {
+      const result = await erpCall("erp_late_orders", { limit: integer(args.limit, 1, 50, 20) });
+      return {
+        ok: result?.ok !== false,
+        source_policy: "Answer only from these rows. If ok is false, say the ERP late-order data is missing instead of guessing.",
+        late_orders: result?.data || result,
+      };
+    }
+    if (name === "list_erp_employee_tasks") {
+      const result = await erpCall("erp_list_employee_tasks", {
+        employee: bounded(args.employee, 80) || undefined,
+        department: bounded(args.department, 120) || undefined,
+        status: bounded(args.status, 40) || undefined,
+        scope: bounded(args.scope, 20) || "all",
+      });
+      return {
+        ok: result?.ok !== false,
+        source_policy: "These are real ERP tasks assigned to staff. Answer only from them and never invent an assignee or a due date.",
+        tasks: result?.data || result,
+        filters: result?.filters || null,
+      };
+    }
     if (name === "get_erp_business_context" || name === "get_finished_goods_stock") {
-      const server = db.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
+      const server = store.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
       if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
       if (!mcp.isLive(server.id)) {
         const connected = await mcp.connect(server);
-        db.mcp.update(server.id, { status: "active", tools: connected.tools });
+        store.mcp.update(server.id, { status: "active", tools: connected.tools });
       }
       const limit = integer(args.limit, 1, 100, 25);
       const callTool = async (tool, toolArgs = {}) => {
@@ -302,7 +574,7 @@ export function createMilaActions(options = {}) {
       };
     }
     if (name === "list_mcp_tools") {
-      const servers = db.mcp.list();
+      const servers = store.mcp.list();
       return {
         servers: servers.map((server) => ({
           id: server.id,
@@ -366,14 +638,18 @@ export function createMilaActions(options = {}) {
   async function call(name, args = {}, context = {}) {
     const action = bounded(name, 80);
     const actor = bounded(context.actor || "Creator", 120);
+    // A staged action belongs to the account that staged it, not just to a display
+    // name, so a token minted for one user can never be spent by another.
+    const identity = bounded(context.user?.id || actor, 200);
+    const scope = { actor, user: context.user || null };
     if (WRITE_ACTIONS.has(action)) {
       const token = bounded(args.confirmationToken, 200);
-      if (token) return executeWrite(action, consume(action, token, actor), { actor });
+      if (token) return executeWrite(action, consume(action, token, identity), scope);
       const clean = cleanMutationArgs(action, args);
       requireFields(action, clean);
-      return stage(action, clean, actor);
+      return stage(action, clean, identity);
     }
-    return executeRead(action, args, { actor });
+    return executeRead(action, args, scope);
   }
 
   return { call, pendingCount: () => pending.size };

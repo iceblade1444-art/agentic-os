@@ -4,9 +4,15 @@ import path from "node:path";
 
 import { config } from "../config.js";
 
+// MILA plans the day, so she has to be able to put things in the calendar, not
+// only read it. `calendar.events` covers create, move and delete on the user's own
+// events; it does not include calendar management or sharing. Widening the scope
+// invalidates existing grants: a user connected before this change keeps working
+// read-only until they reconnect, which `status().scopeStale` surfaces.
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
 ];
+const READ_ONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const pending = new Map();
 const file = path.join(config.dataDir, "google-workspace.json");
 const key = crypto.createHash("sha256").update(`google-workspace:${config.sessionSecret}`).digest();
@@ -47,12 +53,25 @@ function configured() {
   return !!(config.googleWorkspace.clientId && config.googleWorkspace.clientSecret && config.googleWorkspace.redirectUri);
 }
 
+function grantedScopes(record) {
+  const value = String(record?.scope || "").trim();
+  // Grants written before scopes were recorded were read-only by construction.
+  return value ? value.split(/\s+/) : (record ? [READ_ONLY_SCOPE] : []);
+}
+
 function publicStatus(userId) {
   const record = load()[userId];
+  const granted = grantedScopes(record);
+  const canWrite = granted.includes("https://www.googleapis.com/auth/calendar.events")
+    || granted.includes("https://www.googleapis.com/auth/calendar");
   return {
     configured: configured(),
     connected: !!record,
-    scopes: record ? SCOPES.map((scope) => scope.split("/").at(-1)) : [],
+    scopes: granted.map((scope) => scope.split("/").at(-1)),
+    canWrite,
+    // True when the grant predates calendar writes: reading still works, creating
+    // an event does not, and the fix is to reconnect.
+    scopeStale: !!record && !canWrite,
     connectedAt: record?.connectedAt || null,
   };
 }
@@ -72,6 +91,8 @@ function saveToken(userId, token, connectedAt) {
   const records = load();
   records[userId] = {
     encrypted: encrypt(token),
+    // A refresh response omits `scope`; keep whatever the original grant carried.
+    scope: String(token.scope || records[userId]?.scope || "").trim(),
     connectedAt: connectedAt || records[userId]?.connectedAt || new Date().toISOString(),
   };
   save(records);
@@ -108,23 +129,61 @@ async function accessToken(userId, forceRefresh = false) {
   return next.access_token;
 }
 
-async function calendarRequest(userId, pathAndQuery) {
-  let token = await accessToken(userId);
-  let response = await fetch(`${GOOGLE_CALENDAR_URL}${pathAndQuery}`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function calendarRequest(userId, pathAndQuery, { method = "GET", body } = {}) {
+  const send = async (token) => fetch(`${GOOGLE_CALENDAR_URL}${pathAndQuery}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
+
+  let token = await accessToken(userId);
+  let response = await send(token);
   if (response.status === 401) {
     token = await accessToken(userId, true);
-    response = await fetch(`${GOOGLE_CALENDAR_URL}${pathAndQuery}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    response = await send(token);
   }
+  if (response.status === 204) return {};
   const value = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = value?.error?.message || "Google Calendar request failed";
     throw Object.assign(new Error(message), { status: response.status === 403 ? 502 : response.status });
   }
   return value;
+}
+
+function requireWrite(userId) {
+  const state = publicStatus(userId);
+  if (!state.connected) throw Object.assign(new Error("Google Calendar is not connected"), { status: 409 });
+  if (!state.canWrite) {
+    throw Object.assign(
+      new Error("Google Calendar is connected read-only. Reconnect it to let MILA create events."),
+      { status: 403, code: "calendar_scope_stale" },
+    );
+  }
+}
+
+function eventPayload({ title, description, location, start, end, timeZone, allDay }) {
+  const clean = (value, max) => String(value ?? "").trim().slice(0, max);
+  const summary = clean(title, 300);
+  if (!summary) throw Object.assign(new Error("Event title is required"), { status: 400 });
+  const from = new Date(start);
+  if (Number.isNaN(from.getTime())) throw Object.assign(new Error("Event start time is invalid"), { status: 400 });
+  const to = end ? new Date(end) : new Date(from.getTime() + 60 * 60 * 1000);
+  if (Number.isNaN(to.getTime()) || to <= from) {
+    throw Object.assign(new Error("Event end time must be after the start time"), { status: 400 });
+  }
+  const zone = clean(timeZone, 80);
+  const day = (date) => date.toISOString().slice(0, 10);
+  return {
+    summary,
+    description: clean(description, 4000) || undefined,
+    location: clean(location, 300) || undefined,
+    start: allDay ? { date: day(from) } : { dateTime: from.toISOString(), ...(zone ? { timeZone: zone } : {}) },
+    end: allDay ? { date: day(to) } : { dateTime: to.toISOString(), ...(zone ? { timeZone: zone } : {}) },
+  };
 }
 
 function eventTime(value = {}) {
@@ -219,6 +278,44 @@ export const googleWorkspace = {
       timeZone: String(value.timeZone || ""),
       syncedAt: new Date().toISOString(),
     };
+  },
+
+  async createEvent(userId, input = {}) {
+    requireWrite(userId);
+    const value = await calendarRequest(userId, "/calendars/primary/events", {
+      method: "POST",
+      body: eventPayload(input),
+    });
+    return { event: normalizeEvent(value) };
+  },
+
+  async updateEvent(userId, eventId, input = {}) {
+    requireWrite(userId);
+    const id = String(eventId || "").trim();
+    if (!id) throw Object.assign(new Error("Event id is required"), { status: 400 });
+    const current = await calendarRequest(userId, `/calendars/primary/events/${encodeURIComponent(id)}`);
+    const merged = eventPayload({
+      title: input.title ?? current.summary,
+      description: input.description ?? current.description,
+      location: input.location ?? current.location,
+      start: input.start ?? eventTime(current.start),
+      end: input.end ?? eventTime(current.end),
+      timeZone: input.timeZone ?? current.start?.timeZone,
+      allDay: input.allDay ?? !!(current.start?.date && !current.start?.dateTime),
+    });
+    const value = await calendarRequest(userId, `/calendars/primary/events/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: merged,
+    });
+    return { event: normalizeEvent(value) };
+  },
+
+  async deleteEvent(userId, eventId) {
+    requireWrite(userId);
+    const id = String(eventId || "").trim();
+    if (!id) throw Object.assign(new Error("Event id is required"), { status: 400 });
+    await calendarRequest(userId, `/calendars/primary/events/${encodeURIComponent(id)}`, { method: "DELETE" });
+    return { ok: true, id };
   },
 
   disconnect(userId) {

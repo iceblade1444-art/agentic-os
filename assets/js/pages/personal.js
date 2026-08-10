@@ -15,6 +15,19 @@ const tabs = [
 
 let data = null;
 let activeTab = "today";
+let plan = null;
+let planError = "";
+let milaBrief = "";
+let milaBusy = false;
+
+function clock(value, timezone) {
+  try {
+    return new Intl.DateTimeFormat("ru-RU", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false })
+      .format(new Date(value));
+  } catch {
+    return String(value || "").slice(11, 16);
+  }
+}
 
 const stateLabel = (value) => t(value === "connected" ? "personal.status.connected" : value === "setup_required" ? "personal.status.setup" : "personal.status.disconnected");
 const stateTone = (value) => value === "connected" ? "connected" : value === "setup_required" ? "warning" : "muted";
@@ -56,15 +69,6 @@ function taskItem(task) {
   </article>`;
 }
 
-function calendarEventItem(event) {
-  const start = event.start ? localizedDate(event.start) : t("personal.calendar.noTime");
-  const detail = [start, event.location].filter(Boolean).join(" · ");
-  const body = `<span class="personal-source-icon">${icon("calendar")}</span><span><strong>${esc(event.title)}</strong><small>${esc(detail)}</small></span>${icon("chevright")}`;
-  return event.htmlLink
-    ? `<a class="personal-source" href="${esc(event.htmlLink)}" target="_blank" rel="noopener">${body}</a>`
-    : `<div class="personal-source">${body}</div>`;
-}
-
 function approvalTitle(item) {
   return item?.title || item?.description || item?.action || item?.summary || item?.id || t("personal.approval.action");
 }
@@ -90,25 +94,118 @@ function googleSource(name, key, glyph) {
   return `<button type="button" class="personal-source ${data.google?.configured ? "" : "disabled"}" data-google-connect ${data.google?.configured ? "" : "disabled"}>${body}</button>`;
 }
 
+function agendaItem(item, timezone) {
+  const time = item.allDay
+    ? t("personal.plan.allDay")
+    : `${clock(item.start, timezone)}–${clock(item.end, timezone)}`;
+  const focus = item.kind === "focus";
+  const label = focus ? t("personal.plan.focusBlock") : t("personal.plan.meeting");
+  const body = `<span class="personal-agenda-time">${esc(time)}</span>
+    <span class="personal-agenda-body"><strong>${esc(item.title)}</strong><small>${esc([label, item.detail].filter(Boolean).join(" · "))}</small></span>
+    <span class="personal-agenda-kind ${focus ? "focus" : "event"}">${icon(focus ? "zap" : "calendar")}</span>`;
+  if (focus) {
+    return `<article class="personal-agenda-item focus">${body}
+      <button class="icon-btn tip" data-personal-done="${esc(item.taskId)}" data-tip="${t("personal.task.doneTip")}" aria-label="${t("personal.task.doneAria")}">${icon("check")}</button>
+    </article>`;
+  }
+  return item.link
+    ? `<a class="personal-agenda-item" href="${esc(item.link)}" target="_blank" rel="noopener">${body}</a>`
+    : `<div class="personal-agenda-item">${body}</div>`;
+}
+
+function alertItem(item) {
+  return `<article class="personal-alert ${item.level === "high" ? "high" : "normal"}">
+    ${icon(item.level === "high" ? "alert" : "info")}
+    <div><strong>${esc(item.title)}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</div>
+    ${item.route ? `<a class="btn btn-ghost sm" href="${esc(item.route)}">${t("personal.open")}</a>` : ""}
+  </article>`;
+}
+
+function planPanel() {
+  if (planError) {
+    return `<section class="personal-panel personal-agenda">
+      <header><div><span>${t("personal.plan.eyebrow")}</span><h3>${t("personal.plan.title")}</h3></div><button class="link-button" data-plan-refresh>${t("personal.plan.refresh")}</button></header>
+      <div class="personal-empty">${icon("alert")}<strong>${t("personal.plan.unavailable")}</strong><span>${esc(planError)}</span></div>
+    </section>`;
+  }
+  if (!plan) {
+    return `<section class="personal-panel personal-agenda"><header><div><span>${t("personal.plan.eyebrow")}</span><h3>${t("personal.plan.title")}</h3></div></header><div class="skeleton" style="height:120px"></div></section>`;
+  }
+  const zone = plan.timezone;
+  const stats = plan.stats || {};
+  return `<section class="personal-panel personal-agenda">
+    <header>
+      <div><span>${t("personal.plan.eyebrow")}</span><h3>${t("personal.plan.title")}</h3></div>
+      <button class="link-button" data-plan-refresh>${t("personal.plan.refresh")}</button>
+    </header>
+    <div class="personal-plan-stats">
+      <span>${icon("calendar")}${t("personal.plan.meetings", { count: stats.events || 0 })}</span>
+      <span>${icon("zap")}${t("personal.plan.focusCount", { count: stats.focusBlocks || 0 })}</span>
+      <span>${icon("clock")}${t("personal.plan.free", { minutes: stats.freeMinutes || 0 })}</span>
+      <span class="personal-plan-window">${esc(plan.workday?.startLabel || "")}–${esc(plan.workday?.endLabel || "")}</span>
+    </div>
+    ${plan.calendar?.scopeStale ? `<div class="personal-policy warning">${icon("warn")}${t("personal.plan.scopeStale")}<button class="btn btn-secondary sm" data-google-reconnect>${t("personal.plan.reconnect")}</button></div>` : ""}
+    <div class="personal-agenda-list">${plan.agenda?.length
+      ? plan.agenda.map((item) => agendaItem(item, zone)).join("")
+      : `<div class="personal-empty">${icon("calendar")}<strong>${t("personal.plan.empty")}</strong><span>${t("personal.plan.emptyHint")}</span></div>`}</div>
+    ${plan.unplaced?.length ? `<div class="personal-policy">${icon("info")}${t("personal.plan.unplaced", { count: plan.unplaced.length })}</div>` : ""}
+  </section>`;
+}
+
+function milaPanel() {
+  return `<section class="personal-panel personal-mila">
+    <header><div><span>${t("personal.mila.eyebrow")}</span><h3>${t("personal.mila.title")}</h3></div></header>
+    <p class="personal-mila-hint">${t("personal.mila.hint")}</p>
+    <div class="personal-mila-actions">
+      <button class="btn btn-primary" data-mila-call>${icon("mic")}${t("personal.mila.call")}</button>
+      <button class="btn btn-secondary" data-mila-brief ${milaBusy ? "disabled" : ""}>${icon("sparkles")}${t(milaBusy ? "personal.mila.thinking" : "personal.mila.brief")}</button>
+      <a class="btn btn-ghost" href="#/chat">${icon("chat")}${t("personal.mila.chat")}</a>
+    </div>
+    ${milaBrief ? `<div class="personal-mila-answer">${esc(milaBrief)}</div>` : ""}
+  </section>`;
+}
+
+function remindersPanel() {
+  const items = data.reminders || [];
+  return `<section class="personal-panel">
+    <header><div><span>${t("personal.reminders.eyebrow")}</span><h3>${t("personal.reminders.title")}</h3></div></header>
+    <div class="personal-stack">${items.length ? items.slice(0, 5).map((item) => `<article class="personal-task">
+      <span class="member-priority ${item.priority === "high" ? "high" : "normal"}"></span>
+      <div><strong>${esc(item.title)}</strong><small>${esc(localizedDate(item.dueAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}</small></div>
+      <button class="icon-btn" data-reminder-cancel="${esc(item.id)}" aria-label="${t("personal.reminders.cancel")}">${icon("x")}</button>
+    </article>`).join("") : `<div class="personal-empty">${icon("clock")}<strong>${t("personal.reminders.empty")}</strong><span>${t("personal.reminders.emptyHint")}</span></div>`}</div>
+  </section>`;
+}
+
 function todayView() {
-  const focus = data.briefing.focus;
   const briefing = briefingCopy();
+  const summary = plan?.summary || briefing.summary;
+  const load = plan?.stats?.load ?? data.briefing.load;
   return `<section class="personal-today">
     <div class="personal-briefing">
       <div class="personal-briefing-icon">${icon("sparkles")}</div>
-      <div><span>${t("personal.briefing")}</span><h2>${esc(briefing.greeting)}</h2><p>${esc(briefing.summary)}</p></div>
-      <div class="personal-load"><strong>${data.briefing.load}%</strong><span>${t("personal.load")}</span><i><b style="width:${data.briefing.load}%"></b></i></div>
+      <div><span>${t("personal.briefing")}</span><h2>${esc(briefing.greeting)}</h2><p>${esc(summary)}</p></div>
+      <div class="personal-load"><strong>${load}%</strong><span>${t("personal.load")}</span><i><b style="width:${load}%"></b></i></div>
     </div>
     <form class="personal-capture" data-capture-form>
       ${icon("command")}<input maxlength="160" data-capture-input placeholder="${t("personal.capture")}"/>
       <button class="btn btn-primary" type="submit">${icon("plus")}${t("personal.add")}</button>
     </form>
+    ${plan?.next ? `<div class="personal-focus-callout wide"><span>${t("personal.plan.next")}</span><strong>${esc(plan.next.title)}</strong><small>${esc(plan.next.allDay ? t("personal.plan.allDay") : `${clock(plan.next.start, plan.timezone)}–${clock(plan.next.end, plan.timezone)}`)}</small></div>` : ""}
+    ${planPanel()}
     <div class="personal-today-grid">
+      ${milaPanel()}
+      <section class="personal-panel">
+        <header><div><span>${t("personal.plan.alertsEyebrow")}</span><h3>${t("personal.plan.alerts")}</h3></div></header>
+        <div class="personal-stack">${plan?.alerts?.length
+          ? plan.alerts.slice(0, 6).map(alertItem).join("")
+          : `<div class="personal-empty">${icon("check")}<strong>${t("personal.plan.noAlerts")}</strong><span>${t("personal.plan.noAlertsHint")}</span></div>`}</div>
+      </section>
       <section class="personal-panel personal-focus">
         <header><div><span>${t("personal.plan")}</span><h3>${t("personal.priorityTasks")}</h3></div><a href="#/my-tasks">${t("personal.allTasks")} ${icon("arrowright")}</a></header>
-        ${focus ? `<div class="personal-focus-callout"><span>${t("personal.mainFocus")}</span><strong>${esc(focus.title)}</strong><small>${esc(focus.detail || t("personal.focusFallback"))}</small></div>` : ""}
         <div class="personal-stack">${data.tasks.length ? data.tasks.slice(0, 5).map(taskItem).join("") : `<div class="personal-empty">${icon("check")}<strong>${t("personal.noOpenTasks")}</strong><span>${t("personal.chooseFocus")}</span></div>`}</div>
       </section>
+      ${remindersPanel()}
       <section class="personal-panel">
         <header><div><span>${t("personal.control")}</span><h3>${t("personal.waitingApprovals")}</h3></div><button class="link-button" data-open-tab="approvals">${t("personal.all")}</button></header>
         <div class="personal-stack">${data.approvals.length ? data.approvals.slice(0, 3).map((item) => approvalItem(item, true)).join("") : `<div class="personal-empty">${icon("guardrails")}<strong>${t("personal.nothingWaiting")}</strong><span>${t(data.approvalsAvailable ? "personal.noAgentRequests" : "personal.operatorOnly")}</span></div>`}</div>
@@ -116,12 +213,6 @@ function todayView() {
       <section class="personal-panel">
         <header><div><span>${t("personal.context")}</span><h3>${t("personal.latestMemory")}</h3></div><button class="link-button" data-open-tab="memory">${t("personal.open")}</button></header>
         <div class="personal-note-stream">${data.notes.length ? data.notes.slice(0, 4).map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}">${icon("file")}<span><strong>${esc(note.title)}</strong><small>${t("personal.updated", { date: shortDate(note.updatedAt) })}</small></span>${icon("chevright")}</a>`).join("") : `<div class="personal-empty">${icon("file")}<strong>${t("personal.emptyMemory")}</strong><span>${t("personal.createMemory")}</span></div>`}</div>
-      </section>
-      <section class="personal-panel">
-        <header><div><span>${t("personal.calendar.eyebrow")}</span><h3>${t("personal.calendar.upcoming")}</h3></div>${data.google?.connected ? `<button class="link-button" data-calendar-refresh>${t("personal.calendar.refresh")}</button>` : ""}</header>
-        <div class="personal-stack">${data.calendarEvents?.length
-          ? data.calendarEvents.slice(0, 5).map(calendarEventItem).join("")
-          : `<div class="personal-empty">${icon("calendar")}<strong>${t(data.google?.connected ? "personal.calendar.empty" : "personal.calendar.connect")}</strong><span>${t(data.google?.connected ? "personal.calendar.emptyHint" : "personal.calendar.connectHint")}</span></div>`}</div>
       </section>
     </div>
     <section class="personal-sources">
@@ -146,6 +237,22 @@ function soulView() {
           <div class="field"><label class="label">${t("personal.timezone")}</label><input class="input" data-profile-timezone maxlength="80" value="${esc(profile.timezone || "Asia/Tashkent")}"/></div>
         </div>
         <div class="field"><label class="label">${t("personal.workFocus")}</label><input class="input" data-profile-focus maxlength="160" value="${esc(profile.roleFocus || "")}" placeholder="${t("personal.workFocusPlaceholder")}"/></div>
+        <div class="personal-form-grid">
+          <div class="field"><label class="label">${t("personal.workdayStart")}</label><input class="input" type="time" data-profile-workday-start value="${esc(profile.workdayStart || "09:00")}"/></div>
+          <div class="field"><label class="label">${t("personal.workdayEnd")}</label><input class="input" type="time" data-profile-workday-end value="${esc(profile.workdayEnd || "18:00")}"/></div>
+        </div>
+        <div class="personal-form-grid">
+          <div class="field"><label class="label">${t("personal.lunchStart")}</label><input class="input" type="time" data-profile-lunch-start value="${esc(profile.lunchStart || "13:00")}"/></div>
+          <div class="field"><label class="label">${t("personal.lunchEnd")}</label><input class="input" type="time" data-profile-lunch-end value="${esc(profile.lunchEnd || "14:00")}"/></div>
+        </div>
+        <p class="hint">${t("personal.workdayHint")}</p>
+        <div class="personal-form-grid">
+          <div class="field"><label class="label">${t("personal.briefTime")}</label><input class="input" type="time" data-profile-brief-time value="${esc(profile.briefTime || "08:00")}"/></div>
+          <div class="field"><label class="label">${t("personal.briefEnabled")}</label>
+            <label class="mila-toggle-row"><input type="checkbox" data-profile-brief-enabled ${profile.briefEnabled === false ? "" : "checked"}/><span>${t("personal.briefEnabledHint")}</span></label>
+          </div>
+        </div>
+        <div class="personal-mila-actions"><button class="btn btn-secondary sm" type="button" data-brief-now>${icon("send")}${t("personal.briefNow")}</button></div>
         <div class="personal-form-grid">
           <div class="field"><label class="label">${t("personal.milaStyle")}</label><select class="select" data-profile-style>
             ${["assistant", "friend", "operator", "mentor"].map((value) => `<option value="${value}" ${profile.assistantStyle === value ? "selected" : ""}>${t(`personal.style.${value}`)}</option>`).join("")}
@@ -234,24 +341,73 @@ function openTab(root, tab) {
   wire(root);
 }
 
-async function reload(root, tab = activeTab) {
-  data = await api.personal.dashboard();
-  data.calendarEvents = [];
-  if (data.google?.connected) {
-    try {
-      const result = await api.personal.googleEvents({ limit: 10 });
-      data.calendarEvents = result.events || [];
-    } catch (error) {
-      data.calendarError = error.message;
-    }
+// The plan and the reminder list are allowed to fail on their own: a calendar that
+// times out must not take the whole Personal page down with it.
+async function loadPlan({ refresh = false } = {}) {
+  try {
+    plan = await api.personal.plan({ refresh });
+    planError = "";
+  } catch (error) {
+    plan = null;
+    planError = error.message;
   }
+}
+
+async function loadSide() {
+  try {
+    const result = await api.personal.reminders();
+    data.reminders = result.reminders || [];
+  } catch {
+    data.reminders = [];
+  }
+}
+
+async function reload(root, tab = activeTab, { refreshPlan = false } = {}) {
+  data = await api.personal.dashboard();
+  await Promise.all([loadPlan({ refresh: refreshPlan }), loadSide()]);
   openTab(root, tab);
 }
 
 function wire(root) {
-  root.querySelector("[data-calendar-refresh]")?.addEventListener("click", async (event) => {
+  root.querySelector("[data-plan-refresh]")?.addEventListener("click", async (event) => {
     event.currentTarget.disabled = true;
-    await reload(root, "today");
+    await reload(root, "today", { refreshPlan: true });
+  });
+  root.querySelector("[data-google-reconnect]")?.addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      const result = await api.personal.googleConnect();
+      location.assign(result.authorizationUrl);
+    } catch (error) {
+      event.currentTarget.disabled = false;
+      toast("error", t("personal.googleError"), error.message);
+    }
+  });
+  root.querySelector("[data-mila-call]")?.addEventListener("click", async () => {
+    try {
+      if (!milaHub.active) await milaHub.start();
+    } catch (error) { toast("error", t("personal.mila.callError"), error.message); }
+  });
+  root.querySelector("[data-mila-brief]")?.addEventListener("click", async () => {
+    milaBusy = true;
+    openTab(root, "today");
+    try {
+      await milaHub.sendWritten(t("personal.mila.prompt"));
+      const answer = milaHub.snapshot().history.filter((item) => item.role === "assistant").at(-1);
+      milaBrief = answer?.text || "";
+    } catch (error) {
+      toast("error", t("personal.mila.briefError"), error.message);
+    } finally {
+      milaBusy = false;
+      openTab(root, "today");
+    }
+  });
+  root.querySelectorAll("[data-reminder-cancel]").forEach((button) => button.onclick = async () => {
+    button.disabled = true;
+    try {
+      await api.personal.cancelReminder(button.dataset.reminderCancel);
+      await reload(root, "today");
+    } catch (error) { button.disabled = false; toast("error", t("personal.reminders.cancelError"), error.message); }
   });
   root.querySelector("[data-personal-file]")?.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
@@ -335,6 +491,12 @@ function wire(root) {
           roleFocus: root.querySelector("[data-profile-focus]").value,
           assistantStyle: root.querySelector("[data-profile-style]").value,
           responseLength: root.querySelector("[data-profile-length]").value,
+          workdayStart: root.querySelector("[data-profile-workday-start]").value,
+          workdayEnd: root.querySelector("[data-profile-workday-end]").value,
+          lunchStart: root.querySelector("[data-profile-lunch-start]").value,
+          lunchEnd: root.querySelector("[data-profile-lunch-end]").value,
+          briefTime: root.querySelector("[data-profile-brief-time]").value,
+          briefEnabled: root.querySelector("[data-profile-brief-enabled]").checked,
         },
         ...(current.canEditWorkspace ? { workspace: current.workspace } : {}),
       });
@@ -348,6 +510,15 @@ function wire(root) {
       state.textContent = error.message;
       toast("error", t("personal.profileSaveError"), error.message);
     }
+  });
+  root.querySelector("[data-brief-now]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await api.personal.sendBrief();
+      toast("success", t("personal.briefSent"), t("personal.briefSentHint", { date: result.date }));
+    } catch (error) { toast("error", t("personal.briefError"), error.message); }
+    button.disabled = false;
   });
   root.querySelector("[data-sync-soul]")?.addEventListener("click", async (event) => {
     event.currentTarget.disabled = true;
@@ -385,6 +556,8 @@ const personal = {
       data = await api.personal.dashboard();
       root.innerHTML = shell();
       wire(root);
+      await Promise.all([loadPlan(), loadSide()]);
+      openTab(root, activeTab);
     } catch (error) {
       root.innerHTML = `<div class="empty member-empty">${icon("alert")}<h4>${t("personal.unavailable")}</h4><p>${esc(error.message)}</p></div>`;
     }

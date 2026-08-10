@@ -59,6 +59,8 @@ import { sessions } from "./lib/sessions.js";
 import { users } from "./lib/users.js";
 import { googleWorkspace } from "./lib/google-workspace.js";
 import { pushService } from "./lib/push-service.js";
+import { reminders } from "./lib/reminders.js";
+import { morningBrief } from "./lib/morning-brief.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -275,6 +277,8 @@ server.listen(config.port, async () => {
   else console.log(`    \x1b[33mAuth        : DISABLED — set AUTH_TOKEN before exposing this beyond localhost\x1b[0m`);
   postgresShadow.start();
   postgresAuthReads.start();
+  reminders.start();
+  morningBrief.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {

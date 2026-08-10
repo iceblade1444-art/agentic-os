@@ -145,6 +145,20 @@ export const api = {
       query.set("limit", String(limit));
       return j(`/api/personal/google/calendar/events?${query}`);
     },
+    plan: ({ refresh = false, spoken = false } = {}) => {
+      const query = new URLSearchParams();
+      if (refresh) query.set("refresh", "1");
+      if (spoken) query.set("spoken", "1");
+      const suffix = query.toString();
+      return j(`/api/personal/plan${suffix ? `?${suffix}` : ""}`);
+    },
+    createEvent: (body) => j("/api/personal/google/calendar/events", { method: "POST", body }),
+    updateEvent: (id, body) => j(`/api/personal/google/calendar/events/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    deleteEvent: (id) => j(`/api/personal/google/calendar/events/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    sendBrief: () => j("/api/personal/brief", { method: "POST" }),
+    reminders: () => j("/api/personal/reminders"),
+    createReminder: (body) => j("/api/personal/reminders", { method: "POST", body }),
+    cancelReminder: (id) => j(`/api/personal/reminders/${encodeURIComponent(id)}`, { method: "DELETE" }),
     files: () => j("/api/personal/files"),
     uploadFile: (body) => j("/api/personal/files", { method: "POST", body }),
     deleteFile: (id) => j(`/api/personal/files/${encodeURIComponent(id)}`, { method: "DELETE" }),

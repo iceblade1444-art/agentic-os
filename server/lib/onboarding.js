@@ -10,6 +10,17 @@ const LENGTHS = new Set(["brief", "balanced"]);
 const LANGUAGES = new Set(["Russian", "Uzbek", "English"]);
 
 const text = (value, max) => String(value || "").trim().replace(/\s+/g, " ").slice(0, max);
+// The day planner needs real working hours, so they are stored as validated
+// HH:MM rather than prose: anything malformed falls back to the default instead
+// of silently shifting someone's whole schedule.
+const clock = (value, fallback) => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text(value, 5));
+  if (!match) return fallback;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return fallback;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+};
 const list = (value, maxItems = 6, maxChars = 300) => [...new Set(
   (Array.isArray(value) ? value : String(value || "").split("\n"))
     .map((item) => text(item, maxChars)).filter(Boolean),
@@ -67,12 +78,23 @@ export class OnboardingStore {
     const locale = LOCALES.has(profileInput.locale) ? profileInput.locale : "ru-RU";
     const assistantStyle = STYLES.has(profileInput.assistantStyle) ? profileInput.assistantStyle : "assistant";
     const responseLength = LENGTHS.has(profileInput.responseLength) ? profileInput.responseLength : "brief";
+    const workdayStart = clock(profileInput.workdayStart, current.profile.workdayStart || "09:00");
+    const workdayEnd = clock(profileInput.workdayEnd, current.profile.workdayEnd || "18:00");
     const profile = {
       locale,
       timezone: text(profileInput.timezone || "Asia/Tashkent", 80),
       roleFocus: text(profileInput.roleFocus, 160),
       assistantStyle,
       responseLength,
+      // An end before the start would leave the planner with no day at all.
+      workdayStart: workdayEnd > workdayStart ? workdayStart : "09:00",
+      workdayEnd: workdayEnd > workdayStart ? workdayEnd : "18:00",
+      lunchStart: clock(profileInput.lunchStart, current.profile.lunchStart || "13:00"),
+      lunchEnd: clock(profileInput.lunchEnd, current.profile.lunchEnd || "14:00"),
+      briefTime: clock(profileInput.briefTime, current.profile.briefTime || "08:00"),
+      briefEnabled: profileInput.briefEnabled === undefined
+        ? current.profile.briefEnabled !== false
+        : !!profileInput.briefEnabled,
       completedAt: current.profile.completedAt || now,
       updatedAt: now,
     };
@@ -145,6 +167,8 @@ This is the durable personal operating profile for MILA, Hermes and Agentic OS a
 - Timezone: ${profile.timezone || "Asia/Tashkent"}
 - Preferred interface and voice language: ${profile.locale || "ru-RU"}
 - Work focus: ${profile.roleFocus || "Not specified"}
+- Working hours: ${profile.workdayStart || "09:00"}–${profile.workdayEnd || "18:00"} local, lunch ${profile.lunchStart || "13:00"}–${profile.lunchEnd || "14:00"}
+- Morning brief: ${profile.briefEnabled === false ? "off" : `at ${profile.briefTime || "08:00"} local`}
 
 ## Assistant Preferences
 

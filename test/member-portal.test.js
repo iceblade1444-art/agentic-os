@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { MemberWorkspaceStore } from "../server/lib/member-workspace.js";
+import { PERSONAL_ACTIONS } from "../server/lib/mila-actions.js";
 
 function temporaryStore(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-members-"));
@@ -211,11 +212,19 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
     assert.equal(integrations.includes(route), true, `expected admin gate on ${route}`);
   }
 
-  // The tool-calling endpoint enforces its own allowlist: only the two read-only
-  // ERP actions pass for a non-operator, everything else (Kanban, Hermes, Obsidian,
-  // Claude Code, MCP) 403s regardless of what the client declared.
+  // The tool-calling endpoint enforces its own allowlist: the two read-only ERP
+  // actions and the caller's own personal desk pass for a non-operator, everything
+  // else (Kanban, Hermes, Obsidian, Claude Code, MCP) 403s regardless of what the
+  // client declared.
   assert.match(milaActionsRoute, /READ_ONLY_ERP_ACTIONS = new Set\(\["get_erp_business_context", "get_finished_goods_stock"\]\)/);
-  assert.match(milaActionsRoute, /!READ_ONLY_ERP_ACTIONS\.has\(name\) && !isOperator\(req\)/);
+  assert.match(milaActionsRoute, /allowedForEveryone = \(name\) => READ_ONLY_ERP_ACTIONS\.has\(name\) \|\| PERSONAL_ACTIONS\.has\(name\)/);
+  assert.match(milaActionsRoute, /!allowedForEveryone\(name\) && !isOperator\(req\)/);
+  for (const operatorOnly of ["create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool"]) {
+    assert.equal(PERSONAL_ACTIONS.has(operatorOnly), false, `${operatorOnly} must stay operator-only`);
+  }
+  // Personal actions run against req.user, so a Member reaches their own desk and
+  // nobody else's — the route has to hand the user object down, not just a name.
+  assert.match(milaActionsRoute, /milaActions\.call\(name, req\.body\?\.args \|\| \{\}, \{ actor: user\?\.name \|\| "Creator", user \}\)/);
 
   // The client mirrors the same allowlist so Mila never offers an action it cannot run.
   assert.match(milaTools, /MILA_MEMBER_TOOLS = MILA_TOOLS\.filter/);

@@ -7,6 +7,10 @@ import { personalBriefing } from "../lib/personal.js";
 import { pendingApprovals } from "../lib/pulse.js";
 import { googleWorkspace } from "../lib/google-workspace.js";
 import { personalFiles } from "../lib/personal-files.js";
+import { dayPlanFor } from "../lib/personal-day.js";
+import { spokenPlan } from "../lib/personal-planner.js";
+import { reminders } from "../lib/reminders.js";
+import { morningBrief } from "../lib/morning-brief.js";
 
 const r = Router();
 
@@ -57,6 +61,46 @@ r.get("/", async (req, res, next) => {
       },
       google,
     });
+  } catch (error) { next(error); }
+});
+
+r.get("/plan", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    const plan = await dayPlanFor(user, { force: req.query.refresh === "1" });
+    res.json(req.query.spoken === "1" ? { ...plan, spoken: spokenPlan(plan) } : plan);
+  } catch (error) { next(error); }
+});
+
+// Deliver today's brief on demand: the same payload the morning tick sends, so
+// what the owner tests at noon is exactly what arrives at eight.
+r.post("/brief", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    const result = await morningBrief.sendFor(user);
+    res.status(201).json({ ok: true, item: result.item, date: result.plan.date });
+  } catch (error) { next(error); }
+});
+
+r.get("/reminders", (req, res) => {
+  const user = req.user || authenticatedUser(req);
+  res.json({ reminders: reminders.list(user.id) });
+});
+
+r.post("/reminders", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.status(201).json({ reminder: reminders.create(user.id, req.body || {}) });
+  } catch (error) { next(error); }
+});
+
+r.delete("/reminders/:id", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    if (!reminders.cancel(user.id, req.params.id)) {
+      return res.status(404).json({ error: "Reminder not found" });
+    }
+    res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
@@ -113,6 +157,27 @@ r.get("/google/calendar/events", async (req, res, next) => {
       to: req.query.to,
       limit: req.query.limit,
     }));
+  } catch (error) { next(error); }
+});
+
+r.post("/google/calendar/events", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.status(201).json(await googleWorkspace.createEvent(user.id, req.body || {}));
+  } catch (error) { next(error); }
+});
+
+r.patch("/google/calendar/events/:id", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.json(await googleWorkspace.updateEvent(user.id, req.params.id, req.body || {}));
+  } catch (error) { next(error); }
+});
+
+r.delete("/google/calendar/events/:id", async (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.json(await googleWorkspace.deleteEvent(user.id, req.params.id));
   } catch (error) { next(error); }
 });
 
