@@ -67,11 +67,18 @@ function fixture() {
     cancel: (userId, id) => id === "rem_1",
   };
 
+  // Without this the action layer journals into the real Obsidian vault, so a
+  // test run would leave "Встреча с закупщиком" in someone's actual notes.
+  const journalled = [];
+  const journal = { append: async (entry) => { journalled.push(entry); return entry; }, recentText: () => "" };
+
   return {
-    created, calendarCalls, reminderCalls,
+    created, calendarCalls, reminderCalls, journalled,
     actions: createMilaActions({
       memberWorkspaces,
       googleWorkspace,
+      journal,
+      onboarding: { get: () => ({ profile: { timezone: "Asia/Tashkent" } }) },
       reminders,
       dayPlanFor: async (user) => ({
         date: "2026-08-10", timezone: "Asia/Tashkent", summary: `План для ${user.name}`,
@@ -170,7 +177,11 @@ test("ERP work reaches staff only after confirmation, and never from a Member", 
     mcp: { list: () => [{ id: "mcp_erp", kind: "erp", name: "milana-erp" }], update: () => {} },
   };
   let token = 0;
-  const actions = createMilaActions({ mcpManager, db, makeToken: () => `confirm_${++token}` });
+  const actions = createMilaActions({
+    mcpManager, db, makeToken: () => `confirm_${++token}`,
+    journal: { append: async () => null, recentText: () => "" },
+    onboarding: { get: () => ({ profile: {} }) },
+  });
   const context = { actor: OWNER.name, user: OWNER };
 
   const staged = await actions.call("send_erp_notification", {

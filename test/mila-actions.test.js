@@ -72,6 +72,10 @@ function fixture() {
       kanbanRequest, knowledge, claude, board: "agentic-os",
       hermesStatus: async () => ({ ready: true, status: 200 }),
       mcpManager,
+      // Confirmed writes are journalled, and the real store would write into the
+      // developer's own Obsidian vault.
+      journal: { append: async () => null, recentText: () => "" },
+      onboarding: { get: () => ({ profile: {} }) },
       makeToken: () => `confirm_${++token}`,
     }),
   };

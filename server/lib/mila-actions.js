@@ -6,6 +6,8 @@ import { claudeCode } from "./claude-code.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { knowledge } from "./knowledge.js";
+import { journal } from "./journal.js";
+import { onboarding } from "./onboarding.js";
 import { googleWorkspace } from "./google-workspace.js";
 import { memberWorkspaces } from "./member-workspace.js";
 import { dayPlanFor } from "./personal-day.js";
@@ -35,6 +37,12 @@ export const PERSONAL_ACTIONS = new Set([
   "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
 ]);
+// The personal actions that change something. Reads are deliberately absent: a
+// journal of every "what's on today" would bury the decisions it exists to keep.
+const JOURNALLED_PERSONAL_ACTIONS = new Set([
+  "create_my_task", "update_my_task", "save_my_note", "remind_me", "cancel_reminder",
+]);
+
 const STATUSES = new Set(["triage", "todo", "ready"]);
 const PROFILES = new Set(["default", "scout", "scribe", "reach", "dev"]);
 
@@ -145,6 +153,28 @@ function actionSummary(name, args) {
   return "Run Agentic OS action";
 }
 
+// One line per action, phrased so a person skimming the vault tomorrow and a model
+// reading it as context both learn the same thing: what happened, to what.
+function journalLine(name, args = {}, result = {}) {
+  const of = (...values) => bounded(values.find((value) => value), 160);
+  if (name === "create_my_task") return { kind: "task", title: `Задача: ${of(result.task?.title, args.title)}`, detail: args.dueDate ? `срок ${args.dueDate}` : "" };
+  if (name === "update_my_task") return { kind: "task", title: `Задача обновлена: ${of(result.task?.title, args.title, args.taskId)}`, detail: bounded(args.status || args.dueDate || args.priority, 80) };
+  if (name === "save_my_note") return { kind: "note", title: `Заметка: ${of(result.note?.title, args.title)}` };
+  if (name === "remind_me") return { kind: "reminder", title: `Напоминание: ${of(args.title)}`, detail: bounded(args.dueAt, 40) };
+  if (name === "cancel_reminder") return { kind: "reminder", title: "Напоминание отменено" };
+  if (name === "create_calendar_event") return { kind: "calendar", title: `Встреча: ${of(result.event?.title, args.title)}`, detail: bounded(args.start, 40) };
+  if (name === "reschedule_calendar_event") return { kind: "calendar", title: `Встреча перенесена: ${of(result.event?.title, args.title, args.eventId)}`, detail: bounded(args.start, 40) };
+  if (name === "cancel_calendar_event") return { kind: "calendar", title: `Встреча отменена: ${of(args.eventId)}` };
+  if (name === "create_kanban_task") return { kind: "kanban", title: `Карточка: ${of(result.task?.title, args.title)}` };
+  if (name === "delegate_to_hermes") return { kind: "hermes", title: `Hermes: ${of(args.title, args.goal)}` };
+  if (name === "write_obsidian_note") return { kind: "vault", title: `Заметка в vault: ${of(args.path)}` };
+  if (name === "ask_claude_code") return { kind: "claude", title: `Claude Workspace: ${of(args.title, args.request)}` };
+  if (name === "create_erp_task") return { kind: "erp", title: `Задача в ERP: ${of(args.title)}`, detail: args.department ? `отдел ${args.department}` : `сотрудник ${args.assigneeUserId}` };
+  if (name === "send_erp_notification") return { kind: "erp", title: `Уведомление в ERP: ${of(args.title)}`, detail: erpTargetLabel(args) };
+  if (name === "call_mcp_tool") return { kind: "mcp", title: `MCP ${of(args.server)} · ${of(args.tool)}` };
+  return null;
+}
+
 function cleanMutationArgs(name, args = {}) {
   if (name === "create_erp_task") return {
     title: bounded(args.title, 240), description: bounded(args.description, 4000),
@@ -233,8 +263,30 @@ export function createMilaActions(options = {}) {
   const reminderStore = options.reminders || reminders;
   const dayPlan = options.dayPlanFor || dayPlanFor;
   const now = options.now || Date.now;
+  const journalStore = options.journal || journal;
+  const onboardingStore = options.onboarding || onboarding;
   const makeToken = options.makeToken || (() => crypto.randomBytes(24).toString("base64url"));
   const pending = new Map();
+
+  // Writes one line into the day journal so the next session knows what this one
+  // did. Best-effort on purpose: an action the user asked for must not report a
+  // failure because the vault was unwritable.
+  async function record(action, args, result, scope) {
+    try {
+      const line = journalLine(action, args, result);
+      if (!line) return;
+      const profile = scope.user ? (onboardingStore.get(scope.user).profile || {}) : {};
+      await journalStore.append({
+        actor: scope.actor,
+        timezone: profile.timezone,
+        kind: line.kind,
+        title: line.title,
+        detail: line.detail,
+      });
+    } catch (error) {
+      console.error(`[mila] could not journal ${action}: ${error.message}`);
+    }
+  }
 
   // One way into the ERP MCP server for everything outside the big context read,
   // so a tool call cannot quietly skip the connect step.
@@ -644,10 +696,21 @@ export function createMilaActions(options = {}) {
     const scope = { actor, user: context.user || null };
     if (WRITE_ACTIONS.has(action)) {
       const token = bounded(args.confirmationToken, 200);
-      if (token) return executeWrite(action, consume(action, token, identity), scope);
+      if (token) {
+        const confirmed = consume(action, token, identity);
+        const result = await executeWrite(action, confirmed, scope);
+        // Only after it actually happened: a staged action is not history.
+        await record(action, confirmed, result, scope);
+        return result;
+      }
       const clean = cleanMutationArgs(action, args);
       requireFields(action, clean);
       return stage(action, clean, identity);
+    }
+    if (JOURNALLED_PERSONAL_ACTIONS.has(action)) {
+      const result = await executeRead(action, args, scope);
+      await record(action, args, result, scope);
+      return result;
     }
     return executeRead(action, args, scope);
   }

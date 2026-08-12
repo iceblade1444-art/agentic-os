@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { config } from "../config.js";
+import { journal } from "./journal.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 
 const LOCALES = new Set(["ru-RU", "uz-UZ", "en-US"]);
@@ -270,6 +271,9 @@ export const AGENT_PLAYBOOKS = [
 // last and only into what is left: a long playbook can lose its own tail, never
 // the workspace facts or the user profile above it.
 export const CONTEXT_BUDGET = 9000;
+// The journal is capped well below the whole budget: it must inform the agent,
+// never crowd out the workspace facts and the playbook it sits between.
+export const JOURNAL_CONTEXT_BUDGET = 1800;
 const MIN_PLAYBOOK_ROOM = 400;
 
 export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.obsidianVault) {
@@ -292,7 +296,7 @@ export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.o
 export function sharedAgentContext(
   user,
   state = onboarding.get(user || { id: "system", role: "Viewer" }),
-  { vault = config.obsidianVault } = {},
+  { vault = config.obsidianVault, journal: journalStore = journal } = {},
 ) {
   const workspace = state.workspace || {};
   const profile = state.profile || {};
@@ -320,6 +324,17 @@ export function sharedAgentContext(
   }
   let out = context.join("\n").slice(0, CONTEXT_BUDGET);
   if (!(workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;
+
+  // The other half of the memory loop. Facts and playbooks flow down into every
+  // agent; without this, nothing flowed back, so each session began knowing
+  // nothing about the last one. The journal goes in before the playbooks because
+  // it is the part that changes daily — a playbook is stable and can be re-read
+  // from the vault, yesterday's decisions cannot.
+  const journalHeading = "\nWhat Agentic OS did recently (day journal, newest last):\n";
+  const room = Math.min(JOURNAL_CONTEXT_BUDGET, CONTEXT_BUDGET - out.length - journalHeading.length);
+  const recent = room > 200 ? journalStore.recentText({ budget: room, timeZone: profile.timezone }) : "";
+  if (recent) out += `${journalHeading}${recent}\n`;
+
   for (const entry of AGENT_PLAYBOOKS) {
     const heading = `\n${entry.label} (authoritative, written by the team):\n`;
     const playbook = readAgentPlaybook(entry, CONTEXT_BUDGET - out.length - heading.length, vault);
