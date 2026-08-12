@@ -115,7 +115,14 @@
 
 **Задеплоено 2026-08-10**, коммит `33f5214`. Релизный гейт зелёный: 250 тестов на хосте и в образе, candidate health, production E2E.
 
-⚠️ **Не активно в проде, пока не настроят:** Google OAuth (`GOOGLE_CLIENT_ID`/`GOOGLE_REDIRECT_URI` пустые) — без него календарь не подключается вообще, план строится только из задач. Firebase настроен, push работает.
+**Google Calendar в проде настроен** (проверено 2026-08-12): `/api/personal/google/status`
+отвечает `configured: true`, авторизационная ссылка уходит на правильный redirect
+`https://agent.milanapremium.uz/api/personal/google/callback` со scope `calendar.events`.
+Переменные называются `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` /
+`GOOGLE_OAUTH_REDIRECT_URI` — не `GOOGLE_CLIENT_ID`, на этом легко ошибиться при проверке.
+Строка про Google в конце `deploy.sh` печатается безусловно и ничего не диагностирует.
+Осталось только одно действие владельца: нажать «Календарь» на вкладке «Персональное» и
+подтвердить доступ в Google — `connected` пока `false`. Firebase настроен, push работает.
 
 ## 4. Приоритет и последовательность
 
