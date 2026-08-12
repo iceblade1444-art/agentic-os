@@ -106,6 +106,50 @@ function svc(ok, label, detail, href) {
   </a>`;
 }
 
+// ---------- database migration ----------
+
+// The JSON-to-Postgres migration runs live behind a consistency gate that falls
+// back to JSON on its own. Falling back is normal and by design; what is not
+// normal is an outbox that keeps growing or a refresh that keeps failing, and
+// until now none of it was visible anywhere.
+const OUTBOX_WARN = 25;
+const OUTBOX_FAIL = 200;
+
+export function databaseHealth(database = {}) {
+  const outbox = database.outbox || {};
+  const pending = Number(outbox.pending) || 0;
+  const failures = Number(database.consecutiveFailures) || 0;
+  const refreshFailures = Number(database.authReads?.refreshFailures) || 0;
+  const errors = [database.error, outbox.error, database.reads?.error, database.writes?.error,
+    database.authReads?.error, database.authWrites?.error].filter(Boolean);
+
+  let level = "ok";
+  const reasons = [];
+  if (!database.enabled) {
+    return { level: "off", label: "JSON only", detail: "Postgres sync is disabled", pending, reasons };
+  }
+  if (errors.length) { level = "fail"; reasons.push(String(errors[0]).slice(0, 120)); }
+  if (refreshFailures > 0) { level = "fail"; reasons.push(`${refreshFailures} refresh failures`); }
+  if (failures > 0) { level = level === "fail" ? "fail" : "warn"; reasons.push(`${failures} syncs failed in a row`); }
+  if (pending >= OUTBOX_FAIL) { level = "fail"; reasons.push(`${pending} writes queued`); }
+  else if (pending >= OUTBOX_WARN) { level = level === "fail" ? "fail" : "warn"; reasons.push(`${pending} writes queued`); }
+  if (database.status && database.status !== "ready" && level === "ok") {
+    level = "warn";
+    reasons.push(`status ${database.status}`);
+  }
+
+  const source = database.sourceOfTruth === "postgres" ? "Postgres" : "Hybrid";
+  return {
+    level,
+    label: source,
+    detail: level === "ok"
+      ? `${source} · synced ${database.lastSuccessAt ? age(database.lastSuccessAt) : "never"}`
+      : reasons.join(" · "),
+    pending,
+    reasons,
+  };
+}
+
 // ---------- attention ----------
 
 function attentionItems(data) {
@@ -136,6 +180,15 @@ function attentionItems(data) {
   const disk = data.pulse.host?.disk;
   if (disk && disk.usedPct >= 85) {
     items.push({ sev: disk.usedPct >= 93 ? "err" : "warn", title: `Disk usage at ${disk.usedPct}%`, detail: `${gb(disk.freeBytes)} free — prune Docker or expand the volume`, actions: `<a class="btn btn-secondary sm" href="#/observability">Details</a>` });
+  }
+  const database = databaseHealth(data.health?.database);
+  if (database.level === "fail" || database.level === "warn") {
+    items.push({
+      sev: database.level === "fail" ? "err" : "warn",
+      title: database.level === "fail" ? "Database migration is failing" : "Database migration needs a look",
+      detail: `${database.detail} — writes are still safe in JSON, but the Postgres copy is falling behind`,
+      actions: `<a class="btn btn-secondary sm" href="#/observability">Details</a>`,
+    });
   }
   const backup = data.operations.backup || {};
   if (backup.status && backup.status !== "success") {
@@ -245,6 +298,7 @@ function dashboardHTML(data) {
   const attention = attentionItems(data);
   const workspace = data.onboarding.workspace?.name || "Agentic OS";
   const servicesOk = [data.hermes.ready, data.mila.ok, data.claude.ready, data.knowledge.ready].filter(Boolean).length;
+  const database = databaseHealth(data.health?.database);
 
   const missionDelta = missionsDone === missionsPrev
     ? `<span class="oh-delta flat">same as last week</span>`
@@ -268,6 +322,7 @@ function dashboardHTML(data) {
       ${svc(data.knowledge.ready && data.knowledge.writable, "Vault", `${data.knowledge.notes || 0} notes`, "#/knowledge")}
       ${svc(backup.status === "success", "Backup", backup.status === "success" ? age(backup.lastSuccessAt) : "Not verified", "#/observability")}
       ${svc(!host.disk || host.disk.usedPct < 85, "Disk", host.disk ? `${host.disk.usedPct}% used` : "No probe", "#/observability")}
+      ${svc(database.level === "ok" || database.level === "off", "Database", database.detail, "#/observability")}
     </div>
 
     <div class="oh-top mb-4">
@@ -362,6 +417,7 @@ async function loadDashboard(force = false) {
     bounded(api.integrations.milaStatus(), { ok: false, error: "Timed out" }, 3500),
     bounded(api.onboarding.get(), { workspace: {} }),
     bounded(api.missions.list(), []),
+    bounded(api.healthNow(), api.health || {}, 3500),
   ]);
   const critical = [results[0], results[1], results[2]];
   if (critical.every((result) => result.status === "rejected")) {
@@ -381,6 +437,7 @@ async function loadDashboard(force = false) {
       mila: value(results[9], {}),
       onboarding: value(results[10], { workspace: {} }),
       missions: value(results[11], []),
+      health: value(results[12], api.health || {}),
       checkedAt: Date.now(),
     };
     dashboardError = "";

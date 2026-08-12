@@ -22,6 +22,9 @@ async function j(url, opts = {}) {
 export const api = {
   get on() { return state.on; },
   get health() { return state.health; },
+  // The cached health above is from app boot. The dashboard polls, and the
+  // database migration status only means something if it is current.
+  healthNow: () => j("/api/health"),
   voiceMetric: (body) => j("/api/telemetry/voice", { method: "POST", body }),
   serverHasLLM() { const p = state.health?.providers || {}; return state.on && Object.values(p).some(Boolean); },
   async detect() {
