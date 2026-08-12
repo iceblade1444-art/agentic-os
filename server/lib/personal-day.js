@@ -17,6 +17,12 @@ const settle = (promise, fallback, timeoutMs = 4000) => Promise.race([
   new Promise((resolve) => setTimeout(resolve, timeoutMs, fallback).unref?.()),
 ]);
 
+// The first ERP read after the MCP connection goes cold pays for a connect and a
+// login, which is most of the interactive budget on its own. A page load can
+// afford to skip it and refresh later; the morning brief cannot, because nobody
+// is watching and a missed read means a late order silently absent from the day.
+const INTERACTIVE_ERP_MS = 4000;
+
 export async function dayPlanFor(user, options = {}) {
   const now = options.now || new Date();
   const workspaces = options.memberWorkspaces || memberWorkspaces;
@@ -36,7 +42,15 @@ export async function dayPlanFor(user, options = {}) {
       }), { events: [] })
       : Promise.resolve({ events: [] }),
     operator ? settle(approvalsOf(), []) : Promise.resolve([]),
-    operator ? settle(digest.read({ force: !!options.force }), { available: false }) : Promise.resolve({ available: false }),
+    operator
+      ? settle(
+        digest.read({ force: !!options.force }),
+        // Distinguished from "no ERP configured": a read that ran out of time is
+        // a gap the plan must admit to, not an absence it can quietly ignore.
+        { available: false, timedOut: true },
+        Number(options.erpTimeoutMs) || INTERACTIVE_ERP_MS,
+      )
+      : Promise.resolve({ available: false }),
   ]);
 
   const plan = buildDayPlan({
@@ -57,6 +71,6 @@ export async function dayPlanFor(user, options = {}) {
       scopeStale: !!google.scopeStale,
       configured: !!google.configured,
     },
-    erp: { available: !!erp?.available, checkedAt: erp?.checkedAt || null },
+    erp: { available: !!erp?.available, checkedAt: erp?.checkedAt || null, timedOut: !!erp?.timedOut },
   };
 }

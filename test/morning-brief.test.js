@@ -67,6 +67,24 @@ test("the brief fires once per local morning and not again that day", async () =
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("the brief gives ERP room the interactive page cannot", async () => {
+  const { brief, deps, dir } = fixture();
+  const config = deps();
+  const budgets = [];
+  config.dayPlanFor = async (user, options) => {
+    budgets.push(options.erpTimeoutMs);
+    return buildDayPlan({ user, profile: { timezone: TZ }, now: options.now });
+  };
+
+  await brief.run(new Date("2026-08-10T03:10:00.000Z"), config);
+  // The first ERP read of the day pays for a cold connect and a login; a page
+  // load can refresh later, an unattended brief cannot.
+  assert.equal(budgets.length, 1);
+  assert.ok(budgets[0] >= 15000, `expected a generous ERP budget, got ${budgets[0]}`);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test("a brief that missed its window by hours is skipped rather than sent late", async () => {
   const { brief, deps, inbox, dir } = fixture();
   // 14:00 local, six hours past the 08:00 slot.

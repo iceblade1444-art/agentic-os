@@ -85,7 +85,10 @@ export class MorningBrief {
     const workspaces = deps.memberWorkspaces || memberWorkspaces;
     const push = deps.pushService || pushService;
     const buildPlan = deps.dayPlanFor || dayPlanFor;
-    const plan = await buildPlan(user, { now });
+    // Nobody is waiting on the brief, and it is always the first ERP read of the
+    // day — the slowest one, since the MCP connection and login have gone cold
+    // overnight. Give it room rather than shipping a day plan with ERP missing.
+    const plan = await buildPlan(user, { now, erpTimeoutMs: 20000 });
     const item = workspaces.createInboxItem(user.id, {
       type: "reminder",
       title: `План на ${plan.date}`,

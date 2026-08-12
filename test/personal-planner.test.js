@@ -99,6 +99,22 @@ test("ERP flags reach the plan, and a missing ERP contributes nothing", () => {
   assert.equal(withoutErp.alerts.some((alert) => alert.source === "erp"), false);
 });
 
+test("an ERP read that ran out of time is admitted, not swallowed", () => {
+  // The dangerous failure is a clean-looking day that simply never checked for
+  // late orders, so a timeout has to be visible in the plan.
+  const plan = buildDayPlan({
+    profile: { timezone: TZ }, now: MORNING,
+    erp: { available: false, timedOut: true },
+  });
+  const alert = plan.alerts.find((item) => item.id === "erp_timeout");
+  assert.ok(alert, "a timed-out ERP read must raise an alert");
+  assert.match(alert.detail, /Пересобрать/);
+
+  // A workspace with no ERP at all stays quiet: there is nothing to warn about.
+  const noErp = buildDayPlan({ profile: { timezone: TZ }, now: MORNING, erp: { available: false } });
+  assert.equal(noErp.alerts.some((item) => item.source === "erp"), false);
+});
+
 test("tasks that do not fit the day are reported instead of silently dropped", () => {
   const plan = buildDayPlan({
     profile: { timezone: TZ },

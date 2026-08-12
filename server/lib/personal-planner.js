@@ -186,6 +186,18 @@ function scheduleTasks(tasks, slots, today) {
 
 function erpAlerts(erp = {}) {
   const alerts = [];
+  // A read that ran out of time is not the same as no ERP at all. Staying silent
+  // here would hide a late order behind an otherwise clean-looking day.
+  if (erp?.timedOut) {
+    return [{
+      id: "erp_timeout",
+      level: "normal",
+      source: "erp",
+      title: "Данные ERP не успели загрузиться",
+      detail: "Просроченные заказы и склад не проверены. Нажмите «Пересобрать».",
+      route: "#/erp",
+    }];
+  }
   if (!erp || erp.available === false) return alerts;
   const late = Number(erp.lateOrders);
   if (Number.isFinite(late) && late > 0) {
