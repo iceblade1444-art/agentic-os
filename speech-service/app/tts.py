@@ -191,17 +191,33 @@ def _qwen_python(text: str, language: str, speaker: str, instruct: str) -> bytes
 
 
 
+# VoxCPM is built for a 3-10 s prompt. Past that it does not complain — it
+# returns silence, which reads as "cloning is broken". Measured: a 16 s
+# reference produced 2.4 s of nothing; the same voice trimmed to 10 s cloned
+# correctly.
+REF_MAX_SEC = float(os.getenv("CLONE_REF_MAX_SEC", "10"))
+REF_MIN_SEC = 1.5
+
+
 def _as_reference_wav(path: str) -> str:
-    """Browsers record ogg/opus/webm; VoxCPM wants a plain 16 kHz mono wav."""
+    """Browsers record ogg/opus/webm; VoxCPM wants a short 16 kHz mono wav."""
     import subprocess
     import tempfile
+    import wave
 
     out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", path,
-                        "-ac", "1", "-ar", "16000", out], capture_output=True)
+                        "-t", str(REF_MAX_SEC), "-ac", "1", "-ar", "16000", out],
+                       capture_output=True)
     if r.returncode != 0 or not os.path.getsize(out):
         raise RuntimeError("не удалось прочитать образец голоса — "
                            "запишите 3-10 секунд чистой речи без шума")
+    with wave.open(out) as w:
+        seconds = w.getnframes() / w.getframerate()
+    if seconds < REF_MIN_SEC:
+        raise RuntimeError(f"образец слишком короткий ({seconds:.1f} с) — "
+                           "нужно 3-10 секунд непрерывной речи")
+    log.info("clone reference: %.1fs used (max %.0fs)", seconds, REF_MAX_SEC)
     return out
 
 
