@@ -289,7 +289,7 @@ export default {
       if (btn.disabled) return;                 // a second click would only queue
       // premium runs a diffusion model on CPU: ~13x realtime, plus ~50 s the
       // first time after a restart while the model loads
-      const eta = { premium: 40, clone: 40, quality: 6, emotion: 6, fast: 1 }[engine] || 5;
+      const eta = { premium: 45, clone: 65, quality: 6, emotion: 6, fast: 1 }[engine] || 5;
       const started = Date.now();
       btn.disabled = true;
       const tick = () => {

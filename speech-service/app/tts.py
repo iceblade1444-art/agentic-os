@@ -190,19 +190,39 @@ def _qwen_python(text: str, language: str, speaker: str, instruct: str) -> bytes
     return buf.getvalue()
 
 
+
+def _as_reference_wav(path: str) -> str:
+    """Browsers record ogg/opus/webm; VoxCPM wants a plain 16 kHz mono wav."""
+    import subprocess
+    import tempfile
+
+    out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", path,
+                        "-ac", "1", "-ar", "16000", out], capture_output=True)
+    if r.returncode != 0 or not os.path.getsize(out):
+        raise RuntimeError("не удалось прочитать образец голоса — "
+                           "запишите 3-10 секунд чистой речи без шума")
+    return out
+
+
 def clone(text: str, language: str | None, ref_audio_path: str,
           ref_text: str | None = None) -> bytes:
     """Zero-shot voice clone from a 3-10s reference sample (Qwen Base model).
     Works for Qwen's 10 languages (ru/en included; uz is served by the
     custom-trained piper voice instead)."""
     lang_norm = _norm_lang(language)
+    if lang_norm == "Uzbek":
+        # our own VoxCPM does zero-shot Uzbek cloning — it is how the production
+        # voice was made. Slow on CPU (~13x realtime), but it works.
+        return _voxcpm(quality.normalize_for_tts(text, lang_norm),
+                       ref_wav=_as_reference_wav(ref_audio_path),
+                       ref_text=(ref_text or "").strip() or None)
     if lang_norm not in ("Russian", "English", "Chinese", "Japanese", "Korean",
                          "German", "French", "Spanish", "Italian", "Portuguese"):
         raise RuntimeError(
             f"Клонирование не поддерживает язык «{lang_norm}» — движок Qwen знает "
-            "только 10 языков (русский, английский и др.). Узбекский голос под "
-            "конкретного человека делается дообучением модели Миланы на его записях "
-            "(нужно 30-60 минут чистого аудио) — спроси об этом ассистента.")
+            "только 10 языков (русский, английский и др.), а наш VoxCPM обучен на "
+            "узбекском. Для остальных языков клонирование пока недоступно.")
     global _clone_model
     with _lock:
         if _clone_model is None:
@@ -238,7 +258,8 @@ VOX_REF_TEXT = ("Tabiiyki, bunday ko'nikmalar bilan taraqqiyotga "
 _vox_model = None
 
 
-def _voxcpm(text: str) -> bytes:
+def _voxcpm(text: str, ref_wav: str | None = None,
+            ref_text: str | None = None) -> bytes:
     global _vox_model
     import io
     import json as _json
@@ -271,8 +292,8 @@ def _voxcpm(text: str) -> bytes:
             log.info("premium uz voice ready")
 
     wav = np.asarray(_vox_model.generate(
-        text=text, prompt_wav_path=f"{VOX_CKPT}/REFERENCE_VOICE.wav",
-        prompt_text=VOX_REF_TEXT, inference_timesteps=VOX_STEPS,
+        text=text, prompt_wav_path=ref_wav or f"{VOX_CKPT}/REFERENCE_VOICE.wav",
+        prompt_text=ref_text or VOX_REF_TEXT, inference_timesteps=VOX_STEPS,
         cfg_value=VOX_CFG)).squeeze()
     buf = io.BytesIO()
     _sf.write(buf, wav, 44100, format="WAV")
