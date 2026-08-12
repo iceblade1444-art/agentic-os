@@ -7,6 +7,7 @@ import test from "node:test";
 import { createJournal, JOURNAL_FOLDER } from "../server/lib/journal.js";
 import { createMilaActions } from "../server/lib/mila-actions.js";
 import { sharedAgentContext, CONTEXT_BUDGET, JOURNAL_CONTEXT_BUDGET } from "../server/lib/onboarding.js";
+import { readMemorySnapshot } from "../server/lib/memory.js";
 
 const TZ = "Asia/Tashkent";
 const OWNER = { id: "usr_owner", name: "Бахадыр", role: "Creator" };
@@ -75,6 +76,54 @@ test("recentText returns the newest days last and respects its budget", async ()
 
   assert.deepEqual(store.listDays(), ["2026-08-10", "2026-08-09", "2026-08-08"]);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("entries parse back into structure, newest first, and survive hand edits", async () => {
+  const v = vault();
+  await v.journal.append({ actor: "Бахадыр", kind: "task", title: "Задача: Отгрузка", detail: "срок 2026-08-11", timezone: TZ });
+  await v.journal.append({ actor: "Creator", kind: "mission", title: "Миссия выполнена: Сбор лидов", timezone: TZ });
+  // Someone annotating the day in Obsidian writes a plain bullet, not our format.
+  fs.appendFileSync(path.join(v.dir, JOURNAL_FOLDER, "2026-08-10.md"), "- дописал руками про поставщика\n");
+
+  const entries = v.journal.recentEntries({ days: 2, timeZone: TZ });
+  assert.equal(entries.length, 3);
+  // A hand-written bullet carries no timestamp, so it sorts to the end of its
+  // day rather than being dropped for not matching the generated format.
+  const byHand = entries.find((item) => item.title === "дописал руками про поставщика");
+  assert.ok(byHand, "a hand-written line is kept");
+  assert.equal(byHand.kind, "");
+  assert.equal(byHand.time, "");
+  assert.equal(entries.at(-1), byHand);
+
+  const task = entries.find((item) => item.kind === "task");
+  assert.deepEqual(
+    { actor: task.actor, time: task.time, title: task.title, detail: task.detail, date: task.date },
+    { actor: "Бахадыр", time: "14:30", title: "Задача: Отгрузка", detail: "срок 2026-08-11", date: "2026-08-10" },
+  );
+  assert.ok(entries.some((item) => item.kind === "mission"));
+  v.cleanup();
+});
+
+test("the memory snapshot carries the journal, and only for operators", async () => {
+  const store = {
+    recentEntries: ({ timeZone }) => [{ date: "2026-08-10", time: "14:30", actor: "Бахадыр", kind: "task", title: `Задача (${timeZone})`, detail: "" }],
+  };
+  const deps = {
+    journal: store,
+    onboarding: { get: () => ({ profile: { timezone: TZ, completedAt: "2026-01-01" }, workspace: {} }) },
+    memberWorkspaces: { dashboard: () => ({ counts: { notes: 2 } }) },
+    knowledge: { status: async () => ({ ready: true, notes: 7 }), recentUsage: async () => [] },
+  };
+
+  const operator = await readMemorySnapshot({ id: "u1", name: "Бахадыр", role: "Creator" }, deps);
+  assert.equal(operator.journal.length, 1);
+  assert.equal(operator.stats.journalEntries, 1);
+  assert.match(operator.journal[0].title, /Asia\/Tashkent/, "the user's own timezone decides the day");
+
+  // The journal spans the whole workspace, so a Member must not receive it.
+  const member = await readMemorySnapshot({ id: "u2", name: "Гость", role: "Member" }, deps);
+  assert.deepEqual(member.journal, []);
+  assert.equal(member.stats.journalEntries, 0);
 });
 
 test("a missing journal is silence, never an error", () => {

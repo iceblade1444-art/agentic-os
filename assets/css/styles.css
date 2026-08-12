@@ -2806,6 +2806,39 @@ body.compact .card.pad-lg { padding: 16px; }
   .personal-policy.warning { align-items: flex-start; flex-wrap: wrap; }
   .personal-policy.warning .btn { margin-left: 0; }
 }
+/* Memory: the day journal the system writes about itself */
+.memory-journal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.memory-journal-head h4 { margin: 0; color: var(--text); font-size: 14px; font-weight: 700; }
+.memory-journal-head span { display: block; margin-top: 3px; color: var(--text-3); font-size: 11px; }
+.memory-journal { padding: 4px 18px 14px; }
+.memory-journal-day {
+  margin: 12px 0 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.memory-journal-row {
+  display: grid;
+  grid-template-columns: 46px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.memory-journal-row:last-child { border-bottom: 0; }
+.memory-journal-time { color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.memory-journal-ico svg { width: 14px; color: var(--primary); }
+.memory-journal-body { min-width: 0; }
+.memory-journal-body strong { display: block; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.memory-journal-body small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10px; }
+@media (max-width: 560px) {
+  .memory-journal { padding: 4px 12px 12px; }
+  .memory-journal-row { grid-template-columns: 42px 16px minmax(0, 1fr); row-gap: 4px; }
+  .memory-journal-row .badge { grid-column: 3 / -1; justify-self: start; }
+}
+
 /* Studio: Design, Media and Analytics */
 .studio-page{padding-bottom:48px}.studio-head{align-items:flex-start}.studio-head .row{flex-wrap:wrap;justify-content:flex-end}
 .studio-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}

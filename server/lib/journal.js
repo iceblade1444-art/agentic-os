@@ -118,6 +118,37 @@ export function createJournal(options = {}) {
     return text;
   }
 
+  // The same lines as `recentText`, parsed for a screen rather than a prompt.
+  // The format is written by `formatEntry` above, but a person may have edited
+  // the file by hand in Obsidian, so anything unparseable degrades to a title
+  // instead of being dropped.
+  function recentEntries({ days = 7, limit = 60, timeZone = "Asia/Tashkent" } = {}) {
+    const out = [];
+    for (let back = 0; back < days; back += 1) {
+      const dateKey = dateKeyFor(timeZone, new Date(now().getTime() - back * 24 * 60 * 60 * 1000));
+      let body = "";
+      try { body = fs.readFileSync(fileFor(dateKey), "utf8"); } catch { continue; }
+      for (const raw of body.split("\n")) {
+        if (!raw.startsWith("- ")) continue;
+        const line = raw.slice(2).trim();
+        const match = /^(\d{2}:\d{2})\s+(?:\*\*(.+?)\*\*\s+)?(?:\((\w[\w-]*)\)\s+)?(.*)$/.exec(line);
+        const [title, detail] = (match ? match[4] : line).split(" — ");
+        out.push({
+          date: dateKey,
+          time: match ? match[1] : "",
+          actor: match?.[2] || "",
+          kind: match?.[3] || "",
+          title: (title || "").trim(),
+          detail: (detail || "").trim(),
+        });
+      }
+    }
+    // Newest first: a screen is read from the top, unlike a prompt.
+    return out
+      .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+      .slice(0, limit);
+  }
+
   function readDay(dateKey) {
     try {
       return fs.readFileSync(fileFor(String(dateKey || "").slice(0, 10)), "utf8");
@@ -139,7 +170,7 @@ export function createJournal(options = {}) {
     }
   }
 
-  return { append, recentText, readDay, listDays, invalidate: () => { cache = null; }, fileFor };
+  return { append, recentText, recentEntries, readDay, listDays, invalidate: () => { cache = null; }, fileFor };
 }
 
 export const journal = createJournal();

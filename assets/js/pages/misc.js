@@ -450,6 +450,38 @@ let memoryState = null;
 let memoryError = "";
 let memoryLoading = false;
 
+const JOURNAL_KIND_ICONS = {
+  task: "evaluations", note: "file", reminder: "clock", calendar: "calendar",
+  kanban: "grid", hermes: "bot", vault: "knowledge", claude: "code",
+  erp: "database", mcp: "mcp", mission: "rocket", routine: "refresh",
+};
+
+// The day journal is the half of memory the system writes itself, so it is shown
+// as a timeline rather than a table: what happened, in order, newest first.
+function journalHTML(entries) {
+  if (!entries.length) {
+    return `<div class="card pad-lg mb-4"><div class="empty" style="min-height:150px">
+      <div class="empty-ico">${icon("activity")}</div>
+      <h4>${t("memory.journalEmpty")}</h4><p>${t("memory.journalEmptyText")}</p>
+    </div></div>`;
+  }
+  let lastDate = "";
+  const rows = entries.map((item) => {
+    const heading = item.date === lastDate ? "" : `<div class="memory-journal-day">${esc(item.date)}</div>`;
+    lastDate = item.date;
+    return `${heading}<div class="memory-journal-row">
+      <span class="memory-journal-time mono">${esc(item.time || "—")}</span>
+      <span class="memory-journal-ico">${icon(JOURNAL_KIND_ICONS[item.kind] || "dot")}</span>
+      <span class="memory-journal-body"><strong>${esc(item.title)}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</span>
+      ${item.actor ? `<span class="badge neutral">${esc(item.actor)}</span>` : ""}
+    </div>`;
+  }).join("");
+  return `<div class="card mb-4" style="padding:0">
+    <div class="memory-journal-head"><h4>${t("memory.journalTitle")}</h4><span>${t("memory.journalSub")}</span></div>
+    <div class="memory-journal">${rows}</div>
+  </div>`;
+}
+
 export const memory = {
   title: "Memory",
   render() {
@@ -462,11 +494,12 @@ export const memory = {
     return head(t("memory.title"), t("memory.subtitle"), action) + `
       <div class="grid cols-4" style="margin-bottom:16px">
         ${statMini(t("memory.visibleEntries"), stats.entries || 0, "memory")}
+        ${statMini(t("memory.journalEntries"), stats.journalEntries || 0, "activity")}
         ${statMini(t("memory.personalNotes"), stats.personalNotes || 0, "file")}
         ${statMini(t("memory.obsidianNotes"), stats.vaultNotes || 0, "knowledge")}
-        ${statMini(t("memory.agentEvents"), stats.agentEvents || 0, "activity")}
       </div>
       <div class="alert info mb-4"><span class="a-ico">${icon("database")}</span><div class="a-body"><div class="a-title">${t("memory.authoritative")}</div><div class="a-desc">${t("memory.authoritativeText")}</div></div></div>
+      ${journalHTML(memoryState.journal || [])}
       <div class="card" style="padding:0"><div class="table-wrap"><table class="tbl">
         <thead><tr><th>${t("memory.key")}</th><th>${t("memory.scope")}</th><th>${t("memory.value")}</th><th>${t("memory.source")}</th><th>${t("system.updated")}</th></tr></thead>
         <tbody>${mems.length ? mems.map((item) => `<tr><td class="mono">${esc(item.key)}</td><td><span class="badge ${item.scope === "user" ? "info" : item.scope === "workspace" ? "primary" : "warning"}">${esc(t(`memory.scope.${item.scope}`))}</span></td><td class="muted">${esc(item.value)}</td><td><span class="badge neutral">${esc(item.source)}</span></td><td class="muted nowrap">${item.updatedAt ? timeAgo(new Date(item.updatedAt).getTime()) : "—"}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty" style="min-height:180px"><div class="empty-ico">${icon("memory")}</div><h4>${t("memory.empty")}</h4><p>${t("memory.emptyText")}</p></div></td></tr>`}</tbody>

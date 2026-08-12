@@ -1,3 +1,4 @@
+import { journal } from "./journal.js";
 import { knowledge } from "./knowledge.js";
 import { memberWorkspaces } from "./member-workspace.js";
 import { onboarding } from "./onboarding.js";
@@ -59,13 +60,21 @@ export async function readMemorySnapshot(user, dependencies = {}) {
   }
 
   const visible = entries.filter((item) => item.value);
+  // The facts above are what the system was told; the journal is what it did.
+  // Both are memory, and the screen is the only place either becomes visible.
+  const journalStore = dependencies.journal || journal;
+  const timeline = operator
+    ? journalStore.recentEntries({ days: 7, limit: 40, timeZone: profile.timezone })
+    : [];
   return {
     entries: visible,
+    journal: timeline,
     stats: {
       entries: visible.length,
       personalNotes: dashboard.counts?.notes || 0,
       vaultNotes: Number(vault.notes) || 0,
       agentEvents: usage.length,
+      journalEntries: timeline.length,
     },
     sources: {
       profile: profile.completedAt ? "connected" : "setup_required",
