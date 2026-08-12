@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { icon } from "../icons.js";
+import { t } from "../i18n.js";
 import { store, timeAgo } from "../store.js";
 import { esc, toast } from "../ui.js";
 
@@ -49,7 +50,8 @@ function fleetState(profile, tasks) {
   const queued = assigned.filter((task) => openStatuses.has(task.status) && task.status !== "running" && task.status !== "blocked");
   return {
     running, waiting, blocked, queued,
-    label: running.length ? "Working" : blocked.length ? "Blocked" : waiting.length ? "Waiting input" : queued.length ? "Queued" : "Ready",
+    label: t(running.length ? "dash.state.working" : blocked.length ? "dash.state.blocked"
+      : waiting.length ? "dash.state.waiting" : queued.length ? "dash.state.queued" : "dash.state.ready"),
     tone: running.length || waiting.length ? "warning" : blocked.length ? "error" : queued.length ? "info" : "success",
   };
 }
@@ -64,7 +66,7 @@ function seriesFrom(history, key, points = 40) {
 }
 
 function sparkline(values, { width = 120, height = 30 } = {}) {
-  if (!values || values.length < 2) return `<div class="oh-spark-empty">History builds up as the server runs</div>`;
+  if (!values || values.length < 2) return `<div class="oh-spark-empty">${t("dash.historyBuilds")}</div>`;
   const min = Math.min(...values), max = Math.max(...values);
   const span = max - min || 1;
   const step = width / (values.length - 1);
@@ -84,7 +86,7 @@ function deltaAgainst(history, key, current, hoursBack = 24) {
   const previous = Number(past?.[key]);
   if (!Number.isFinite(previous) || !Number.isFinite(current)) return "";
   const diff = current - previous;
-  if (!diff) return `<span class="oh-delta flat">no change · 24h</span>`;
+  if (!diff) return `<span class="oh-delta flat">${t("dash.noChange")}</span>`;
   return `<span class="oh-delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "▲" : "▼"} ${Math.abs(diff)} · 24h</span>`;
 }
 
@@ -115,39 +117,48 @@ function svc(ok, label, detail, href) {
 const OUTBOX_WARN = 25;
 const OUTBOX_FAIL = 200;
 
+// Returns codes and numbers rather than prose, so the page decides the wording
+// in the reader's language and the rules stay testable on their own.
 export function databaseHealth(database = {}) {
   const outbox = database.outbox || {};
   const pending = Number(outbox.pending) || 0;
   const failures = Number(database.consecutiveFailures) || 0;
   const refreshFailures = Number(database.authReads?.refreshFailures) || 0;
-  const errors = [database.error, outbox.error, database.reads?.error, database.writes?.error,
-    database.authReads?.error, database.authWrites?.error].filter(Boolean);
+  const error = [database.error, outbox.error, database.reads?.error, database.writes?.error,
+    database.authReads?.error, database.authWrites?.error].filter(Boolean)[0] || "";
 
-  let level = "ok";
+  const base = {
+    pending, failures, refreshFailures, error,
+    status: database.status || "",
+    lastSuccessAt: database.lastSuccessAt || null,
+    source: database.sourceOfTruth === "postgres" ? "postgres" : "hybrid",
+    reasons: [],
+  };
+  if (!database.enabled) return { ...base, level: "off", source: "off" };
+
   const reasons = [];
-  if (!database.enabled) {
-    return { level: "off", label: "JSON only", detail: "Postgres sync is disabled", pending, reasons };
-  }
-  if (errors.length) { level = "fail"; reasons.push(String(errors[0]).slice(0, 120)); }
-  if (refreshFailures > 0) { level = "fail"; reasons.push(`${refreshFailures} refresh failures`); }
-  if (failures > 0) { level = level === "fail" ? "fail" : "warn"; reasons.push(`${failures} syncs failed in a row`); }
-  if (pending >= OUTBOX_FAIL) { level = "fail"; reasons.push(`${pending} writes queued`); }
-  else if (pending >= OUTBOX_WARN) { level = level === "fail" ? "fail" : "warn"; reasons.push(`${pending} writes queued`); }
+  let level = "ok";
+  const escalate = (next) => { level = level === "fail" ? "fail" : next; };
+  if (error) { level = "fail"; reasons.push({ code: "error", value: String(error).slice(0, 120) }); }
+  // A stale auth cache decides who can sign in, so it is never merely a warning.
+  if (refreshFailures > 0) { level = "fail"; reasons.push({ code: "refreshFailures", value: refreshFailures }); }
+  if (failures > 0) { escalate("warn"); reasons.push({ code: "syncFailures", value: failures }); }
+  if (pending >= OUTBOX_FAIL) { level = "fail"; reasons.push({ code: "outbox", value: pending }); }
+  else if (pending >= OUTBOX_WARN) { escalate("warn"); reasons.push({ code: "outbox", value: pending }); }
   if (database.status && database.status !== "ready" && level === "ok") {
     level = "warn";
-    reasons.push(`status ${database.status}`);
+    reasons.push({ code: "status", value: database.status });
   }
+  return { ...base, level, reasons };
+}
 
-  const source = database.sourceOfTruth === "postgres" ? "Postgres" : "Hybrid";
-  return {
-    level,
-    label: source,
-    detail: level === "ok"
-      ? `${source} · synced ${database.lastSuccessAt ? age(database.lastSuccessAt) : "never"}`
-      : reasons.join(" · "),
-    pending,
-    reasons,
-  };
+function databaseCopy(state) {
+  if (state.level === "off") return { label: t("dash.db.jsonOnly"), detail: t("dash.db.disabled") };
+  const label = t(state.source === "postgres" ? "dash.db.postgres" : "dash.db.hybrid");
+  if (state.level === "ok") {
+    return { label, detail: `${label} · ${t("dash.db.synced", { when: state.lastSuccessAt ? age(state.lastSuccessAt) : t("dash.never") })}` };
+  }
+  return { label, detail: state.reasons.map((reason) => t(`dash.db.reason.${reason.code}`, { value: reason.value })).join(" · ") };
 }
 
 // ---------- attention ----------
@@ -159,48 +170,48 @@ function attentionItems(data) {
     for (const approval of data.pulse.approvals.slice(0, 4)) {
       items.push({
         sev: "info",
-        title: `Approve: ${approval.summary || approval.action}`,
-        detail: `${approval.project ? `${approval.project} · ` : ""}waiting ${approval.requestedAt ? age(approval.requestedAt) : "for review"}`,
+        title: t("dash.approveAction", { action: approval.summary || approval.action }),
+        detail: `${approval.project ? `${approval.project} · ` : ""}${t("dash.waitingReview", { age: approval.requestedAt ? age(approval.requestedAt) : t("dash.forReview") })}`,
         actions: admin
-          ? `<button class="btn btn-primary sm" data-approval="${esc(approval.id)}" data-decision="approve">Approve</button>
-             <button class="btn btn-secondary sm" data-approval="${esc(approval.id)}" data-decision="deny">Deny</button>`
-          : `<a class="btn btn-secondary sm" href="#/missions">Review</a>`,
+          ? `<button class="btn btn-primary sm" data-approval="${esc(approval.id)}" data-decision="approve">${t("dash.approve")}</button>
+             <button class="btn btn-secondary sm" data-approval="${esc(approval.id)}" data-decision="deny">${t("dash.deny")}</button>`
+          : `<a class="btn btn-secondary sm" href="#/missions">${t("dash.review")}</a>`,
       });
     }
   } else {
-    items.push({ sev: "warn", title: "AgentOS runtime is unreachable", detail: "Approvals and mission events are hidden until it answers", actions: `<a class="btn btn-secondary sm" href="#/observability">Details</a>` });
+    items.push({ sev: "warn", title: t("dash.runtimeUnreachable"), detail: t("dash.runtimeUnreachableText"), actions: `<a class="btn btn-secondary sm" href="#/observability">${t("dash.details")}</a>` });
   }
   const tasks = tasksFrom(data.board);
-  for (const task of tasks.filter((t) => t.status === "blocked" && t.block_kind !== "needs_input").slice(0, 3)) {
-    items.push({ sev: "err", title: `Task blocked: ${task.title || task.id}`, detail: task.block_reason || `assignee ${task.assignee || "default"}`, actions: `<a class="btn btn-secondary sm" href="#/kanban">Open</a>` });
+  for (const task of tasks.filter((item) => item.status === "blocked" && item.block_kind !== "needs_input").slice(0, 3)) {
+    items.push({ sev: "err", title: t("dash.taskBlocked", { title: task.title || task.id }), detail: task.block_reason || t("dash.assignee", { name: task.assignee || "default" }), actions: `<a class="btn btn-secondary sm" href="#/kanban">${t("dash.open")}</a>` });
   }
-  for (const task of tasks.filter((t) => t.status === "blocked" && t.block_kind === "needs_input").slice(0, 2)) {
-    items.push({ sev: "warn", title: `Waiting for input: ${task.title || task.id}`, detail: `assignee ${task.assignee || "default"}`, actions: `<a class="btn btn-secondary sm" href="#/kanban">Answer</a>` });
+  for (const task of tasks.filter((item) => item.status === "blocked" && item.block_kind === "needs_input").slice(0, 2)) {
+    items.push({ sev: "warn", title: t("dash.waitingInput", { title: task.title || task.id }), detail: t("dash.assignee", { name: task.assignee || "default" }), actions: `<a class="btn btn-secondary sm" href="#/kanban">${t("dash.answer")}</a>` });
   }
   const disk = data.pulse.host?.disk;
   if (disk && disk.usedPct >= 85) {
-    items.push({ sev: disk.usedPct >= 93 ? "err" : "warn", title: `Disk usage at ${disk.usedPct}%`, detail: `${gb(disk.freeBytes)} free — prune Docker or expand the volume`, actions: `<a class="btn btn-secondary sm" href="#/observability">Details</a>` });
+    items.push({ sev: disk.usedPct >= 93 ? "err" : "warn", title: t("dash.diskUsage", { pct: disk.usedPct }), detail: t("dash.diskFree", { free: gb(disk.freeBytes) }), actions: `<a class="btn btn-secondary sm" href="#/observability">${t("dash.details")}</a>` });
   }
   const database = databaseHealth(data.health?.database);
   if (database.level === "fail" || database.level === "warn") {
     items.push({
       sev: database.level === "fail" ? "err" : "warn",
-      title: database.level === "fail" ? "Database migration is failing" : "Database migration needs a look",
-      detail: `${database.detail} — writes are still safe in JSON, but the Postgres copy is falling behind`,
-      actions: `<a class="btn btn-secondary sm" href="#/observability">Details</a>`,
+      title: t(database.level === "fail" ? "dash.db.failTitle" : "dash.db.warnTitle"),
+      detail: t("dash.db.detail", { detail: databaseCopy(database).detail }),
+      actions: `<a class="btn btn-secondary sm" href="#/observability">${t("dash.details")}</a>`,
     });
   }
   const backup = data.operations.backup || {};
   if (backup.status && backup.status !== "success") {
-    items.push({ sev: "warn", title: "Automated backup is not green", detail: `Last status: ${backup.status}`, actions: `<a class="btn btn-secondary sm" href="#/observability">Inspect</a>` });
+    items.push({ sev: "warn", title: t("dash.backupNotGreen"), detail: `${t("dash.svc.backup")}: ${backup.status}`, actions: `<a class="btn btn-secondary sm" href="#/observability">${t("dash.inspect")}</a>` });
   }
   const drill = data.operations.restoreDrill || {};
   if (drill.status && drill.status !== "success") {
-    items.push({ sev: "warn", title: "Backup restore has not been verified", detail: "Run a restore drill so backups are provably usable", actions: `<a class="btn btn-secondary sm" href="#/observability">Run drill</a>` });
+    items.push({ sev: "warn", title: t("dash.restoreUnverified"), detail: t("dash.restoreHint"), actions: `<a class="btn btn-secondary sm" href="#/observability">${t("dash.runDrill")}</a>` });
   }
   const recommendation = (data.operations.readiness?.recommendations || [])[0];
   if (recommendation) {
-    items.push({ sev: "info", title: recommendation.title, detail: recommendation.detail || "", actions: `<a class="btn btn-secondary sm" href="${esc(recommendation.href || "#/observability")}">Resolve</a>` });
+    items.push({ sev: "info", title: recommendation.title, detail: recommendation.detail || "", actions: `<a class="btn btn-secondary sm" href="${esc(recommendation.href || "#/observability")}">${t("dash.resolve")}</a>` });
   }
   return items;
 }
@@ -253,14 +264,14 @@ function feedItemHTML(entry, fresh = false) {
 function laneSegments(state) {
   const segments = [];
   for (const task of state.running.slice(0, 2)) segments.push({ kind: "running", text: task.title || task.id, weight: 3 });
-  for (const task of state.waiting.slice(0, 1)) segments.push({ kind: "waiting", text: `Waiting: ${task.title || task.id}`, weight: 2 });
-  for (const task of state.blocked.slice(0, 1)) segments.push({ kind: "blocked", text: `Blocked: ${task.title || task.id}`, weight: 2 });
-  if (state.queued.length) segments.push({ kind: "queued", text: `${state.queued.length} queued`, weight: 1 });
+  for (const task of state.waiting.slice(0, 1)) segments.push({ kind: "waiting", text: `${t("dash.state.waiting")}: ${task.title || task.id}`, weight: 2 });
+  for (const task of state.blocked.slice(0, 1)) segments.push({ kind: "blocked", text: `${t("dash.state.blocked")}: ${task.title || task.id}`, weight: 2 });
+  if (state.queued.length) segments.push({ kind: "queued", text: `${state.queued.length} · ${t("dash.state.queued")}`, weight: 1 });
   return segments;
 }
 
 function lanesHTML(profiles, tasks) {
-  if (!profiles.length) return `<div class="empty ops-empty"><div class="empty-ico">${icon("agents")}</div><h4>No Hermes profiles</h4><p>Run the fleet configuration script to create the specialist profiles.</p></div>`;
+  if (!profiles.length) return `<div class="empty ops-empty"><div class="empty-ico">${icon("agents")}</div><h4>${t("dash.noProfiles")}</h4><p>${t("dash.noProfilesHint")}</p></div>`;
   return `<div class="oh-lanes">${profiles.map((profile) => {
     const meta = META[profile.name] || { label: profile.name, role: "Agent", icon: "bot", color: "violet" };
     const state = fleetState(profile, tasks);
@@ -269,7 +280,7 @@ function lanesHTML(profiles, tasks) {
       <a class="oh-lane-label" href="#/agents"><i class="oh-dot agent-${esc(meta.color)}"></i>${esc(meta.label)}</a>
       <div class="oh-lane-track">${segments.length
         ? segments.map((segment) => `<span class="oh-bar ${segment.kind} agent-bg-${esc(meta.color)}" style="flex:${segment.weight}" title="${esc(segment.text)}">${esc(segment.text)}</span>`).join("")
-        : `<span class="oh-bar idle">Idle — ready for work</span>`}</div>
+        : `<span class="oh-bar idle">${t("dash.state.idle")}</span>`}</div>
     </div>`;
   }).join("")}</div>`;
 }
@@ -300,101 +311,105 @@ function dashboardHTML(data) {
   const servicesOk = [data.hermes.ready, data.mila.ok, data.claude.ready, data.knowledge.ready].filter(Boolean).length;
   const database = databaseHealth(data.health?.database);
 
+  const dbCopy = databaseCopy(database);
   const missionDelta = missionsDone === missionsPrev
-    ? `<span class="oh-delta flat">same as last week</span>`
-    : `<span class="oh-delta ${missionsDone > missionsPrev ? "up" : "down"}">${missionsDone > missionsPrev ? "▲" : "▼"} ${Math.abs(missionsDone - missionsPrev)} vs last week</span>`;
+    ? `<span class="oh-delta flat">${t("dash.sameAsLastWeek")}</span>`
+    : `<span class="oh-delta ${missionsDone > missionsPrev ? "up" : "down"}">${missionsDone > missionsPrev ? "▲" : "▼"} ${Math.abs(missionsDone - missionsPrev)} ${t("dash.vsLastWeek")}</span>`;
 
   return `
     <div class="page-head operational-head">
       <div>
-        <div class="page-title">Operational Home</div>
-        <div class="page-sub">${esc(workspace)} · ${servicesOk} of 4 services ready · ${pulse.approvals.length} approval${pulse.approvals.length === 1 ? "" : "s"} waiting · updated ${esc(age(data.checkedAt))}</div>
+        <div class="page-title">${t("dash.title")}</div>
+        <div class="page-sub">${esc(t("dash.sub", { workspace, ready: servicesOk, approvals: pulse.approvals.length, age: age(data.checkedAt) }))}</div>
       </div>
       <div class="spacer"></div>
-      <button class="btn btn-secondary" id="dashboardRefresh">${icon("refresh")}Refresh</button>
-      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/kanban/new">${icon("plus")}New task</a>` : ""}
+      <button class="btn btn-secondary" id="dashboardRefresh">${icon("refresh")}${t("dash.refresh")}</button>
+      ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/kanban/new">${icon("plus")}${t("dash.newTask")}</a>` : ""}
     </div>
 
     <div class="oh-pulse mb-4">
-      ${svc(data.hermes.ready, "Hermes", data.hermes.ready ? "Bridge ready" : "Unreachable", "#/hermes")}
-      ${svc(data.mila.ok && data.mila.voiceConfigured, "MILA", data.mila.ok ? (data.mila.liveModel || "Voice ready") : "Unavailable", "#/mila")}
-      ${svc(data.claude.ready && data.claude.auth?.loggedIn, "Claude", data.claude.ready ? (data.claude.model?.resolved || "Authenticated") : "Unavailable", "#/claude")}
-      ${svc(data.knowledge.ready && data.knowledge.writable, "Vault", `${data.knowledge.notes || 0} notes`, "#/knowledge")}
-      ${svc(backup.status === "success", "Backup", backup.status === "success" ? age(backup.lastSuccessAt) : "Not verified", "#/observability")}
-      ${svc(!host.disk || host.disk.usedPct < 85, "Disk", host.disk ? `${host.disk.usedPct}% used` : "No probe", "#/observability")}
-      ${svc(database.level === "ok" || database.level === "off", "Database", database.detail, "#/observability")}
+      ${svc(data.hermes.ready, "Hermes", t(data.hermes.ready ? "dash.svc.bridgeReady" : "dash.svc.unreachable"), "#/hermes")}
+      ${svc(data.mila.ok && data.mila.voiceConfigured, "MILA", data.mila.ok ? (data.mila.liveModel || t("dash.svc.voiceReady")) : t("dash.svc.unavailable"), "#/mila")}
+      ${svc(data.claude.ready && data.claude.auth?.loggedIn, "Claude", data.claude.ready ? (data.claude.model?.resolved || t("dash.svc.authenticated")) : t("dash.svc.unavailable"), "#/claude")}
+      ${svc(data.knowledge.ready && data.knowledge.writable, "Vault", t("dash.svc.notes", { count: data.knowledge.notes || 0 }), "#/knowledge")}
+      ${svc(backup.status === "success", t("dash.svc.backup"), backup.status === "success" ? age(backup.lastSuccessAt) : t("dash.svc.notVerified"), "#/observability")}
+      ${svc(!host.disk || host.disk.usedPct < 85, t("dash.svc.disk"), host.disk ? t("dash.svc.diskUsed", { pct: host.disk.usedPct }) : t("dash.svc.noProbe"), "#/observability")}
+      ${svc(database.level === "ok" || database.level === "off", t("dash.svc.database"), dbCopy.detail, "#/observability")}
     </div>
 
     <div class="oh-top mb-4">
       <section class="card oh-attn-card">
-        <div class="card-head"><div><h3>Needs your attention</h3><p class="hint">Approvals, blockers and warnings — the one list to read</p></div></div>
+        <div class="card-head"><div><h3>${t("dash.attention")}</h3><p class="hint">${t("dash.attentionHint")}</p></div></div>
         ${attention.length ? `<div class="oh-attn">${attention.map((item) => `
           <div class="oh-attn-item">
             <span class="oh-sev ${esc(item.sev)}"></span>
             <div class="oh-attn-body"><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>
             <div class="oh-attn-actions">${item.actions}</div>
           </div>`).join("")}</div>`
-        : `<div class="empty ops-empty"><div class="empty-ico">${icon("check")}</div><h4>Nothing needs you right now</h4><p>Approvals, blockers and operational warnings appear here first.</p></div>`}
+        : `<div class="empty ops-empty"><div class="empty-ico">${icon("check")}</div><h4>${t("dash.attentionEmpty")}</h4><p>${t("dash.attentionEmptyHint")}</p></div>`}
       </section>
 
       <div class="oh-kpis">
-        ${kpi("Open work", String(open.length), deltaAgainst(history, "open", open.length), sparkline(seriesFrom(history, "open")), "#/kanban")}
-        ${kpi("Pending approvals", String(pulse.approvals.length), deltaAgainst(history, "approvals", pulse.approvals.length), sparkline(seriesFrom(history, "approvals")), "#/missions")}
-        ${kpi("Active routines", String(activeRoutines.length), deltaAgainst(history, "routines", activeRoutines.length), sparkline(seriesFrom(history, "routines")), "#/routines")}
-        ${kpi("Missions done · 7d", String(missionsDone), missionDelta, sparkline((pulse.missions?.days || []).map((day) => day.done)), "#/missions")}
+        ${kpi(t("dash.kpi.openWork"), String(open.length), deltaAgainst(history, "open", open.length), sparkline(seriesFrom(history, "open")), "#/kanban")}
+        ${kpi(t("dash.kpi.approvals"), String(pulse.approvals.length), deltaAgainst(history, "approvals", pulse.approvals.length), sparkline(seriesFrom(history, "approvals")), "#/missions")}
+        ${kpi(t("dash.kpi.routines"), String(activeRoutines.length), deltaAgainst(history, "routines", activeRoutines.length), sparkline(seriesFrom(history, "routines")), "#/routines")}
+        ${kpi(t("dash.kpi.missions"), String(missionsDone), missionDelta, sparkline((pulse.missions?.days || []).map((day) => day.done)), "#/missions")}
       </div>
     </div>
 
     <div class="oh-mid mb-4">
       <section class="card">
-        <div class="card-head ops-card-head"><div><h3>Fleet focus</h3><p class="hint">What each profile is doing right now · ${running.length} running · ${blocked.length} blocked</p></div><a class="btn btn-ghost sm" href="#/kanban">Open board ${icon("arrowright")}</a></div>
+        <div class="card-head ops-card-head"><div><h3>${t("dash.fleet")}</h3><p class="hint">${t("dash.fleetHint", { running: running.length, blocked: blocked.length })}</p></div><a class="btn btn-ghost sm" href="#/kanban">${t("dash.openBoard")} ${icon("arrowright")}</a></div>
         ${lanesHTML(profiles, tasks)}
       </section>
 
       <section class="card">
-        <div class="card-head"><div><h3>Live activity</h3><p class="hint">Runtime, knowledge and mission events</p></div></div>
+        <div class="card-head"><div><h3>${t("dash.activity")}</h3><p class="hint">${t("dash.activityHint")}</p></div></div>
         <div class="oh-feed" id="ohFeed">
           ${(() => { const entries = feedEntries(data); return entries.length
             ? entries.map((entry) => feedItemHTML(entry)).join("")
-            : `<div class="empty ops-empty"><div class="empty-ico">${icon("observability")}</div><h4>No recent events</h4><p>Agent activity streams in here as it happens.</p></div>`; })()}
+            : `<div class="empty ops-empty"><div class="empty-ico">${icon("observability")}</div><h4>${t("dash.noEvents")}</h4><p>${t("dash.noEventsHint")}</p></div>`; })()}
         </div>
       </section>
     </div>
 
     <div class="oh-low">
       <section class="card pad-lg">
-        <div class="card-head"><div><h3>Hermes fleet</h3><p class="hint">Persistent specialist profiles</p></div><a class="btn btn-ghost sm" href="#/agents">Manage</a></div>
+        <div class="card-head"><div><h3>${t("dash.hermesFleet")}</h3><p class="hint">${t("dash.hermesFleetHint")}</p></div><a class="btn btn-ghost sm" href="#/agents">${t("dash.manage")}</a></div>
         <div class="ops-fleet">${profiles.map((profile) => {
           const meta = META[profile.name] || { label: profile.name, role: "Agent", icon: "bot", color: "violet" };
           const state = fleetState(profile, tasks);
-          const focus = state.running[0]?.title || (state.waiting[0] ? `Waiting: ${state.waiting[0].title}` : state.blocked[0] ? `Blocked: ${state.blocked[0].title}` : state.queued.length ? `${state.queued.length} queued` : "Idle");
+          const focus = state.running[0]?.title
+            || (state.waiting[0] ? `${t("dash.state.waiting")}: ${state.waiting[0].title}`
+              : state.blocked[0] ? `${t("dash.state.blocked")}: ${state.blocked[0].title}`
+                : state.queued.length ? `${state.queued.length} · ${t("dash.state.queued")}` : t("dash.state.ready"));
           return `<a class="ops-agent" href="#/agents"><span class="kanban-agent-icon ${esc(meta.color)}">${icon(meta.icon)}</span><span><strong>${esc(meta.label)}</strong><small>${esc(meta.role)} · ${esc(focus)}</small></span><span class="badge ${state.tone}">${esc(state.label)}</span></a>`;
         }).join("")}</div>
       </section>
 
       <section class="card pad-lg">
-        <div class="card-head"><div><h3>Four C</h3><p class="hint">Current product readiness</p></div><span class="badge ${statusTone(readiness.status)}">${esc(readiness.score || 0)}%</span></div>
+        <div class="card-head"><div><h3>Four C</h3><p class="hint">${t("dash.readiness")}</p></div><span class="badge ${statusTone(readiness.status)}">${esc(readiness.score || 0)}%</span></div>
         <div class="stack gap-3">${(readiness.sections || []).map((section) => `<a class="ops-progress" href="#/observability"><div class="row between"><span>${esc(section.label)}</span><strong>${esc(section.score)}%</strong></div><div class="progress"><span style="width:${Math.max(0, Math.min(100, Number(section.score) || 0))}%"></span></div></a>`).join("")}</div>
       </section>
 
       <section class="card pad-lg">
-        <div class="card-head"><div><h3>Host</h3><p class="hint">Server probes from the app container</p></div></div>
+        <div class="card-head"><div><h3>${t("dash.host")}</h3><p class="hint">${t("dash.probes")}</p></div></div>
         ${host.disk ? `<div class="oh-meter ${host.disk.usedPct >= 85 ? "warn" : ""}">
-          <div class="row between"><span>Disk</span><strong class="mono">${gb(host.disk.totalBytes - host.disk.freeBytes)} / ${gb(host.disk.totalBytes)}</strong></div>
+          <div class="row between"><span>${t("dash.svc.disk")}</span><strong class="mono">${gb(host.disk.totalBytes - host.disk.freeBytes)} / ${gb(host.disk.totalBytes)}</strong></div>
           <div class="progress"><span style="width:${host.disk.usedPct}%"></span></div>
-          <small class="hint">${gb(host.disk.freeBytes)} free · warning at 85%</small>
+          <small class="hint">${t("dash.diskWarn", { free: gb(host.disk.freeBytes) })}</small>
         </div>` : ""}
         ${host.memory ? `<div class="oh-meter">
-          <div class="row between"><span>Memory</span><strong class="mono">${gb(host.memory.totalBytes - host.memory.freeBytes)} / ${gb(host.memory.totalBytes)}</strong></div>
+          <div class="row between"><span>${t("dash.memory")}</span><strong class="mono">${gb(host.memory.totalBytes - host.memory.freeBytes)} / ${gb(host.memory.totalBytes)}</strong></div>
           <div class="progress"><span style="width:${host.memory.usedPct}%"></span></div>
         </div>` : ""}
         ${host.cpu ? `<div class="oh-meter">
-          <div class="row between"><span>CPU load · ${host.cpu.cores} cores</span><strong class="mono">${host.cpu.loadPct}%</strong></div>
+          <div class="row between"><span>${t("dash.cpu", { cores: host.cpu.cores })}</span><strong class="mono">${host.cpu.loadPct}%</strong></div>
           <div class="progress"><span style="width:${host.cpu.loadPct}%"></span></div>
         </div>` : ""}
         <div class="stack gap-2" style="margin-top:12px">
-          <div class="oh-hostrow"><span>${icon("check")}</span><span>Backup: <strong>${esc(backup.status || "unknown")}</strong>${backup.lastSuccessAt ? ` · ${esc(age(backup.lastSuccessAt))}` : ""}</span></div>
-          <div class="oh-hostrow"><span>${icon("check")}</span><span>Restore drill: <strong>${esc((data.operations.restoreDrill || {}).status || "never run")}</strong></span></div>
+          <div class="oh-hostrow"><span>${icon("check")}</span><span>${t("dash.svc.backup")}: <strong>${esc(backup.status || t("dash.unknown"))}</strong>${backup.lastSuccessAt ? ` · ${esc(age(backup.lastSuccessAt))}` : ""}</span></div>
+          <div class="oh-hostrow"><span>${icon("check")}</span><span>${t("dash.restoreDrill")}: <strong>${esc((data.operations.restoreDrill || {}).status || t("dash.neverRun"))}</strong></span></div>
         </div>
       </section>
     </div>`;
@@ -412,16 +427,16 @@ async function loadDashboard(force = false) {
     bounded(api.routines.list("all"), []),
     bounded(api.knowledge.status(), {}),
     bounded(api.knowledge.usage(12), []),
-    bounded(api.hermes.status(), { ready: false, error: "Timed out" }, 3500),
-    bounded(api.claude.status(true), { ready: false, error: "Timed out" }, 5000),
-    bounded(api.integrations.milaStatus(), { ok: false, error: "Timed out" }, 3500),
+    bounded(api.hermes.status(), { ready: false, error: t("dash.timedOut") }, 3500),
+    bounded(api.claude.status(true), { ready: false, error: t("dash.timedOut") }, 5000),
+    bounded(api.integrations.milaStatus(), { ok: false, error: t("dash.timedOut") }, 3500),
     bounded(api.onboarding.get(), { workspace: {} }),
     bounded(api.missions.list(), []),
     bounded(api.healthNow(), api.health || {}, 3500),
   ]);
   const critical = [results[0], results[1], results[2]];
   if (critical.every((result) => result.status === "rejected")) {
-    dashboardError = critical[0].reason?.message || "Operational data is unavailable";
+    dashboardError = critical[0].reason?.message || t("dash.unavailable");
     dashboardState = null;
   } else {
     dashboardState = {
@@ -447,24 +462,24 @@ async function loadDashboard(force = false) {
 }
 
 export default {
-  title: "Home",
+  get title() { return t("dash.title"); },
   render() {
-    if (!api.on) return `<div class="page-head"><div><div class="page-title">Operational Home</div><div class="page-sub">Start the backend to read live system state</div></div></div><div class="alert warning"><div class="a-body"><div class="a-title">Backend unavailable</div><div class="a-desc">Operational Home does not display demo metrics.</div></div></div>`;
-    if (dashboardError) return `<div class="page-head"><div><div class="page-title">Operational Home</div><div class="page-sub">Live Agentic OS state</div></div><div class="spacer"></div><button class="btn btn-secondary" id="dashboardRefresh">${icon("refresh")}Retry</button></div><div class="alert error"><div class="a-body"><div class="a-title">Could not load operational state</div><div class="a-desc">${esc(dashboardError)}</div></div></div>`;
-    return dashboardState ? dashboardHTML(dashboardState) : `<div class="page-head"><div><div class="page-title">Operational Home</div><div class="page-sub">Reading live Agentic OS state</div></div></div>${loadingHTML()}`;
+    if (!api.on) return `<div class="page-head"><div><div class="page-title">${t("dash.title")}</div><div class="page-sub">${t("dash.subOffline")}</div></div></div><div class="alert warning"><div class="a-body"><div class="a-title">${t("dash.offlineTitle")}</div><div class="a-desc">${t("dash.offlineText")}</div></div></div>`;
+    if (dashboardError) return `<div class="page-head"><div><div class="page-title">${t("dash.title")}</div><div class="page-sub">${t("dash.live")}</div></div><div class="spacer"></div><button class="btn btn-secondary" id="dashboardRefresh">${icon("refresh")}${t("dash.retry")}</button></div><div class="alert error"><div class="a-body"><div class="a-title">${t("dash.loadError")}</div><div class="a-desc">${esc(dashboardError)}</div></div></div>`;
+    return dashboardState ? dashboardHTML(dashboardState) : `<div class="page-head"><div><div class="page-title">${t("dash.title")}</div><div class="page-sub">${t("dash.reading")}</div></div></div>${loadingHTML()}`;
   },
   mount(root) {
     root.querySelector("#dashboardRefresh")?.addEventListener("click", async (event) => {
       event.currentTarget.classList.add("loading");
       await loadDashboard(true);
-      toast("success", "Operational state refreshed");
+      toast("success", t("dash.refreshed"));
     });
     root.querySelectorAll("[data-approval]").forEach((button) => button.addEventListener("click", async (event) => {
       const { approval, decision } = event.currentTarget.dataset;
       event.currentTarget.disabled = true;
       try {
         await api.pulse.decideApproval(approval, decision);
-        toast("success", decision === "approve" ? "Approved — the runtime continues" : "Denied — the runtime stops this action");
+        toast("success", decision === "approve" ? t("dash.approved") : t("dash.denied"));
         await loadDashboard(true);
       } catch (error) {
         event.currentTarget.disabled = false;

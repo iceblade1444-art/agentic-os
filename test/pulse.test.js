@@ -71,7 +71,7 @@ test("dashboard uses the pulse API and fonts are self-hosted", () => {
   assert.match(apiClient, /\/api\/pulse/);
   assert.match(apiClient, /EventSource/);
   assert.match(dashboard, /api\.pulse\.status/);
-  assert.match(dashboard, /Needs your attention/);
+  assert.match(dashboard, /t\("dash\.attention"\)/);
   assert.match(dashboard, /data-approval/);
   assert.match(dashboard, /oh-feed/);
 

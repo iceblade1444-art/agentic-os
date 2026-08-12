@@ -30,6 +30,34 @@ test("the Personal page is fully translated in every supported locale", () => {
   assert.deepEqual(missing, [], `untranslated Personal page keys:\n${missing.join("\n")}`);
 });
 
+test("the Operational Home is fully translated in every supported locale", () => {
+  const keys = keysUsedBy("../assets/js/pages/dashboard.js");
+  assert.ok(keys.length > 50, `expected the dashboard to use many keys, found ${keys.length}`);
+
+  const missing = [];
+  for (const [locale] of SUPPORTED_LOCALES) {
+    setLocale(locale);
+    for (const key of keys) if (t(key) === key) missing.push(`${locale}: ${key}`);
+  }
+  setLocale("ru-RU");
+  assert.deepEqual(missing, [], `untranslated dashboard keys:\n${missing.join("\n")}`);
+});
+
+test("no English copy is left hardcoded on the Operational Home", () => {
+  const source = fs.readFileSync(new URL("../assets/js/pages/dashboard.js", import.meta.url), "utf8");
+  // Sentences that used to sit in the markup. Product names (Hermes, MILA,
+  // Claude, Vault, Postgres, Four C) stay as they are in every language.
+  for (const phrase of [
+    "Operational Home", "Needs your attention", "Nothing needs you right now",
+    "Live activity", "No recent events", "Fleet focus", "No Hermes profiles",
+    "Idle — ready for work", "Open work", "Pending approvals", "Active routines",
+    "Backend unavailable", "Could not load operational state", "Timed out",
+    "Database migration is failing", "Postgres sync is disabled", "writes queued",
+  ]) {
+    assert.equal(source.includes(phrase), false, `"${phrase}" must come from the dictionary`);
+  }
+});
+
 test("day-plan and reminder copy carries its placeholders through every locale", () => {
   const cases = [
     ["personal.plan.meetings", { count: 3 }, "3"],

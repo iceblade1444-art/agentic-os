@@ -82,7 +82,9 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(dashboard, /api\.knowledge\.usage/);
   assert.match(dashboard, /bounded\(api\.hermes\.status/);
   assert.match(dashboard, /timeoutValue/);
-  assert.match(dashboard, /Operational Home/);
+  // The page title comes from the dictionary now, so assert the key rather than
+  // the English words it happens to resolve to.
+  assert.match(dashboard, /t\("dash\.title"\)/);
   assert.doesNotMatch(dashboard, /randomSeries|Tokens Used|Success Rate.*82|All systems operational/);
   assert.match(installer, /OnUnitActiveSec=5min/);
   assert.match(installer, /OnCalendar=\*-\*-\* 03:15:00/);
