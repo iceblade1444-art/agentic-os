@@ -33,7 +33,44 @@ let recordingSince = 0;
 let reactingTo = "";
 let showMembers = false;
 
-const rerender = () => window.dispatchEvent(new HashChangeEvent("hashchange"));
+let mountRoot = null;
+let markReadAt = 0;
+
+// Re-render this page in place. Dispatching a hashchange would make the router
+// tear the page down and call mount() again — which reloads the conversation,
+// which re-renders, which mounts again: an unbounded request loop that ran the
+// API into its rate limit. Rendering in place also keeps what you were typing
+// and where you were scrolled, which a remount threw away on every keystroke.
+function rerender() {
+  const root = mountRoot;
+  if (!root || !root.isConnected) return;
+  const thread = root.querySelector("#chatThread");
+  const stickToBottom = !thread || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;
+  const previousScroll = thread?.scrollTop ?? 0;
+  const input = root.querySelector("[data-input]");
+  const draft = input ? input.value : null;
+  const caret = input ? input.selectionStart : null;
+  const focused = document.activeElement;
+  const refocus = focused?.dataset?.input !== undefined ? "input"
+    : focused?.dataset?.search !== undefined ? "search" : "";
+
+  root.innerHTML = render();
+  wire(root);
+
+  const nextInput = root.querySelector("[data-input]");
+  if (nextInput && draft !== null) {
+    nextInput.value = draft;
+    if (caret !== null) nextInput.setSelectionRange(caret, caret);
+  }
+  if (refocus === "input") nextInput?.focus();
+  if (refocus === "search") {
+    const nextSearch = root.querySelector("[data-search]");
+    nextSearch?.focus();
+    nextSearch?.setSelectionRange(nextSearch.value.length, nextSearch.value.length);
+  }
+  const nextThread = root.querySelector("#chatThread");
+  if (nextThread) nextThread.scrollTop = stickToBottom ? nextThread.scrollHeight : previousScroll;
+}
 const byId = (id) => state?.people.find((person) => person.id === id) || null;
 const isAgent = (id) => String(id || "").startsWith("agent:");
 const active = () => state?.conversations.find((conversation) => conversation.id === activeId) || null;
@@ -320,7 +357,7 @@ async function openConversation(id, jumpTo = "") {
 }
 
 function jumpToMessage(id) {
-  const target = document.querySelector(`[data-message="${CSS.escape(id)}"]`);
+  const target = mountRoot?.querySelector(`[data-message="${CSS.escape(id)}"]`);
   if (!target) return;
   target.scrollIntoView({ block: "center" });
   target.classList.add("flash");
@@ -341,8 +378,15 @@ async function loadOlder() {
 }
 
 function scrollThread() {
-  const thread = document.getElementById("chatThread");
+  const thread = mountRoot?.querySelector("#chatThread");
   if (thread) thread.scrollTop = thread.scrollHeight;
+}
+
+// A burst of incoming messages should not become a burst of read receipts.
+function markReadSoon(id) {
+  if (Date.now() - markReadAt < 2000) return;
+  markReadAt = Date.now();
+  api.messenger.markRead(id).catch(() => {});
 }
 
 function upsert(message) {
@@ -588,19 +632,27 @@ export default {
   get title() { return t("chat.title"); },
   render,
   async mount(root, ctx) {
+    mountRoot = root;
     await loadOverview();
     const requested = ctx?.params?.[0];
     if (requested && state?.conversations.some((conversation) => conversation.id === requested)) activeId = requested;
     root.innerHTML = render();
     wire(root);
-    if (activeId) await openConversation(activeId);
+    // Only fetch the thread when this mount actually needs it. mount() runs again
+    // on every route change, and reloading a conversation already in memory is
+    // both wasted requests and a visible flicker.
+    if (activeId && (!messages.length || messages[0]?.conversationId !== activeId)) {
+      await openConversation(activeId);
+    } else if (activeId) {
+      rerender();
+    }
 
     if (!stream && window.EventSource) {
       stream = api.messenger.stream({
         message: ({ conversationId, message }) => {
           if (conversationId === activeId) {
             upsert(message);
-            api.messenger.markRead(activeId).catch(() => {});
+            markReadSoon(activeId);
             rerender();
             scrollThread();
           } else {
@@ -636,6 +688,7 @@ export default {
     }
   },
   unmount() {
+    mountRoot = null;
     stream?.close();
     stream = null;
     clearTimeout(typingTimer);
