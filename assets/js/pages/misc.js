@@ -1015,8 +1015,8 @@ function openMilaCode() {
     onMount: (m) => (m.querySelector("#milaCreateCode").onclick = async () => {
       const btn = m.querySelector("#milaCreateCode"); btn.classList.add("loading");
       try {
-        const result = await api.integrations.milaConnectionCode(m.querySelector("#milaLabel").value.trim() || "MILA user");
-        m.querySelector("#milaCodeResult").innerHTML = `<div class="alert success"><span class="a-ico">${icon("key")}</span><div class="a-body"><div class="a-title mono" style="font-size:22px;letter-spacing:3px">${esc(result.code)}</div><div class="a-desc">Enter in MILA → Settings → AI Providers. Expires in 10 minutes.</div></div></div>`;
+        const result = await api.integrations.milaConnectionCode(m.querySelector("#milaLabel").value.trim() || t("integrations.defaultUser"));
+        m.querySelector("#milaCodeResult").innerHTML = `<div class="alert success"><span class="a-ico">${icon("key")}</span><div class="a-body"><div class="a-title mono" style="font-size:22px;letter-spacing:3px">${esc(result.code)}</div><div class="a-desc">${t("integrations.codeHint")}</div></div></div>`;
       } catch (e) { m.querySelector("#milaCodeResult").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${t("integrations.codeFailed")}</div><div class="a-desc">${esc(e.message)}</div></div></div>`; }
       btn.classList.remove("loading");
     }),
@@ -1036,10 +1036,10 @@ function openMilaDevices() {
       const slot = m.querySelector("#milaDevicesList");
       const render = (devices) => {
         if (!devices.length) { slot.innerHTML = `<div class="empty">${t("integrations.noDevices")}</div>`; return; }
-        slot.innerHTML = devices.map((device) => `<div class="card tile"><div class="row between gap-3"><div class="stack"><strong>${esc(device.label || "MILA device")}</strong><span class="hint">Paired ${esc(milaDeviceTime(device.createdAt))}</span>${device.revokedAt ? `<span class="hint">Revoked ${esc(milaDeviceTime(device.revokedAt))}</span>` : ""}</div><div class="row gap-2"><span class="badge ${device.active ? "success" : "neutral"}">${device.active ? "Active" : "Revoked"}</span>${device.active ? `<button class="btn sm btn-secondary" data-mila-revoke="${esc(device.id)}">Revoke</button>` : ""}</div></div></div>`).join("");
+        slot.innerHTML = devices.map((device) => `<div class="card tile"><div class="row between gap-3"><div class="stack"><strong>${esc(device.label || t("integrations.device"))}</strong><span class="hint">${t("integrations.paired", { when: milaDeviceTime(device.createdAt) })}</span>${device.revokedAt ? `<span class="hint">${t("integrations.revokedAt", { when: milaDeviceTime(device.revokedAt) })}</span>` : ""}</div><div class="row gap-2"><span class="badge ${device.active ? "success" : "neutral"}">${device.active ? t("integrations.active") : t("integrations.revoked")}</span>${device.active ? `<button class="btn sm btn-secondary" data-mila-revoke="${esc(device.id)}">${t("integrations.revoke")}</button>` : ""}</div></div></div>`).join("");
         slot.querySelectorAll("[data-mila-revoke]").forEach((button) => {
           button.onclick = async () => {
-            if (!window.confirm("Revoke this MILA device? It will need a new one-time code to reconnect.")) return;
+            if (!window.confirm(t("integrations.revokeConfirm"))) return;
             button.classList.add("loading");
             try { await api.integrations.milaRevokeDevice(button.dataset.milaRevoke); const result = await api.integrations.milaDevices(); render(result.devices || []); toast("success", t("integrations.deviceRevoked")); }
             catch (error) { toast("error", t("integrations.revokeFailed"), error.message); }
@@ -1064,12 +1064,12 @@ function intConnect(i) {
         const r = await api.integrations.connect(i.provider, cfg);
         if (r.ok) { closeOverlay(); toast("success", t("integrations.connectedName", { name: i.name }), r.detail); rerender(); }
         else m.querySelector("#icErr").innerHTML = `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${t("integrations.connectionFailed")}</div><div class="a-desc">${esc(r.detail)}</div></div></div>`;
-      } catch (e) { toast("error", "Error", e.message); }
+      } catch (e) { toast("error", t("alert.requestFailed"), e.message); }
       btn.classList.remove("loading");
     }),
   });
 }
 async function intDisconnect(i) {
   try { await api.integrations.disconnect(i.provider); toast("info", t("integrations.disconnectedName", { name: i.name })); rerender(); }
-  catch (e) { toast("error", "Failed", e.message); }
+  catch (e) { toast("error", t("alert.requestFailed"), e.message); }
 }

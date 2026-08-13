@@ -87,7 +87,7 @@ function deltaAgainst(history, key, current, hoursBack = 24) {
   if (!Number.isFinite(previous) || !Number.isFinite(current)) return "";
   const diff = current - previous;
   if (!diff) return `<span class="oh-delta flat">${t("dash.noChange")}</span>`;
-  return `<span class="oh-delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "▲" : "▼"} ${Math.abs(diff)} · 24h</span>`;
+  return `<span class="oh-delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "▲" : "▼"} ${Math.abs(diff)} · ${t("dash.last24h")}</span>`;
 }
 
 function kpi(label, valueText, deltaHTML, sparkHTML, href) {
