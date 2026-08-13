@@ -137,6 +137,25 @@ export const api = {
     publishInboxItem: (body) => j("/api/member/inbox/publish", { method: "POST", body }),
     updateInboxItem: (id, body) => j(`/api/member/inbox/${encodeURIComponent(id)}`, { method: "PATCH", body }),
   },
+  messenger: {
+    overview: () => j("/api/messenger"),
+    createChannel: (body) => j("/api/messenger/channels", { method: "POST", body }),
+    updateChannel: (id, body) => j(`/api/messenger/channels/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    openDirect: (userId) => j("/api/messenger/direct", { method: "POST", body: { userId } }),
+    messages: (id, { limit = 60, before = "" } = {}) => {
+      const query = new URLSearchParams({ limit: String(limit) });
+      if (before) query.set("before", before);
+      return j(`/api/messenger/${encodeURIComponent(id)}/messages?${query}`);
+    },
+    send: (id, text) => j(`/api/messenger/${encodeURIComponent(id)}/messages`, { method: "POST", body: { text } }),
+    markRead: (id) => j(`/api/messenger/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    stream: (onMessage, onConversation) => {
+      const source = new EventSource("/api/messenger/stream");
+      source.addEventListener("message", (event) => { try { onMessage(JSON.parse(event.data)); } catch { /* ignore */ } });
+      source.addEventListener("conversation", (event) => { try { onConversation(JSON.parse(event.data)); } catch { /* ignore */ } });
+      return source;
+    },
+  },
   personal: {
     dashboard: () => j("/api/personal"),
     googleConnect: () => j("/api/personal/google/connect", { method: "POST" }),

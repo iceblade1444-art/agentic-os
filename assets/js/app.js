@@ -14,7 +14,7 @@ import missions from "./pages/missions.js";
 import hermes from "./pages/hermes.js";
 import claude from "./pages/claude-code.js";
 import mila from "./pages/mila.js";
-import chat from "./pages/chat.js";
+import chat from "./pages/messenger.js";
 import workflows from "./pages/workflows.js";
 import settings from "./pages/settings.js";
 import speech from "./pages/speech.js";
@@ -70,7 +70,7 @@ const MEMBER_NAV = [
   { group: null, items: [
     { route: "", navKey: "erp", icon: "mcp", label: "ERP" },
     { route: "personal", icon: "user", label: "Personal" },
-    { route: "chat", icon: "chat", label: "Mila Assistant" },
+    { route: "chat", icon: "chat", label: "Chat" },
     { route: "mila", icon: "mic", label: "Mila Live" },
     { route: "inbox", icon: "inbox", label: "Inbox" },
     { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
@@ -87,7 +87,7 @@ const DESIGN_NAV = [
   { group: null, items: [
     { route: "", icon: "home", label: "Home" },
     { route: "personal", icon: "user", label: "Personal" },
-    { route: "chat", icon: "chat", label: "Mila Assistant" },
+    { route: "chat", icon: "chat", label: "Chat" },
     { route: "inbox", icon: "inbox", label: "Inbox" },
     { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
     { route: "my-notes", icon: "knowledge", label: "My Notes" },

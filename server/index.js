@@ -60,6 +60,7 @@ import { users } from "./lib/users.js";
 import { googleWorkspace } from "./lib/google-workspace.js";
 import { pushService } from "./lib/push-service.js";
 import { reminders } from "./lib/reminders.js";
+import messenger from "./routes/messenger.js";
 import { morningBrief } from "./lib/morning-brief.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -232,6 +233,7 @@ app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin"), deleteUserHa
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);
+app.use("/api/messenger", messenger);
 app.use("/api/personal", personal);
 app.use("/api/telemetry", telemetry);
 app.use("/api/memory", memory);
