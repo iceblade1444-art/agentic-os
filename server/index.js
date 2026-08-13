@@ -269,7 +269,17 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use((err, req, res, next) => { console.error("[error]", err); res.status(500).json({ error: err.message }); });
+// Routes signal an expected refusal by attaching a status to the error — "not a
+// member" is 403, "no such message" is 404. Reporting all of them as 500 made a
+// validation message indistinguishable from a crashed server, and filled the log
+// with stack traces for things that were working exactly as designed.
+app.use((err, req, res, next) => {
+  const status = Number(err?.status);
+  const expected = Number.isInteger(status) && status >= 400 && status < 500;
+  if (expected) console.warn(`[api] ${status} ${req.method} ${req.path}: ${err.message}`);
+  else console.error("[error]", err);
+  res.status(expected ? status : 500).json({ error: err.message });
+});
 
 server.listen(config.port, async () => {
   console.log(`\n  ▲ Agentic OS running → http://localhost:${config.port}`);

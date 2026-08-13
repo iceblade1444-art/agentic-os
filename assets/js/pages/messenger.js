@@ -323,9 +323,16 @@ function render() {
 
 async function loadOverview() {
   try {
-    state = await api.messenger.overview();
+    const result = await api.messenger.overview();
+    if (!result?.me || !Array.isArray(result.conversations)) throw new Error("Unexpected response from the chat service");
+    state = {
+      ...result,
+      people: Array.isArray(result.people) ? result.people : [],
+      reactions: Array.isArray(result.reactions) ? result.reactions : [],
+    };
     error = "";
   } catch (failure) {
+    state = null;
     error = failure.message;
   }
 }
@@ -341,13 +348,17 @@ async function openConversation(id, jumpTo = "") {
   rerender();
   try {
     const result = await api.messenger.messages(id);
-    messages = result.messages;
-    readBy = result.readBy || {};
-    hasMore = result.hasMore;
+    // Defaulted rather than trusted: a response that is not the shape we expect
+    // — a session that expired mid-request, a proxy error page — used to leave
+    // `messages` undefined and throw out of the render on the next line.
+    messages = Array.isArray(result?.messages) ? result.messages : [];
+    readBy = result?.readBy || {};
+    hasMore = !!result?.hasMore;
     await api.messenger.markRead(id);
-    const conversation = state.conversations.find((item) => item.id === id);
+    const conversation = state?.conversations.find((item) => item.id === id);
     if (conversation) conversation.unread = 0;
   } catch (failure) {
+    messages = [];
     toast("error", failure.message);
   }
   loadingThread = false;
@@ -370,8 +381,8 @@ async function loadOlder() {
   rerender();
   try {
     const result = await api.messenger.messages(activeId, { before: messages[0].createdAt });
-    messages = [...result.messages, ...messages];
-    hasMore = result.hasMore;
+    messages = [...(Array.isArray(result?.messages) ? result.messages : []), ...messages];
+    hasMore = !!result?.hasMore;
   } catch (failure) { toast("error", failure.message); }
   loadingOlder = false;
   rerender();
