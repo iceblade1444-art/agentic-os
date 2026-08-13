@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { journal } from "./journal.js";
+import { personalProfiles } from "./personal-profile.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 
 const LOCALES = new Set(["ru-RU", "uz-UZ", "en-US"]);
@@ -300,7 +301,7 @@ export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.o
 export function sharedAgentContext(
   user,
   state = onboarding.get(user || { id: "system", role: "Viewer" }),
-  { vault = config.obsidianVault, journal: journalStore = journal } = {},
+  { vault = config.obsidianVault, journal: journalStore = journal, profiles = personalProfiles } = {},
 ) {
   const workspace = state.workspace || {};
   const profile = state.profile || {};
@@ -325,6 +326,11 @@ export function sharedAgentContext(
       `User timezone: ${profile.timezone || "Not specified"}`,
       `User work focus: ${profile.roleFocus || "Not specified"}`,
     );
+    // What this person told MILA about themselves. Private to them: it is stored
+    // per user outside the vault and only ever reaches their own agent.
+    const personal = profiles.contextBlock(user.id);
+    if (personal) context.push(`What ${user.name} has told you about themselves:
+${personal}`);
   }
   let out = context.join("\n").slice(0, CONTEXT_BUDGET);
   if (!(workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;

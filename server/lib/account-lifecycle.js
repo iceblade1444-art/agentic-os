@@ -9,6 +9,7 @@ import { users } from "./users.js";
 import { commitAuthGroups } from "./auth-persistence.js";
 import { googleWorkspace } from "./google-workspace.js";
 import { personalFiles } from "./personal-files.js";
+import { personalProfiles } from "./personal-profile.js";
 import { pushDevices } from "./push-devices.js";
 
 let configuredWorkspaceStore = memberWorkspaces;
@@ -23,6 +24,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const mfaStore = dependencies.mfa || mfa;
   const googleStore = dependencies.googleWorkspace || googleWorkspace;
   const personalFileStore = dependencies.personalFiles || personalFiles;
+  const profileStore = dependencies.personalProfiles || personalProfiles;
   const pushDeviceStore = dependencies.pushDevices || pushDevices;
   const user = userStore.get(id);
   if (!user) return null;
@@ -33,6 +35,8 @@ export async function deleteUserAccount(id, dependencies = {}) {
   tokenStore.removeUser(id);
   googleStore.disconnect(id);
   personalFileStore.removeUser(id);
+  // Everything MILA was told about this person goes with the account.
+  profileStore.clear(id);
   pushDeviceStore.removeUser(id);
 
   const slug = safeUserSlug(user);

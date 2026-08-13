@@ -77,6 +77,28 @@ export const MILA_PERSONAL_TOOLS = [
     parameters: { type: "object", properties: { reminderId: { type: "string" } }, required: ["reminderId"] },
   },
   {
+    name: "remember_about_me",
+    description: "Remember one fact the owner told you about themselves — a person they work with and how, a preference, a standing commitment, a date that matters. Only ever record what they actually said or confirmed: never your own conclusions about them, and never something you inferred from their behaviour. Runs immediately; say back what you wrote.",
+    parameters: { type: "object", properties: {
+      fact: { type: "string", description: "One short sentence, in the owner's own words where possible" },
+      category: { type: "string", enum: ["people", "preferences", "commitments", "dates", "other"] },
+    }, required: ["fact"] },
+  },
+  {
+    name: "read_about_me",
+    description: "Read what the owner has told you about themselves. Use it to be genuinely useful — remembering how someone prefers to be contacted, or what they always do on a Monday — and never repeat any of it to anyone else.",
+    parameters: { type: "object", properties: {
+      category: { type: "string", enum: ["people", "preferences", "commitments", "dates", "other"] },
+    } },
+  },
+  {
+    name: "forget_about_me",
+    description: "Remove one fact from the personal profile, by id, when the owner asks you to forget it or says it is wrong.",
+    parameters: { type: "object", properties: {
+      factId: { type: "string" },
+    }, required: ["factId"] },
+  },
+  {
     name: "list_my_calendar",
     description: "Read real Google Calendar events in a time range. Use it before proposing a meeting time so you never double-book.",
     parameters: { type: "object", properties: {

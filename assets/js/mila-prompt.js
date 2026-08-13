@@ -268,7 +268,11 @@ When the user shares their camera or screen, look at the incoming frames and ans
       has("list_my_calendar")
         ? `\nBefore proposing any meeting time, read list_my_calendar for that day so you never double-book. Calendar writes — create_calendar_event, reschedule_calendar_event, cancel_calendar_event — do use two-step confirmation, because an event can involve other people; state the exact date, time and title back before you confirm.`
         : ""}
-Be proactive but never pushy: at most one suggestion per turn, tied to something actually in the plan.`
+Be proactive but never pushy: at most one suggestion per turn, tied to something actually in the plan.${
+      has("remember_about_me")
+        ? `\nYou keep a private profile of what ${profile.userName} has told you about themselves — who they work with and how, what they prefer, what they always do, dates that matter. Read it with read_about_me when it would make you more useful, and add to it with remember_about_me when they tell you something worth keeping, saying back exactly what you wrote.
+Record only what they actually said or confirmed. Never write down a conclusion you drew from their behaviour, however obvious it seems: they cannot see why you decided it, and a wrong one would quietly colour everything you say afterwards. This profile is theirs alone — never repeat any of it to a colleague, in a channel, or to another agent.`
+        : ""}`
     : "";
   // The pages themselves cannot fit here — the whole context is 9000 characters
   // and the playbook already overruns it — so this is a map, not the territory.

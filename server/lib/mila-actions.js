@@ -7,6 +7,7 @@ import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { knowledge } from "./knowledge.js";
 import { knowledgeBase } from "./knowledge-base.js";
+import { personalProfiles, PROFILE_CATEGORIES } from "./personal-profile.js";
 import { journal } from "./journal.js";
 import { onboarding } from "./onboarding.js";
 import { googleWorkspace } from "./google-workspace.js";
@@ -37,6 +38,7 @@ export const PERSONAL_ACTIONS = new Set([
   "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
   "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
+  "remember_about_me", "read_about_me", "forget_about_me",
 ]);
 // Company knowledge every employee may read. It is the one part of the vault
 // that is not operator material, and reading it is how MILA answers a question
@@ -49,6 +51,7 @@ export const KNOWLEDGE_ACTIONS = new Set([
 // journal of every "what's on today" would bury the decisions it exists to keep.
 const JOURNALLED_PERSONAL_ACTIONS = new Set([
   "create_my_task", "update_my_task", "save_my_note", "remind_me", "cancel_reminder",
+  "remember_about_me", "forget_about_me",
 ]);
 
 const STATUSES = new Set(["triage", "todo", "ready"]);
@@ -169,6 +172,10 @@ function journalLine(name, args = {}, result = {}) {
   if (name === "create_my_task") return { kind: "task", title: `Задача: ${of(result.task?.title, args.title)}`, detail: args.dueDate ? `срок ${args.dueDate}` : "" };
   if (name === "update_my_task") return { kind: "task", title: `Задача обновлена: ${of(result.task?.title, args.title, args.taskId)}`, detail: bounded(args.status || args.dueDate || args.priority, 80) };
   if (name === "save_my_note") return { kind: "note", title: `Заметка: ${of(result.note?.title, args.title)}` };
+  // The fact itself stays out of the shared journal: the profile is private,
+  // and the journal is read by every agent that asks for context.
+  if (name === "remember_about_me") return { kind: "profile", title: "Дополнен личный профиль" };
+  if (name === "forget_about_me") return { kind: "profile", title: "Удалён факт из личного профиля" };
   if (name === "remind_me") return { kind: "reminder", title: `Напоминание: ${of(args.title)}`, detail: bounded(args.dueAt, 40) };
   if (name === "cancel_reminder") return { kind: "reminder", title: "Напоминание отменено" };
   if (name === "create_calendar_event") return { kind: "calendar", title: `Встреча: ${of(result.event?.title, args.title)}`, detail: bounded(args.start, 40) };
@@ -278,6 +285,7 @@ export function createMilaActions(options = {}) {
   const workspaces = options.memberWorkspaces || memberWorkspaces;
   const calendar = options.googleWorkspace || googleWorkspace;
   const reminderStore = options.reminders || reminders;
+  const profiles = options.personalProfiles || personalProfiles;
   const dayPlan = options.dayPlanFor || dayPlanFor;
   const now = options.now || Date.now;
   const journalStore = options.journal || journal;
@@ -544,6 +552,26 @@ export function createMilaActions(options = {}) {
         route: bounded(args.route, 200),
       });
       return { ok: true, action: name, reminder };
+    }
+
+    if (name === "remember_about_me") {
+      const fact = profiles.remember(user.id, { fact: args.fact, category: args.category });
+      return { ok: true, action: name, fact, note: "Записано в личный профиль. Виден только вам." };
+    }
+
+    if (name === "read_about_me") {
+      return {
+        facts: profiles.list(user.id, { category: bounded(args.category, 40) }),
+        categories: PROFILE_CATEGORIES,
+        source_policy: "This is what the owner told you about themselves. Use it to be useful, never repeat it to anyone else, and never add to it from your own conclusions.",
+      };
+    }
+
+    if (name === "forget_about_me") {
+      const id = bounded(args.factId, 120);
+      if (!id) throw Object.assign(new Error("Which fact should be forgotten?"), { status: 400 });
+      if (!profiles.forget(user.id, id)) throw Object.assign(new Error("Fact not found"), { status: 404 });
+      return { ok: true, action: name, factId: id };
     }
 
     if (name === "list_my_reminders") {
