@@ -209,6 +209,146 @@ test("agents are never push targets, because they have no phone", () => {
   s.cleanup();
 });
 
+test("a reply keeps an excerpt, and survives the original being deleted", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Отгрузки", memberIds: [BAHADIR.id] });
+  const first = s.messenger.send(channel.id, OWNER, { text: "Нужен упаковочный лист на 240 мест" });
+  const reply = s.messenger.send(channel.id, BAHADIR, { text: "Сделаю", replyToId: first.id });
+  assert.equal(reply.replyTo.authorName, "Бахадыр");
+  assert.match(reply.replyTo.excerpt, /упаковочный лист/);
+
+  // The quote is a copy, so deleting the original leaves the reply readable
+  // instead of turning it into an answer to nothing.
+  s.messenger.remove(channel.id, first.id, OWNER);
+  const after = s.messenger.messages(channel.id, BAHADIR.id).messages;
+  assert.equal(after[0].deleted, true);
+  assert.equal(after[0].text, "");
+  assert.match(after[1].replyTo.excerpt, /упаковочный лист/);
+
+  // Replying to something already gone is refused rather than silently dropped.
+  assert.throws(() => s.messenger.send(channel.id, OWNER, { text: "поздно", replyToId: first.id }), (error) => error.status === 404);
+  s.cleanup();
+});
+
+test("editing is the author's own, and only for a day", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id] });
+  const message = s.messenger.send(channel.id, OWNER, { text: "240 мест" });
+
+  const edited = s.messenger.edit(channel.id, message.id, OWNER, "245 мест");
+  assert.equal(edited.text, "245 мест");
+  assert.ok(edited.editedAt, "an edit is visible, not silent");
+
+  assert.throws(() => s.messenger.edit(channel.id, message.id, BAHADIR, "чужое"), (error) => error.status === 403);
+
+  // Rewriting last week's message would change what a colleague already acted on.
+  const old = s.messenger.send(channel.id, OWNER, { text: "старое" });
+  const file = path.join(s.dir, `messages-${channel.id.replace(/[^a-zA-Z0-9_-]/g, "")}.json`);
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  raw.find((item) => item.id === old.id).createdAt = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  fs.writeFileSync(file, JSON.stringify(raw));
+  assert.throws(() => s.messenger.edit(channel.id, old.id, OWNER, "переписал"), (error) => error.status === 409);
+  s.cleanup();
+});
+
+test("an operator can delete someone else's message, a colleague cannot", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id, SHAVKAT.id] });
+  const message = s.messenger.send(channel.id, BAHADIR, { text: "лишнее" });
+  assert.throws(() => s.messenger.remove(channel.id, message.id, SHAVKAT), (error) => error.status === 403);
+  assert.equal(s.messenger.remove(channel.id, message.id, OWNER).deleted, true);
+  s.cleanup();
+});
+
+test("reactions toggle, and only from the agreed list", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id] });
+  const message = s.messenger.send(channel.id, OWNER, { text: "готово" });
+
+  assert.deepEqual(s.messenger.react(channel.id, message.id, BAHADIR, "👍").reactions, { "👍": [BAHADIR.id] });
+  const both = s.messenger.react(channel.id, message.id, OWNER, "👍");
+  assert.deepEqual(both.reactions["👍"].sort(), [BAHADIR.id, OWNER.id].sort());
+  // Tapping again takes it back, and the key disappears when nobody is left.
+  assert.deepEqual(s.messenger.react(channel.id, message.id, BAHADIR, "👍").reactions["👍"], [OWNER.id]);
+  assert.deepEqual(s.messenger.react(channel.id, message.id, OWNER, "👍").reactions, {});
+
+  // Free text would be a second message channel with none of a message's rules.
+  assert.throws(() => s.messenger.react(channel.id, message.id, OWNER, "<script>"), /Unsupported/);
+  s.cleanup();
+});
+
+test("a message can carry attachments with no text, but not nothing at all", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий" });
+  const photo = s.messenger.send(channel.id, OWNER, {
+    attachments: [{ id: "f1", name: "накладная.jpg", kind: "image", type: "image/jpeg", size: 2048 }],
+  });
+  assert.equal(photo.text, "");
+  assert.equal(photo.attachments.length, 1);
+  assert.throws(() => s.messenger.send(channel.id, OWNER, {}), /empty/i);
+  s.cleanup();
+});
+
+test("search reaches only conversations the reader is in", () => {
+  const s = store();
+  const mine = s.messenger.createChannel(OWNER, { name: "Мой", memberIds: [BAHADIR.id] });
+  const theirs = s.messenger.createChannel(SHAVKAT, { name: "Чужой" });
+  s.messenger.send(mine.id, OWNER, { text: "отгрузка в Алматы" });
+  s.messenger.send(theirs.id, SHAVKAT, { text: "отгрузка секретная" });
+
+  const found = s.messenger.search(BAHADIR.id, "отгрузка");
+  assert.equal(found.length, 1);
+  assert.match(found[0].message.text, /Алматы/);
+  // Too short to be a search, and a deleted message is not a hit.
+  assert.deepEqual(s.messenger.search(BAHADIR.id, "о"), []);
+  s.cleanup();
+});
+
+test("leaving a channel is the one membership change a member makes alone", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id] });
+  s.messenger.leaveChannel(BAHADIR, channel.id);
+  assert.equal(s.messenger.listFor(BAHADIR.id).length, 0);
+  assert.throws(() => s.messenger.messages(channel.id, BAHADIR.id), (error) => error.status === 403);
+  s.cleanup();
+});
+
+test("pinning points at a real message and clears when it is deleted", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id] });
+  const message = s.messenger.send(channel.id, OWNER, { text: "график смен" });
+  assert.equal(s.messenger.pin(OWNER, channel.id, message.id).pinnedMessageId, message.id);
+  assert.throws(() => s.messenger.pin(OWNER, channel.id, "msg_missing"), (error) => error.status === 404);
+
+  s.messenger.remove(channel.id, message.id, OWNER);
+  assert.equal(s.messenger.conversation(channel.id, OWNER.id).pinnedMessageId, "", "a pin must not outlive its message");
+  s.cleanup();
+});
+
+test("mentions of you are flagged on the conversation, not just counted", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id] });
+  s.messenger.send(channel.id, OWNER, { text: "всем привет" });
+  assert.equal(s.messenger.listFor(BAHADIR.id)[0].mentioned, false);
+  s.messenger.send(channel.id, OWNER, { text: "@bahadir глянь", mentions: [BAHADIR.id] });
+  assert.equal(s.messenger.listFor(BAHADIR.id)[0].mentioned, true);
+  s.cleanup();
+});
+
+test("read receipts show how far others got, never the reader themselves", () => {
+  const s = store();
+  const channel = s.messenger.createChannel(OWNER, { name: "Общий", memberIds: [BAHADIR.id, MILA_MEMBER_ID] });
+  s.messenger.send(channel.id, OWNER, { text: "проверьте" });
+  s.messenger.markRead(BAHADIR.id, channel.id);
+
+  const view = s.messenger.messages(channel.id, OWNER.id);
+  assert.ok(view.readBy[BAHADIR.id], "a colleague's progress is visible");
+  assert.equal(Object.hasOwn(view.readBy, OWNER.id), false, "your own watermark tells you nothing");
+  // An assistant reading is meaningless, so it is not reported as a reader.
+  assert.equal(Object.hasOwn(view.readBy, MILA_MEMBER_ID), false);
+  s.cleanup();
+});
+
 test("live subscribers hear only what they are members of", () => {
   const s = store();
   const heard = [];

@@ -93,6 +93,10 @@ export class OnboardingStore {
       lunchStart: clock(profileInput.lunchStart, current.profile.lunchStart || "13:00"),
       lunchEnd: clock(profileInput.lunchEnd, current.profile.lunchEnd || "14:00"),
       briefTime: clock(profileInput.briefTime, current.profile.briefTime || "08:00"),
+      // Empty means "do not post to a channel": automatic messages are opt-in,
+      // so nobody's team channel fills up because a setting defaulted on.
+      briefChannel: text(profileInput.briefChannel ?? current.profile.briefChannel, 80),
+      alertChannel: text(profileInput.alertChannel ?? current.profile.alertChannel, 80),
       briefEnabled: profileInput.briefEnabled === undefined
         ? current.profile.briefEnabled !== false
         : !!profileInput.briefEnabled,

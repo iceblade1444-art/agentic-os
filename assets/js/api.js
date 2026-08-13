@@ -139,21 +139,49 @@ export const api = {
   },
   messenger: {
     overview: () => j("/api/messenger"),
+    search: (query) => j(`/api/messenger/search?q=${encodeURIComponent(query)}`),
     createChannel: (body) => j("/api/messenger/channels", { method: "POST", body }),
     updateChannel: (id, body) => j(`/api/messenger/channels/${encodeURIComponent(id)}`, { method: "PATCH", body }),
+    leaveChannel: (id) => j(`/api/messenger/channels/${encodeURIComponent(id)}/leave`, { method: "POST" }),
     openDirect: (userId) => j("/api/messenger/direct", { method: "POST", body: { userId } }),
     messages: (id, { limit = 60, before = "" } = {}) => {
       const query = new URLSearchParams({ limit: String(limit) });
       if (before) query.set("before", before);
       return j(`/api/messenger/${encodeURIComponent(id)}/messages?${query}`);
     },
-    send: (id, text) => j(`/api/messenger/${encodeURIComponent(id)}/messages`, { method: "POST", body: { text } }),
+    send: (id, body) => j(`/api/messenger/${encodeURIComponent(id)}/messages`, { method: "POST", body }),
+    edit: (id, messageId, text) => j(`/api/messenger/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}`, { method: "PATCH", body: { text } }),
+    remove: (id, messageId) => j(`/api/messenger/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" }),
+    react: (id, messageId, emoji) => j(`/api/messenger/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/react`, { method: "POST", body: { emoji } }),
+    pin: (id, messageId) => j(`/api/messenger/${encodeURIComponent(id)}/pin`, { method: "POST", body: { messageId } }),
+    typing: (id) => j(`/api/messenger/${encodeURIComponent(id)}/typing`, { method: "POST" }),
+    upload: (id, body) => j(`/api/messenger/${encodeURIComponent(id)}/files`, { method: "POST", body }),
     markRead: (id) => j(`/api/messenger/${encodeURIComponent(id)}/read`, { method: "POST" }),
-    stream: (onMessage, onConversation) => {
+    stream: (handlers = {}) => {
       const source = new EventSource("/api/messenger/stream");
-      source.addEventListener("message", (event) => { try { onMessage(JSON.parse(event.data)); } catch { /* ignore */ } });
-      source.addEventListener("conversation", (event) => { try { onConversation(JSON.parse(event.data)); } catch { /* ignore */ } });
+      const on = (event, handler) => source.addEventListener(event, (raw) => {
+        if (!handler) return;
+        try { handler(JSON.parse(raw.data)); } catch { /* a malformed frame is not worth breaking the stream */ }
+      });
+      on("message", handlers.message);
+      on("message-updated", handlers.updated);
+      on("conversation", handlers.conversation);
+      on("typing", handlers.typing);
+      on("read", handlers.read);
       return source;
+    },
+  },
+  speech: {
+    // The recogniser takes the raw audio body, not JSON.
+    async transcribe(blob, language = "") {
+      const response = await fetch(`/api/speech/stt${language ? `?language=${encodeURIComponent(language)}` : ""}`, {
+        method: "POST",
+        headers: { "Content-Type": blob.type || "application/octet-stream", "X-File-Name": "voice.webm" },
+        body: blob,
+      });
+      if (!response.ok) throw new Error(`Speech recognition failed (${response.status})`);
+      const result = await response.json();
+      return String(result.text || result.transcript || "").trim();
     },
   },
   personal: {

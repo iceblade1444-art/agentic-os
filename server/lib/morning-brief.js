@@ -12,6 +12,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { creatorUser } from "./auth.js";
 import { memberWorkspaces } from "./member-workspace.js";
+import { broadcaster } from "./messenger-broadcast.js";
 import { onboarding } from "./onboarding.js";
 import { dayPlanFor } from "./personal-day.js";
 import { planningInternals, spokenPlan } from "./personal-planner.js";
@@ -98,6 +99,18 @@ export class MorningBrief {
       route: "#/personal",
     });
     await push.sendInbox(user.id, item);
+
+    // The brief is also team news when the owner has pointed it at a channel:
+    // the people who can act on a late order are already talking there.
+    const channels = deps.broadcaster || broadcaster;
+    const channelName = channels.briefChannel(user);
+    if (channelName) {
+      try {
+        channels.post(channelName, `**${item.title}**\n${item.body}`);
+      } catch (error) {
+        console.error(`[morning-brief] could not post to ${channelName}: ${error.message}`);
+      }
+    }
 
     const state = this.#read();
     state[user.id] = { date: plan.date, sentAt: new Date(now).toISOString() };
