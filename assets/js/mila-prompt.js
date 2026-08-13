@@ -251,8 +251,22 @@ When the user shares their camera or screen, look at the incoming frames and ans
   const persona = profile.persona
     ? `\nWho you are, as defined by ${profile.userName} — this is your character and it takes precedence over the generic manner described below:\n${profile.persona}\nStay in this character throughout, including when you decline something. It does not change your safety rules, your confirmation steps, or your duty to say plainly what you cannot do.\n`
     : "";
+  // What she can actually read, assembled from the tools this caller declared.
+  // The sentence used to name Kanban, Obsidian and Claude Workspace regardless —
+  // but the block is gated on the ERP tools, and a Member has only those. So
+  // every Member call was told she could read three things she had no tool for,
+  // two paragraphs above "these are the only tools you have on this device". She
+  // would offer the lookup and then fail, or not fail and invent the answer.
+  const readableSources = [
+    hasAny(["list_kanban_tasks", "get_kanban_task"]) ? "Hermes and Kanban tasks" : "",
+    hasAny(["search_obsidian_notes", "read_obsidian_note"]) ? "the Obsidian library" : "",
+    has("list_claude_sessions") ? "Claude Workspace sessions" : "",
+    "Milana ERP business context",
+  ].filter(Boolean);
   const erpReadBlock = hasAny(ERP_READ_TOOL_NAMES)
-    ? `\nYou can read live Agentic OS state through your tools: Hermes and Kanban tasks, the Obsidian library, Claude Workspace sessions, and Milana ERP business context. For ERP business questions, never answer from memory or general reasoning: first use the correct live ERP tool, then answer only from fields returned by that tool and name the ERP source when useful. Use get_erp_business_context for production, cutting department, sewing-flow load, warehouse ETA, material inventory, finance, order-risk and business-control questions before answering. For questions about "склад готовых изделий", "готовая продукция", "ready product", "finished goods" or "FGS", first use get_finished_goods_stock and answer only from finished_goods_stock sourced from /warehouse-stock and /warehouse-map. The exact finished-goods count is finished_goods_stock.total_pieces or finished_goods_stock.answer_hints.ready_goods_total_pieces. Do not use production.production_output, cutting_output, packaging_output, sewing_output, material_inventory, GM summary or old conversation memory for finished-goods warehouse questions. If get_finished_goods_stock returns ok=false, total_pieces is absent, or the needed field is missing, say the ERP finished-goods data is missing instead of guessing or saying "later". Use Obsidian ERP wiki notes only to explain what ERP fields mean, not as proof of live values.`
+    ? `\nYou can read live Agentic OS state through your tools: ${readableSources.length > 1
+      ? `${readableSources.slice(0, -1).join(", ")} and ${readableSources.at(-1)}`
+      : readableSources[0]}. For ERP business questions, never answer from memory or general reasoning: first use the correct live ERP tool, then answer only from fields returned by that tool and name the ERP source when useful. Use get_erp_business_context for production, cutting department, sewing-flow load, warehouse ETA, material inventory, finance, order-risk and business-control questions before answering. For questions about "склад готовых изделий", "готовая продукция", "ready product", "finished goods" or "FGS", first use get_finished_goods_stock and answer only from finished_goods_stock sourced from /warehouse-stock and /warehouse-map. The exact finished-goods count is finished_goods_stock.total_pieces or finished_goods_stock.answer_hints.ready_goods_total_pieces. Do not use production.production_output, cutting_output, packaging_output, sewing_output, material_inventory, GM summary or old conversation memory for finished-goods warehouse questions. If get_finished_goods_stock returns ok=false, total_pieces is absent, or the needed field is missing, say the ERP finished-goods data is missing instead of guessing or saying "later".${hasAny(["search_obsidian_notes", "read_obsidian_note"]) ? " Use Obsidian ERP wiki notes only to explain what ERP fields mean, not as proof of live values." : ""}`
     : "";
   const personalBlock = hasAny(PERSONAL_TOOL_NAMES)
     ? `\nYou are also ${profile.userName}'s personal assistant for the working day, and this is the part of the job you own end to end.${

@@ -2141,6 +2141,20 @@ body.compact .card.pad-lg { padding: 16px; }
   .oh-low { grid-template-columns: 1fr; }
 }
 
+/* On a phone the lane label and the track cannot share a row. At 375px the card
+   leaves 273px; the fixed 96px label and its gap take 106 of them, and the five
+   segments then split 145px by weight — the smallest bar works out at 13px
+   against 18px of its own padding, so its content box clamps to zero and the
+   label is simply not there. Stacking the label above the track gives the bars
+   the full width back. */
+@media (max-width: 560px) {
+  .oh-lane { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .oh-lane-label { font-size: var(--text-xs); }
+  /* With the row back to full width the narrowest bar still only has room for a
+     number, so the padding comes down to leave it something to show. */
+  .oh-bar { padding: 0 5px; }
+}
+
 /* ============================================================
    Member workspace
    ============================================================ */
