@@ -154,6 +154,10 @@ export class Messenger extends EventEmitter {
     writeJson(this.#messagesFile(conversationId), messages.slice(-MAX_MESSAGES_PER_CONVERSATION));
   }
 
+  #dropMessages(conversationId) {
+    fs.rmSync(this.#messagesFile(conversationId), { force: true });
+  }
+
   #conversationFor(index, conversationId, userId) {
     const conversation = index.conversations.find((item) => item.id === conversationId);
     if (!conversation) fail("Conversation not found", 404);
@@ -293,6 +297,36 @@ export class Messenger extends EventEmitter {
     this.#saveIndex(index);
     this.emit("conversation", { conversation: publicConversation(conversation) });
     return { ok: true };
+  }
+
+  // The account is gone, so the person is no longer a member of anything and
+  // their read watermarks have nobody to belong to. Their direct threads go with
+  // them: a one-sided conversation with a deleted account is a thread the
+  // remaining person can open and write into forever with nobody on the other
+  // end. What they wrote in a channel stays — a team channel is a shared record,
+  // and silently rewriting its history would be a stranger thing to do than
+  // leaving a name in it.
+  removeUser(userId) {
+    const id = clean(userId, 120);
+    if (!id) return { conversations: 0 };
+    const index = this.#index();
+    let touched = 0;
+    const kept = [];
+    for (const conversation of index.conversations) {
+      if (!conversation.memberIds.includes(id)) { kept.push(conversation); continue; }
+      touched += 1;
+      if (conversation.kind === "direct") {
+        this.#dropMessages(conversation.id);
+        continue;
+      }
+      conversation.memberIds = conversation.memberIds.filter((member) => member !== id);
+      conversation.updatedAt = now();
+      kept.push(conversation);
+    }
+    index.conversations = kept;
+    delete index.reads[id];
+    this.#saveIndex(index);
+    return { conversations: touched };
   }
 
   // A direct conversation is identified by its pair, so opening one twice from

@@ -220,7 +220,7 @@ function threadBody(conversation) {
 
 function composerHTML() {
   const typingList = [...typingNames.values()];
-  return `${replyTo ? `<div class="chat-reply-bar">${icon("branch")}<div><strong>${esc(replyTo.authorName)}</strong><small>${esc(replyTo.excerpt)}</small></div><button type="button" class="icon-btn sm" data-cancel-reply">${icon("x")}</button></div>` : ""}
+  return `${replyTo ? `<div class="chat-reply-bar">${icon("branch")}<div><strong>${esc(replyTo.authorName)}</strong><small>${esc(replyTo.excerpt)}</small></div><button type="button" class="icon-btn sm" data-cancel-reply>${icon("x")}</button></div>` : ""}
     ${editing ? `<div class="chat-reply-bar editing">${icon("edit")}<div><strong>${t("chat.editing")}</strong></div><button type="button" class="icon-btn sm" data-cancel-edit>${icon("x")}</button></div>` : ""}
     ${pending.length ? `<div class="chat-pending">${pending.map((file, index) => `<span>${file.kind === "image" ? "📷" : file.kind === "audio" ? "🎤" : "📎"} ${esc(file.name)}<button type="button" data-drop="${index}">${icon("x")}</button></span>`).join("")}</div>` : ""}
     ${typingList.length ? `<div class="chat-typing">${esc(t("chat.typing", { names: typingList.join(", ") }))}</div>` : ""}

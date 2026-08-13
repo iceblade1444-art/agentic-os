@@ -53,7 +53,13 @@ export function createMilaResponder(options = {}) {
       buildMilaSystemInstruction({
         language: "auto",
         preferences: { userName: clean(asker?.name, 40) || "Коллега" },
-        agentContext: context(asker || { id: "system", role: "Creator" }),
+        // In a channel her reply is a message several colleagues read, so she is
+        // given the workspace but not the asker's private profile and not the
+        // day journal — a group room is not the place to be holding either. A
+        // direct thread is between her and one person, so it keeps them.
+        agentContext: context(asker || { id: "system", role: "Creator" }, undefined, {
+          audience: conversation.kind === "channel" ? "shared" : "owner",
+        }),
         mode: "text",
         // In a chat thread she can only write; the personal desk and ERP tools
         // live on surfaces that can actually call them.

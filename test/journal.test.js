@@ -174,9 +174,15 @@ test("MILA records what she did, and only once it really happened", async () => 
   await actions.call("save_my_note", { title: "Цена", content: "по бага" }, context);
 
   const body = v.read();
-  assert.match(body, /Задача: Отгрузка в Казахстан — срок 2026-08-11/);
-  assert.match(body, /Напоминание: Позвонить на фабрику/);
-  assert.match(body, /Заметка: Цена/);
+  // The journal is one file a day for the whole company, so a personal line says
+  // that something happened and to what kind of thing — never what it said. See
+  // privacy-boundaries.test.js: the titles used to go in verbatim, and a Design
+  // account could read the lot through /api/knowledge.
+  assert.match(body, /\(task\) Добавлена личная задача/);
+  assert.match(body, /\(reminder\) Поставлено личное напоминание/);
+  assert.match(body, /\(note\) Сохранена личная заметка/);
+  assert.equal(body.includes("Отгрузка в Казахстан"), false);
+  assert.equal(body.includes("Позвонить на фабрику"), false);
   assert.match(body, /\*\*Бахадыр\*\*/);
 
   // Reading the day changes nothing, so it leaves no trace: a journal full of
@@ -186,11 +192,14 @@ test("MILA records what she did, and only once it really happened", async () => 
   await actions.call("list_my_tasks", {}, context);
   assert.equal(v.read(), before);
 
-  // A staged calendar event is not history until it is confirmed.
+  // A staged calendar event is not history until it is confirmed. The title is
+  // redacted either way now, so counting the lines is what tells the two apart.
+  const calendarLines = () => (v.read().match(/\(calendar\)/g) || []).length;
   const staged = await actions.call("create_calendar_event", { title: "Встреча с закупщиком", start: "2026-08-11T05:00:00.000Z" }, context);
-  assert.equal(v.read().includes("Встреча с закупщиком"), false, "staging must not be recorded");
+  assert.equal(calendarLines(), 0, "staging must not be recorded");
   await actions.call("create_calendar_event", { confirmationToken: staged.confirmationToken }, context);
-  assert.match(v.read(), /Встреча: Встреча с закупщиком/);
+  assert.equal(calendarLines(), 1);
+  assert.equal(v.read().includes("Встреча с закупщиком"), false, "it is the owner's own calendar");
 
   v.cleanup();
 });

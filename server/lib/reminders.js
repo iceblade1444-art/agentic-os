@@ -88,6 +88,19 @@ export class ReminderStore {
     return true;
   }
 
+  // The account is gone, so nothing here has anyone to remind. Left behind, the
+  // undelivered ones keep coming due and drain() keeps trying to push them to a
+  // person who no longer has a device — and the titles are the person's own
+  // words, which is reason enough on its own.
+  removeUser(userId) {
+    const all = this.read();
+    if (!Object.hasOwn(all, userId)) return 0;
+    const count = (all[userId] || []).length;
+    delete all[userId];
+    this.write(all);
+    return count;
+  }
+
   // Delivers everything due, returning what was sent. Safe to call concurrently:
   // a reminder is marked delivered before the inbox write, so a failure drops the
   // notification rather than repeating it every tick.

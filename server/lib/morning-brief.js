@@ -106,7 +106,7 @@ export class MorningBrief {
     const channelName = channels.briefChannel(user);
     if (channelName) {
       try {
-        channels.post(channelName, `**${item.title}**\n${item.body}`);
+        channels.post(channelName, `**${item.title}**\n${item.body}`, { onBehalfOf: user });
       } catch (error) {
         console.error(`[morning-brief] could not post to ${channelName}: ${error.message}`);
       }

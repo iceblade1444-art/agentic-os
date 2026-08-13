@@ -169,18 +169,28 @@ function actionSummary(name, args) {
 // reading it as context both learn the same thing: what happened, to what.
 function journalLine(name, args = {}, result = {}) {
   const of = (...values) => bounded(values.find((value) => value), 160);
-  if (name === "create_my_task") return { kind: "task", title: `Задача: ${of(result.task?.title, args.title)}`, detail: args.dueDate ? `срок ${args.dueDate}` : "" };
-  if (name === "update_my_task") return { kind: "task", title: `Задача обновлена: ${of(result.task?.title, args.title, args.taskId)}`, detail: bounded(args.status || args.dueDate || args.priority, 80) };
-  if (name === "save_my_note") return { kind: "note", title: `Заметка: ${of(result.note?.title, args.title)}` };
-  // The fact itself stays out of the shared journal: the profile is private,
-  // and the journal is read by every agent that asks for context.
+  // Everything below the personal block is company work, and its titles belong
+  // in a company file. Everything inside it is one person's own desk. The
+  // journal lives at Agentic OS/Journal/<date>.md — one file a day for the whole
+  // company, readable by anyone with the vault (Creator, Admin and Design), and
+  // fed into every operator's agent prompt. So a personal line records that
+  // something happened and to what kind of thing, never what it said: "Заметка:
+  // Развод — документы к юристу" is not a sentence a colleague should be able to
+  // read, and the person who wrote it never chose to publish it. Their own copy
+  // is intact on the Personal page, which is where they left it.
+  if (name === "create_my_task") return { kind: "task", title: "Добавлена личная задача" };
+  if (name === "update_my_task") return { kind: "task", title: "Обновлена личная задача", detail: bounded(args.status, 40) };
+  if (name === "save_my_note") return { kind: "note", title: "Сохранена личная заметка" };
   if (name === "remember_about_me") return { kind: "profile", title: "Дополнен личный профиль" };
   if (name === "forget_about_me") return { kind: "profile", title: "Удалён факт из личного профиля" };
-  if (name === "remind_me") return { kind: "reminder", title: `Напоминание: ${of(args.title)}`, detail: bounded(args.dueAt, 40) };
+  if (name === "remind_me") return { kind: "reminder", title: "Поставлено личное напоминание" };
   if (name === "cancel_reminder") return { kind: "reminder", title: "Напоминание отменено" };
-  if (name === "create_calendar_event") return { kind: "calendar", title: `Встреча: ${of(result.event?.title, args.title)}`, detail: bounded(args.start, 40) };
-  if (name === "reschedule_calendar_event") return { kind: "calendar", title: `Встреча перенесена: ${of(result.event?.title, args.title, args.eventId)}`, detail: bounded(args.start, 40) };
-  if (name === "cancel_calendar_event") return { kind: "calendar", title: `Встреча отменена: ${of(args.eventId)}` };
+  // The same rule, and it is the person's own calendar: a title like
+  // "Собеседование в другой компании" is exactly the kind of thing that must not
+  // appear in a file the whole company reads.
+  if (name === "create_calendar_event") return { kind: "calendar", title: "Встреча в личном календаре", detail: bounded(args.start, 40) };
+  if (name === "reschedule_calendar_event") return { kind: "calendar", title: "Встреча перенесена", detail: bounded(args.start, 40) };
+  if (name === "cancel_calendar_event") return { kind: "calendar", title: "Встреча отменена" };
   if (name === "create_kanban_task") return { kind: "kanban", title: `Карточка: ${of(result.task?.title, args.title)}` };
   if (name === "delegate_to_hermes") return { kind: "hermes", title: `Hermes: ${of(args.title, args.goal)}` };
   if (name === "write_obsidian_note") return { kind: "vault", title: `Заметка в vault: ${of(args.path)}` };

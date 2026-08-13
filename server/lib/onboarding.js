@@ -301,8 +301,16 @@ export function readAgentPlaybook(entry, room = CONTEXT_BUDGET, vault = config.o
 export function sharedAgentContext(
   user,
   state = onboarding.get(user || { id: "system", role: "Viewer" }),
-  { vault = config.obsidianVault, journal: journalStore = journal, profiles = personalProfiles } = {},
+  { vault = config.obsidianVault, journal: journalStore = journal, profiles = personalProfiles, audience = "owner" } = {},
 ) {
+  // Who ends up reading what this agent writes. "owner" means the answer goes
+  // back to the person who asked and nobody else — the web MILA, the phone, a
+  // direct thread. "shared" means it is published where colleagues read it, and
+  // then two things in here become a leak rather than context: the person's
+  // private profile, and the day journal, which carries what everyone else did.
+  // The model is asked not to repeat them, but a prompt is a request; the only
+  // reliable way not to say something in a room is not to know it there.
+  const forOwnerOnly = audience !== "shared";
   const workspace = state.workspace || {};
   const profile = state.profile || {};
   const context = [];
@@ -326,14 +334,15 @@ export function sharedAgentContext(
       `User timezone: ${profile.timezone || "Not specified"}`,
       `User work focus: ${profile.roleFocus || "Not specified"}`,
     );
-    // What this person told MILA about themselves. Private to them: it is stored
-    // per user outside the vault and only ever reaches their own agent.
-    const personal = profiles.contextBlock(user.id);
+    // What this person told MILA about themselves. Private to them: stored per
+    // user outside the vault, and only ever loaded when the answer goes back to
+    // them alone.
+    const personal = forOwnerOnly ? profiles.contextBlock(user.id) : "";
     if (personal) context.push(`What ${user.name} has told you about themselves:
 ${personal}`);
   }
   let out = context.join("\n").slice(0, CONTEXT_BUDGET);
-  if (!(workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;
+  if (!(forOwnerOnly && workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;
 
   // The other half of the memory loop. Facts and playbooks flow down into every
   // agent; without this, nothing flowed back, so each session began knowing
