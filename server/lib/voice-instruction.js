@@ -11,6 +11,7 @@
 // promising thirteen tools it has no way to call.
 import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../../assets/js/mila-prompt.js";
 import { MILA_TOOLS } from "../../assets/js/mila-tools.js";
+import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { sharedAgentContext } from "./onboarding.js";
 
@@ -51,6 +52,7 @@ export function voiceInstruction(user, requested = {}) {
     agentContext: sharedAgentContext(user),
     mode: requested.mode === "text" ? "text" : "voice",
     tools,
+    knowledgeIndex: knowledgePromptIndex(),
   });
   return { instruction, language, preferences, tools };
 }

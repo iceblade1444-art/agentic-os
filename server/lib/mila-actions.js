@@ -6,6 +6,7 @@ import { claudeCode } from "./claude-code.js";
 import { hermesDashboardStatus } from "./hermes-proxy.js";
 import { hermesKanbanRequest, kanbanPath } from "./hermes-kanban.js";
 import { knowledge } from "./knowledge.js";
+import { knowledgeBase } from "./knowledge-base.js";
 import { journal } from "./journal.js";
 import { onboarding } from "./onboarding.js";
 import { googleWorkspace } from "./google-workspace.js";
@@ -19,7 +20,7 @@ const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const WRITE_ACTIONS = new Set([
   "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool",
   "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
-  "create_erp_task", "send_erp_notification",
+  "create_erp_task", "send_erp_notification", "save_company_knowledge",
 ]);
 const ERP_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 const ERP_TARGETS = new Set(["user", "department", "safe_group"]);
@@ -36,6 +37,13 @@ export const PERSONAL_ACTIONS = new Set([
   "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
   "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
+]);
+// Company knowledge every employee may read. It is the one part of the vault
+// that is not operator material, and reading it is how MILA answers a question
+// about the business instead of guessing — the prompt cannot carry these pages,
+// only an index of them.
+export const KNOWLEDGE_ACTIONS = new Set([
+  "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
 ]);
 // The personal actions that change something. Reads are deliberately absent: a
 // journal of every "what's on today" would bury the decisions it exists to keep.
@@ -140,6 +148,7 @@ function erpTargetLabel(args = {}) {
 }
 
 function actionSummary(name, args) {
+  if (name === "save_company_knowledge") return `Write into company knowledge “${bounded(args.page, 80)}”: ${bounded(args.fact, 160)}`;
   if (name === "create_erp_task") return `Create ERP task “${bounded(args.title, 120)}” for ${args.assigneeUserId ? `user ${args.assigneeUserId}` : `department ${bounded(args.department, 80)}`}`;
   if (name === "send_erp_notification") return `Send ERP notification “${bounded(args.title, 120)}” to ${erpTargetLabel(args)}`;
   if (name === "create_calendar_event") return `Create calendar event “${bounded(args.title, 120)}” at ${bounded(args.start, 40)}`;
@@ -176,6 +185,9 @@ function journalLine(name, args = {}, result = {}) {
 }
 
 function cleanMutationArgs(name, args = {}) {
+  if (name === "save_company_knowledge") return {
+    page: bounded(args.page, 80), section: bounded(args.section, 120), fact: bounded(args.fact, 1500),
+  };
   if (name === "create_erp_task") return {
     title: bounded(args.title, 240), description: bounded(args.description, 4000),
     assigneeUserId: Number.parseInt(args.assigneeUserId, 10) || null,
@@ -228,6 +240,10 @@ function cleanMutationArgs(name, args = {}) {
 }
 
 function requireFields(name, args) {
+  if (name === "save_company_knowledge") {
+    if (!args.page) throw Object.assign(new Error("Name the knowledge page"), { status: 400 });
+    if (!args.fact) throw Object.assign(new Error("There is no fact to write"), { status: 400 });
+  }
   if (name === "create_erp_task") {
     if (!args.title) throw Object.assign(new Error("ERP task title is required"), { status: 400 });
     if (!args.assigneeUserId && !args.department) {
@@ -254,6 +270,7 @@ export function createMilaActions(options = {}) {
   const kanbanRequest = options.kanbanRequest || hermesKanbanRequest;
   const boardName = options.board || config.hermesKanbanBoard;
   const library = options.knowledge || knowledge;
+  const base = options.knowledgeBase || knowledgeBase;
   const claude = options.claude || claudeCode;
   const hermesStatus = options.hermesStatus || hermesDashboardStatus;
   const mcp = options.mcpManager || mcpManager;
@@ -357,6 +374,13 @@ export function createMilaActions(options = {}) {
   }
 
   async function executeWrite(name, args, context) {
+    // Company knowledge is what every colleague and MILA will quote afterwards,
+    // so writing to it is confirmed like anything else that leaves your own desk.
+    if (name === "save_company_knowledge") {
+      const written = await base.addFact(args.page, { section: args.section, fact: args.fact, author: context.actor },
+        { actor: context.actor, source: "mila-knowledge" });
+      return { ok: true, action: name, ...written };
+    }
     // ERP writes reach colleagues, so the confirmed call also carries ERP's own
     // confirm flag: without it the server would only return a preview and MILA
     // would report a task that was never actually created.
@@ -548,6 +572,16 @@ export function createMilaActions(options = {}) {
 
   async function executeRead(name, args, context) {
     if (PERSONAL_ACTIONS.has(name)) return executePersonal(name, args, context);
+
+    if (KNOWLEDGE_ACTIONS.has(name)) {
+      const scope = { actor: context.actor, source: "mila-knowledge" };
+      const policy = "Answer from these pages and quote them. If the page says ❔ or the answer is not there, say plainly that it is not written down yet and offer to record it — never invent a company fact.";
+      if (name === "list_company_knowledge") return { pages: await base.list(scope), source_policy: policy };
+      if (name === "read_company_knowledge") return { ...(await base.read(bounded(args.page, 80), scope)), source_policy: policy };
+      const query = bounded(args.query, 200);
+      if (!query) throw Object.assign(new Error("Search query is required"), { status: 400 });
+      return { query, matches: await base.search(query, scope), source_policy: policy };
+    }
 
     if (name === "get_erp_late_orders") {
       const result = await erpCall("erp_late_orders", { limit: integer(args.limit, 1, 50, 20) });

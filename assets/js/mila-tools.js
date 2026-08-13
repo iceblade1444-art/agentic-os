@@ -114,8 +114,45 @@ export const MILA_PERSONAL_TOOLS = [
   },
 ];
 
+// The company knowledge base. These pages cannot live in the prompt — it holds
+// 9000 characters and the playbook alone already overruns it — so MILA carries
+// an index and looks the page up when asked. Reading is company-wide; writing is
+// operator-only and confirmed, because everyone quotes these pages afterwards.
+export const MILA_KNOWLEDGE_TOOLS = [
+  {
+    name: "search_company_knowledge",
+    description: "Search the Milana company knowledge base: prices and terms, fabrics and size charts, export rules per country, who is responsible for what, and standard answers to customer questions. Use this before answering any question about the business that is not live ERP data.",
+    parameters: { type: "object", properties: {
+      query: { type: "string", description: "What to look for, in the user's own words" },
+    }, required: ["query"] },
+  },
+  {
+    name: "read_company_knowledge",
+    description: "Read one whole page of the company knowledge base.",
+    parameters: { type: "object", properties: {
+      page: { type: "string", enum: ["products-and-prices", "who-does-what", "export-by-country", "customer-questions"] },
+    }, required: ["page"] },
+  },
+  {
+    name: "list_company_knowledge",
+    description: "List the pages of the company knowledge base and what each one holds.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "save_company_knowledge",
+    description: "Stage or confirm writing one fact into the company knowledge base, so it is available to everyone next time. Use it when the owner tells you something worth keeping — a price, a term, a rule. Two-step confirmation: read the exact wording back first, because everyone will quote it afterwards.",
+    parameters: { type: "object", properties: {
+      page: { type: "string", enum: ["products-and-prices", "who-does-what", "export-by-country", "customer-questions"] },
+      section: { type: "string", description: "Heading inside that page, when you know it" },
+      fact: { type: "string", description: "One short quotable sentence" },
+      confirmationToken,
+    }, required: ["page", "fact"] },
+  },
+];
+
 export const MILA_TOOLS = [
   ...MILA_PERSONAL_TOOLS,
+  ...MILA_KNOWLEDGE_TOOLS,
   {
     name: "get_system_status",
     description: "Read the current Hermes, Kanban, Obsidian and Claude Workspace status.",
@@ -265,4 +302,7 @@ export const MILA_TOOLS = [
 // this list only keeps the model from offering actions it cannot actually perform.
 export const MILA_MEMBER_TOOLS = MILA_TOOLS.filter((tool) =>
   ["get_erp_business_context", "get_finished_goods_stock"].includes(tool.name)
-  || MILA_PERSONAL_TOOLS.some((personal) => personal.name === tool.name));
+  || MILA_PERSONAL_TOOLS.some((personal) => personal.name === tool.name)
+  // Reading company knowledge, but not writing it: an employee looking up the
+  // minimum order is the point, an employee rewriting it is not.
+  || (MILA_KNOWLEDGE_TOOLS.some((item) => item.name === tool.name) && tool.name !== "save_company_knowledge"));

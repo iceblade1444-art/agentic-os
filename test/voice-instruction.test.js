@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 import { buildMilaSystemInstruction } from "../assets/js/mila-prompt.js";
 import { MILA_TOOLS } from "../assets/js/mila-tools.js";
+import { knowledgePromptIndex } from "../assets/js/knowledge-pages.js";
 import { voiceInstruction, LIVEKIT_BASELINE_TOOLS } from "../server/lib/voice-instruction.js";
 
 const creator = { id: "creator", name: "Бахадыр", role: "Creator" };
@@ -22,13 +23,16 @@ test("the served instruction is the one the browser builds", () => {
   const preferences = { style: "friend", delivery: "quiet", persona: "Тебя зовут Мила." };
   const tools = MILA_TOOLS.map((tool) => tool.name);
   const served = voiceInstruction(creator, { language: "ru-RU", preferences, tools }).instruction;
-  // Same builder, same arguments, minus the context the server adds for us.
+  // Same builder, same arguments, minus the context the server adds for us. The
+  // knowledge index is one of those arguments: the server derives it from the
+  // shared page list, so the browser has to pass the very same one.
   const browser = buildMilaSystemInstruction({
     language: "ru-RU",
     preferences,
     agentContext: "",
     mode: "voice",
     tools,
+    knowledgeIndex: knowledgePromptIndex(),
   });
   // The prompt carries a clock, so two composals a millisecond apart differ on
   // that line alone. Pin it before comparing rather than comparing a prefix.

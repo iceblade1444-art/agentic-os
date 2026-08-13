@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { authenticatedUser } from "../lib/auth.js";
-import { milaActions, PERSONAL_ACTIONS } from "../lib/mila-actions.js";
+import { milaActions, PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS } from "../lib/mila-actions.js";
 import { voiceInstruction } from "../lib/voice-instruction.js";
 
 const r = Router();
@@ -15,7 +15,11 @@ const r = Router();
 // exactly the data that is already theirs on the Personal page.
 const READ_ONLY_ERP_ACTIONS = new Set(["get_erp_business_context", "get_finished_goods_stock"]);
 const isOperator = (req) => ["Creator", "Admin"].includes(authenticatedUser(req)?.role);
-const allowedForEveryone = (name) => READ_ONLY_ERP_ACTIONS.has(name) || PERSONAL_ACTIONS.has(name);
+// Company knowledge is read-only here and scoped to one vault folder, so every
+// employee may look up a price or who to ask. Writing to it stays operator-only.
+const allowedForEveryone = (name) => READ_ONLY_ERP_ACTIONS.has(name)
+  || PERSONAL_ACTIONS.has(name)
+  || KNOWLEDGE_ACTIONS.has(name);
 
 // The voice agent asks for the prompt instead of keeping its own copy, so a
 // phone call and a browser call speak with the same assistant.

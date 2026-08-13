@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { MilaLiveSession } from "./mila-live.js";
 import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "./mila-tools.js";
+import { knowledgePromptIndex } from "./knowledge-pages.js";
 import {
   attachmentDisplayText, composeAttachmentPrompt, publicAttachment,
 } from "./mila-attachments.js";
@@ -243,6 +244,7 @@ class MilaSessionHub {
       agentContext: this.state.agentContext,
       mode,
       tools: this.declaredTools.map((tool) => tool.name),
+      knowledgeIndex: knowledgePromptIndex(),
     });
   }
 
