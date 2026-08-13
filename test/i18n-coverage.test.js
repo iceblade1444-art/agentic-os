@@ -17,7 +17,7 @@ const pages = fs.readdirSync(pagesDir).filter((name) => name.endsWith(".js"));
 // costs a Russian-speaking operator a page they cannot read, so leaving one here
 // is a decision to postpone, not a decision to skip.
 const NOT_TRANSLATED_YET = new Set([
-  "claude-code.js", "components.js", "mila.js", "missions.js", "speech.js",
+  "claude-code.js", "components.js", "missions.js", "speech.js",
 ]);
 
 test("no page quietly falls out of translation", () => {

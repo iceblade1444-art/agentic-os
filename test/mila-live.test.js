@@ -445,7 +445,8 @@ test("Mila workspace exposes language, attachment and transcript actions", () =>
     assert.match(source, new RegExp(`id=\\"${id}\\"`));
   }
   assert.match(source, /prepareMilaAttachment/);
-  assert.match(source, /Mila voice preferences/);
+  // The wording moved into i18n.js; the page opens the dialog by key now.
+  assert.match(source, /t\("mila\.prefsTitle"\)/);
   for (const route of ["#\/workflows", "#\/knowledge", "#\/claude-code", "#\/hermes"]) assert.match(source, new RegExp(route));
   assert.match(hub, /transcriptionLanguage/);
   assert.match(hub, /inputDeviceId/);

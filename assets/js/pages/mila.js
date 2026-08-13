@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { t } from "../i18n.js";
 import { icon } from "../icons.js";
 import { closeOverlay, esc, openModal, toast } from "../ui.js";
 import {
@@ -16,9 +17,9 @@ let pendingAttachments = [];
 let unsubscribe = null;
 
 const PHASES = {
-  checking: ["Checking", "neutral"], idle: ["Ready", "success"], connecting: ["Connecting", "warning"],
-  listening: ["Listening", "success"], thinking: ["Thinking", "warning"], speaking: ["Speaking", "info"],
-  muted: ["Muted", "neutral"], error: ["Unavailable", "error"],
+  checking: [t("mila.phase.checking"), "neutral"], idle: [t("mila.phase.idle"), "success"], connecting: [t("mila.phase.connecting"), "warning"],
+  listening: [t("mila.phase.listening"), "success"], thinking: [t("mila.phase.thinking"), "warning"], speaking: [t("mila.phase.speaking"), "info"],
+  muted: [t("mila.phase.muted"), "neutral"], error: [t("mila.phase.error"), "error"],
 };
 
 function attachmentHTML(attachment, removable = false) {
@@ -27,7 +28,7 @@ function attachmentHTML(attachment, removable = false) {
     : `<span class="mila-attachment-file">${icon("file")}</span>`;
   return `<div class="mila-attachment" data-attachment-id="${esc(attachment.id)}">
     ${visual}<span class="mila-attachment-copy"><strong>${esc(attachment.name)}</strong><small>${formatAttachmentSize(attachment.size)}</small></span>
-    ${removable ? `<button class="icon-btn mila-remove-attachment tip" type="button" data-tip="Remove" aria-label="Remove attachment">${icon("x")}</button>` : ""}
+    ${removable ? `<button class="icon-btn mila-remove-attachment tip" type="button" data-tip="${t("mila.removeFile")}" aria-label="${t("mila.removeFile")}">${icon("x")}</button>` : ""}
   </div>`;
 }
 
@@ -41,7 +42,7 @@ function messagesFor(state) {
 
 function transcriptHTML(state) {
   const messages = messagesFor(state);
-  if (!messages.length) return `<div class="mila-empty"><span>${icon("mic")}</span><strong>No conversation yet</strong><small>Voice, text and attachments</small></div>`;
+  if (!messages.length) return `<div class="mila-empty"><span>${icon("mic")}</span><strong>${t("mila.emptyTitle")}</strong><small>${t("mila.emptyHint")}</small></div>`;
   return messages.map((message) => message.role === "system"
     ? `<div class="mila-event">${icon("brain")}<span>${esc(message.text)}</span><time>${esc(message.at || "")}</time></div>`
     : `<div class="mila-line ${message.role}${message.partial ? " partial" : ""}">
@@ -91,40 +92,40 @@ export default {
     const operator = api.auth.canAdmin;
     return `<div class="mila-live">
       <div class="page-head mila-head">
-        <div><div class="page-title">Mila Live</div><div class="page-sub">${operator ? "Gemini Live voice · Hermes · Kanban · Obsidian · Claude" : "Gemini Live voice · live ERP context"}</div></div>
+        <div><div class="page-title">Mila Live</div><div class="page-sub">${operator ? t("mila.subOperator") : t("mila.subMember")}</div></div>
         <div class="spacer"></div>
-        <label class="mila-language-wrap tip" data-tip="Speech recognition language"><span>${icon("chat")}</span><select id="milaLanguage" aria-label="Speech recognition language">${languageOptions()}</select></label>
-        <span class="badge neutral" id="milaStatus"><span class="dot"></span>Checking</span>
+        <label class="mila-language-wrap tip" data-tip="${t("mila.recognitionLanguage")}"><span>${icon("chat")}</span><select id="milaLanguage" aria-label="${t("mila.recognitionLanguage")}">${languageOptions()}</select></label>
+        <span class="badge neutral" id="milaStatus"><span class="dot"></span>${t("mila.phase.checking")}</span>
         <span class="badge neutral mono" id="milaTimer">00:00</span>
-        <button class="icon-btn tip" id="milaPreferences" data-tip="Voice preferences" aria-label="Voice preferences">${icon("sparkles")}</button>
-        ${operator ? `<a class="icon-btn tip" data-tip="Mila integration" href="#/integrations">${icon("settings")}</a>` : ""}
+        <button class="icon-btn tip" id="milaPreferences" data-tip="${t("mila.prefs")}" aria-label="${t("mila.prefs")}">${icon("sparkles")}</button>
+        ${operator ? `<a class="icon-btn tip" data-tip="${t("mila.integration")}" href="#/integrations">${icon("settings")}</a>` : ""}
       </div>
 
       <div class="mila-grid">
-        <section class="mila-stage" id="milaStage" aria-label="Mila live voice">
-          <div class="mila-drop-overlay" id="milaDropOverlay">${icon("upload")}<strong>Drop files for Mila</strong></div>
+        <section class="mila-stage" id="milaStage" aria-label="${t("mila.stage")}">
+          <div class="mila-drop-overlay" id="milaDropOverlay">${icon("upload")}<strong>${t("mila.dropFiles")}</strong></div>
           <div class="mila-identity">
             <span class="mila-mark">${icon("mic")}</span>
-            <div class="stack"><strong>Mila</strong><span class="muted text-sm" id="milaModel">Voice backend</span></div>
-            <span class="badge neutral mila-profile" id="milaProfile">Warm · Assistant</span>
-            <span class="badge neutral mila-stt" id="milaSttMode">Direct audio</span>
+            <div class="stack"><strong>Mila</strong><span class="muted text-sm" id="milaModel">${t("mila.voiceBackend")}</span></div>
+            <span class="badge neutral mila-profile" id="milaProfile">${t("mila.defaultProfile")}</span>
+            <span class="badge neutral mila-stt" id="milaSttMode">${t("mila.stt.direct")}</span>
             ${operator ? `<a class="mila-handoff" href="#/hermes">${icon("brain")}Hermes</a>` : ""}
           </div>
 
           <div class="mila-voice-core">
             <div class="mila-wave" id="milaWave" aria-hidden="true">${barsHTML()}</div>
-            <div class="mila-phase" id="milaPhase">Ready</div>
+            <div class="mila-phase" id="milaPhase">${t("mila.phase.idle")}</div>
             <div class="mila-caption" id="milaCaption" aria-live="polite"></div>
             <div class="mila-controls">
-              <button class="mila-mic tip" id="milaMic" data-tip="Start live call" aria-label="Start live call">${icon("mic")}</button>
-              <button class="icon-btn mila-video-btn tip hidden" id="milaCamera" data-tip="Show your camera to Mila" aria-label="Share camera" type="button">${icon("video")}</button>
-              <button class="icon-btn mila-video-btn tip hidden" id="milaScreen" data-tip="Show your screen to Mila" aria-label="Share screen" type="button">${icon("monitor")}</button>
-              <button class="mila-end tip hidden" id="milaEnd" data-tip="End call" aria-label="End call">${icon("x")}</button>
+              <button class="mila-mic tip" id="milaMic" data-tip="${t("mila.startCall")}" aria-label="${t("mila.startCall")}">${icon("mic")}</button>
+              <button class="icon-btn mila-video-btn tip hidden" id="milaCamera" data-tip="${t("mila.shareCamera")}" aria-label="${t("mila.shareCamera")}" type="button">${icon("video")}</button>
+              <button class="icon-btn mila-video-btn tip hidden" id="milaScreen" data-tip="${t("mila.shareScreen")}" aria-label="${t("mila.shareScreen")}" type="button">${icon("monitor")}</button>
+              <button class="mila-end tip hidden" id="milaEnd" data-tip="${t("mila.endCall")}" aria-label="${t("mila.endCall")}">${icon("x")}</button>
             </div>
             <div class="mila-selfview hidden" id="milaSelfView">
               <video id="milaSelfVideo" muted playsinline autoplay></video>
-              <span class="mila-selfview-label" id="milaSelfLabel">Camera</span>
-              <button class="icon-btn tip" id="milaVideoStop" data-tip="Stop sharing" aria-label="Stop sharing" type="button">${icon("x")}</button>
+              <span class="mila-selfview-label" id="milaSelfLabel">${t("mila.camera")}</span>
+              <button class="icon-btn tip" id="milaVideoStop" data-tip="${t("mila.stopSharing")}" aria-label="${t("mila.stopSharing")}" type="button">${icon("x")}</button>
             </div>
             <div class="mila-meters">
               <span>${icon("mic")}<i><b id="milaInputLevel"></b></i></span>
@@ -143,27 +144,27 @@ export default {
           <div class="mila-compose-zone">
             <div class="mila-attachments" id="milaAttachments"></div>
             <form class="mila-composer" id="milaComposer">
-              <button class="icon-btn tip" id="milaAttach" data-tip="Attach image or text file" aria-label="Attach file" type="button">${icon("attach")}</button>
-              <textarea id="milaText" rows="1" maxlength="4000" placeholder="Message Mila…" autocomplete="off"></textarea>
-              <button class="icon-btn mila-send tip" id="milaSend" data-tip="Send" aria-label="Send" type="submit">${icon("send")}</button>
+              <button class="icon-btn tip" id="milaAttach" data-tip="${t("mila.attachTip")}" aria-label="${t("mila.attach")}" type="button">${icon("attach")}</button>
+              <textarea id="milaText" rows="1" maxlength="4000" placeholder="${t("mila.composer")}" autocomplete="off"></textarea>
+              <button class="icon-btn mila-send tip" id="milaSend" data-tip="${t("mila.send")}" aria-label="${t("mila.send")}" type="submit">${icon("send")}</button>
             </form>
             <input class="hidden" id="milaFile" type="file" accept="${MILA_ATTACHMENT_ACCEPT}" multiple/>
           </div>
         </section>
 
-        <section class="mila-transcript" aria-label="Live transcript">
+        <section class="mila-transcript" aria-label="${t("mila.transcript")}">
           <div class="mila-transcript-head">
-            <div><strong>Transcript</strong><span id="milaTranscriptMeta">Live session</span></div>
+            <div><strong>${t("mila.transcript")}</strong><span id="milaTranscriptMeta">${t("mila.liveSession")}</span></div>
             <div class="mila-transcript-actions">
-              <button class="icon-btn tip" id="milaCopy" data-tip="Copy transcript" aria-label="Copy transcript">${icon("copy")}</button>
-              <button class="icon-btn tip" id="milaExport" data-tip="Export Markdown" aria-label="Export transcript">${icon("save")}</button>
-              <button class="icon-btn tip" id="milaClear" data-tip="Clear transcript" aria-label="Clear transcript">${icon("trash")}</button>
+              <button class="icon-btn tip" id="milaCopy" data-tip="${t("mila.copyTranscript")}" aria-label="${t("mila.copyTranscript")}">${icon("copy")}</button>
+              <button class="icon-btn tip" id="milaExport" data-tip="${t("mila.exportTranscript")}" aria-label="${t("mila.exportTranscript")}">${icon("save")}</button>
+              <button class="icon-btn tip" id="milaClear" data-tip="${t("mila.clearTranscript")}" aria-label="${t("mila.clearTranscript")}">${icon("trash")}</button>
             </div>
           </div>
           <div class="mila-scroll" id="milaScroll" aria-live="polite"></div>
         </section>
       </div>
-      <div class="alert error hidden" id="milaError"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">Mila Live unavailable</div><div class="a-desc" id="milaErrorText"></div></div></div>
+      <div class="alert error hidden" id="milaError"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("mila.unavailable")}</div><div class="a-desc" id="milaErrorText"></div></div></div>
     </div>`;
   },
 
@@ -191,56 +192,56 @@ export default {
     let lastWarning = milaHub.state.transcriptWarning;
 
     const openPreview = (src, name) => openModal({
-      title: name || "Image", width: 900,
-      body: `<div class="mila-image-modal"><img src="${esc(src)}" alt="${esc(name || "Attached image")}"/></div>`,
+      title: name || t("mila.image"), width: 900,
+      body: `<div class="mila-image-modal"><img src="${esc(src)}" alt="${esc(name || t("mila.attachedImage"))}"/></div>`,
     });
     const openPreferences = () => {
-      if (milaHub.active) return toast("info", "Voice preferences", "End the current call before changing its voice profile");
+      if (milaHub.active) return toast("info", t("mila.prefs"), t("mila.endCallFirst"));
       const prefs = milaHub.state.preferences;
       openModal({
-        title: "Mila voice preferences",
+        title: t("mila.prefsTitle"),
         width: 620,
         body: `<div class="mila-settings">
           <div class="mila-settings-grid">
-            <div class="field"><label class="label" for="milaVoiceName">Voice</label><select class="select" id="milaVoiceName">${voiceOptionsHTML(prefs.voiceName)}</select><span class="hint">All ${MILA_VOICES.length} Gemini Live voices</span></div>
-            <div class="field"><label class="label" for="milaListeningProfile">Listening</label><select class="select" id="milaListeningProfile">${optionsHTML(MILA_LISTENING_PROFILES, prefs.listeningProfile)}</select></div>
+            <div class="field"><label class="label" for="milaVoiceName">${t("mila.field.voice")}</label><select class="select" id="milaVoiceName">${voiceOptionsHTML(prefs.voiceName)}</select><span class="hint">${t("mila.field.voiceHint", { count: MILA_VOICES.length })}</span></div>
+            <div class="field"><label class="label" for="milaListeningProfile">${t("mila.field.listening")}</label><select class="select" id="milaListeningProfile">${optionsHTML(MILA_LISTENING_PROFILES, prefs.listeningProfile)}</select></div>
           </div>
-          <div class="field"><label class="label" for="milaInputDevice">Microphone</label><select class="select" id="milaInputDevice" disabled><option value="">Loading microphones…</option></select></div>
+          <div class="field"><label class="label" for="milaInputDevice">${t("mila.field.microphone")}</label><select class="select" id="milaInputDevice" disabled><option value="">${t("mila.mic.loading")}</option></select></div>
           <div class="mila-mic-check">
             <button class="btn btn-secondary" id="milaTestMicrophone" type="button" disabled>${icon("mic")}Test microphone</button>
             <div class="mila-mic-check-meter" aria-hidden="true"><span id="milaMicCheckLevel"></span></div>
-            <span class="mila-mic-check-result" id="milaMicCheckResult">Choose the Windows input you speak into.</span>
+            <span class="mila-mic-check-result" id="milaMicCheckResult">${t("mila.mic.choose")}</span>
           </div>
-          <fieldset class="mila-setting-group"><legend>Conversation style</legend><div class="mila-segments four">${segmentsHTML("milaStyle", MILA_STYLES, prefs.style)}</div></fieldset>
+          <fieldset class="mila-setting-group"><legend>${t("mila.group.style")}</legend><div class="mila-segments four">${segmentsHTML("milaStyle", MILA_STYLES, prefs.style)}</div></fieldset>
           <div class="mila-settings-grid">
-            <fieldset class="mila-setting-group"><legend>Speaking pace</legend><div class="mila-segments">${segmentsHTML("milaPace", MILA_PACES, prefs.pace)}</div></fieldset>
-            <fieldset class="mila-setting-group"><legend>Voice answers</legend><div class="mila-segments two">${segmentsHTML("milaResponseLength", MILA_RESPONSE_LENGTHS, prefs.responseLength)}</div></fieldset>
+            <fieldset class="mila-setting-group"><legend>${t("mila.group.pace")}</legend><div class="mila-segments">${segmentsHTML("milaPace", MILA_PACES, prefs.pace)}</div></fieldset>
+            <fieldset class="mila-setting-group"><legend>${t("mila.group.answers")}</legend><div class="mila-segments two">${segmentsHTML("milaResponseLength", MILA_RESPONSE_LENGTHS, prefs.responseLength)}</div></fieldset>
           </div>
-          <fieldset class="mila-setting-group"><legend>Delivery</legend><div class="mila-segments five">${segmentsHTML("milaDelivery", MILA_DELIVERIES, prefs.delivery)}</div></fieldset>
-          <div class="field"><label class="label" for="milaPersona">Who Mila is <span class="muted">(optional)</span></label>
+          <fieldset class="mila-setting-group"><legend>${t("mila.group.delivery")}</legend><div class="mila-segments five">${segmentsHTML("milaDelivery", MILA_DELIVERIES, prefs.delivery)}</div></fieldset>
+          <div class="field"><label class="label" for="milaPersona">${t("mila.field.persona")} <span class="muted">${t("mila.optional")}</span></label>
             <textarea class="input mila-persona" id="milaPersona" rows="4" maxlength="${MILA_PERSONA_LIMIT}" placeholder="Опишите её характер: кто она, как держится, что для неё важно, чего избегает.&#10;Например: Тебя зовут Мила. Ты спокойная и внимательная, говоришь просто и по делу, без канцелярита. Ты не льстишь и не извиняешься попусту. Если чего-то не знаешь — говоришь прямо.">${esc(prefs.persona)}</textarea>
-            <span class="hint">Her character in your own words — it takes precedence over the built-in manner, in both voice and writing. Safety rules and confirmations stay in force.</span>
+            <span class="hint">${t("mila.field.personaHint")}</span>
           </div>
-          <div class="field"><label class="label" for="milaVoiceDirection">Voice direction <span class="muted">(optional)</span></label>
+          <div class="field"><label class="label" for="milaVoiceDirection">${t("mila.field.direction")} <span class="muted">${t("mila.optional")}</span></label>
             <input class="input" id="milaVoiceDirection" maxlength="${MILA_VOICE_DIRECTION_LIMIT}" value="${esc(prefs.voiceDirection)}" placeholder="e.g. Speak like a calm night-radio host, never hurry"/>
-            <span class="hint">Your own note on how Mila should sound. She also follows spoken cues — “whisper”, “speak faster” — and bracketed cues like [excited] without reading them aloud.</span>
+            <span class="hint">${t("mila.field.directionHint")}</span>
           </div>
           <label class="mila-toggle-row"><input type="checkbox" id="milaAffectiveDialog"${prefs.affectiveDialog ? " checked" : ""}/>
-            <span><strong>Affective dialog</strong><small>Mila hears your tone and answers in kind. ${supportsAffectiveDialog(milaHub.state.model)
+            <span><strong>${t("mila.field.affective")}</strong><small>${t("mila.field.affectiveHint")} ${supportsAffectiveDialog(milaHub.state.model)
               ? `Active on ${esc(milaHub.state.model)}.`
               : `Not available on ${esc(milaHub.state.model)} — it needs a native-audio model, set by GEMINI_LIVE_MODEL on the MILA backend.`}</small></span>
           </label>
           <label class="mila-toggle-row"><input type="checkbox" id="milaProactiveAudio"${prefs.proactiveAudio ? " checked" : ""}/>
-            <span><strong>Proactive audio</strong><small>Mila stays quiet when speech was not aimed at her — useful in a room with other people. Turn off if she skips something you meant for her.</small></span>
+            <span><strong>${t("mila.field.proactive")}</strong><small>${t("mila.field.proactiveHint")}</small></span>
           </label>
-          <fieldset class="mila-setting-group"><legend>Call connection</legend>
+          <fieldset class="mila-setting-group"><legend>${t("mila.group.connection")}</legend>
             <div class="mila-segments two">${segmentsHTML("milaTransport", MILA_TRANSPORTS, prefs.transport)}</div>
-            <span class="hint">Direct goes straight to Gemini: it speaks what you type and can see your camera or screen. LiveKit handles echo better but answers typed messages in writing and carries no video.</span>
+            <span class="hint">${t("mila.field.connectionHint")}</span>
           </fieldset>
-          <div class="field mila-name-field"><label class="label" for="milaUserName">Your name</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
-          <div class="mila-settings-note">Changes apply when the next live call starts.</div>
+          <div class="field mila-name-field"><label class="label" for="milaUserName">${t("mila.field.yourName")}</label><input class="input" id="milaUserName" maxlength="40" value="${esc(prefs.userName)}" autocomplete="name"/></div>
+          <div class="mila-settings-note">${t("mila.settingsNote")}</div>
         </div>`,
-        footer: `<button class="btn btn-secondary" data-close>Cancel</button><button class="btn btn-primary" id="milaSavePreferences">${icon("check")}Save</button>`,
+        footer: `<button class="btn btn-secondary" data-close>${t("mila.cancel")}</button><button class="btn btn-primary" id="milaSavePreferences">${icon("check")}${t("mila.save")}</button>`,
         onMount: (modal) => {
           const microphone = modal.querySelector("#milaInputDevice");
           const testButton = modal.querySelector("#milaTestMicrophone");
@@ -248,7 +249,7 @@ export default {
           const testResult = modal.querySelector("#milaMicCheckResult");
           listMilaMicrophones().then((devices) => {
             microphone.innerHTML = [
-              `<option value="">System default</option>`,
+              `<option value="">${t("mila.mic.systemDefault")}</option>`,
               ...devices.filter((device) => device.id !== "default")
                 .map((device) => `<option value="${esc(device.id)}">${esc(device.label)}</option>`),
             ].join("");
@@ -256,23 +257,23 @@ export default {
             microphone.disabled = false;
             testButton.disabled = false;
           }).catch((error) => {
-            microphone.innerHTML = `<option value="">Microphones unavailable</option>`;
-            testResult.textContent = error.message || "Allow microphone access in the browser";
+            microphone.innerHTML = `<option value="">${t("mila.mic.unavailable")}</option>`;
+            testResult.textContent = error.message || t("mila.mic.permission");
           });
           testButton.onclick = async () => {
             testButton.disabled = true;
-            testResult.textContent = "Speak normally for a few seconds…";
+            testResult.textContent = t("mila.mic.speakNow");
             try {
               const maximum = await testMilaMicrophone(microphone.value, (level) => {
                 testLevel.style.width = `${Math.round(level * 100)}%`;
               });
               testResult.textContent = maximum >= 0.08
-                ? "Good signal. This microphone can hear you."
+                ? t("mila.mic.good")
                 : maximum >= 0.025
-                  ? "Signal is quiet. Move closer or choose another microphone."
-                  : "No voice detected. Choose another microphone.";
+                  ? t("mila.mic.quiet")
+                  : t("mila.mic.silent");
             } catch (error) {
-              testResult.textContent = error.message || "Microphone test failed";
+              testResult.textContent = error.message || t("mila.mic.failed");
             } finally {
               testButton.disabled = false;
             }
@@ -294,9 +295,9 @@ export default {
               userName: modal.querySelector("#milaUserName").value,
               inputDeviceId: microphone.value,
             });
-            if (!saved) return toast("warning", "Voice preferences", "End the current call before saving changes");
+            if (!saved) return toast("warning", t("mila.prefs"), t("mila.endCallBeforeSave"));
             closeOverlay();
-            toast("success", "Mila updated", "The new voice profile is ready for the next call");
+            toast("success", t("mila.updated"), t("mila.updatedHint"));
           };
         },
       });
@@ -340,14 +341,14 @@ export default {
       const delivery = MILA_DELIVERIES.find((item) => item.id === state.preferences.delivery)?.label || "";
       root.querySelector("#milaProfile").textContent = [voice, style, delivery].filter(Boolean).join(" · ");
       const stt = root.querySelector("#milaSttMode");
-      stt.textContent = state.transcriptionMode === "browser" ? "Browser STT" : "Direct audio";
+      stt.textContent = state.transcriptionMode === "browser" ? t("mila.stt.browser") : t("mila.stt.direct");
       stt.className = `badge mila-stt ${state.transcriptionMode === "browser" ? "success" : "neutral"}`;
       caption.textContent = state.partials.assistant || state.partials.user || "";
       end.classList.toggle("hidden", !state.active);
       language.disabled = state.active;
       preferencesButton.disabled = state.active;
       language.value = state.language;
-      mic.dataset.tip = state.starting ? "Connecting…" : state.active ? (state.phase === "muted" ? "Unmute" : "Mute") : "Start live call";
+      mic.dataset.tip = state.starting ? t("mila.connecting") : state.active ? (state.phase === "muted" ? t("mila.unmute") : t("mila.mute")) : t("mila.startCall");
       mic.setAttribute("aria-label", mic.dataset.tip);
       mic.classList.toggle("muted", state.phase === "muted");
       // A dead-looking button is what made people click it three times in a row.
@@ -366,7 +367,7 @@ export default {
       const sharing = state.videoSource !== "off";
       selfView.classList.toggle("hidden", !sharing);
       if (sharing) {
-        selfLabel.textContent = state.videoSource === "screen" ? "Screen" : "Camera";
+        selfLabel.textContent = state.videoSource === "screen" ? t("mila.screen") : t("mila.camera");
         const stream = milaHub.session?.videoStream || null;
         if (stream && selfVideo.srcObject !== stream) selfVideo.srcObject = stream;
       } else if (selfVideo.srcObject) selfVideo.srcObject = null;
@@ -374,10 +375,10 @@ export default {
       // On a call Mila speaks whatever you type; without one she writes back.
       const thinkingInText = !state.active && (state.sendingTurn || state.textPhase === "thinking");
       text.placeholder = thinkingInText
-        ? "Mila is writing…"
+        ? t("mila.writing")
         : state.active
           ? `Type — Mila answers ${milaHub.session?.usingLiveKit ? "in the transcript" : "out loud"}…  (Shift+Enter to send)`
-          : "Write to Mila — no call needed…  (Shift+Enter to send)";
+          : t("mila.composerHint");
       if (!state.active && state.textPhase === "error" && state.textError) {
         errorBox.classList.remove("hidden");
         root.querySelector("#milaErrorText").textContent = state.textError;
@@ -388,21 +389,21 @@ export default {
         lastTranscriptKey = transcriptKey;
         scroll.innerHTML = transcriptHTML(state);
         scroll.scrollTop = scroll.scrollHeight;
-        root.querySelector("#milaTranscriptMeta").textContent = state.history.length ? `${state.history.length} entries` : "Live session";
+        root.querySelector("#milaTranscriptMeta").textContent = state.history.length ? t("mila.entries", { count: state.history.length }) : t("mila.liveSession");
         wirePreviews(scroll);
       }
       if (state.transcriptWarning > lastWarning) {
         lastWarning = state.transcriptWarning;
-        toast("warning", "Transcription corrected", "Unreliable foreign-script text was hidden. Check the selected language.");
+        toast("warning", t("mila.transcriptFixed"), t("mila.transcriptFixedHint"));
       }
     };
 
     async function addFiles(files) {
       const available = Math.max(0, 4 - pendingAttachments.length);
-      if (!available) return toast("warning", "Attachments", "Up to four files per message");
+      if (!available) return toast("warning", t("mila.attachments"), t("mila.attachLimit"));
       for (const file of [...files].slice(0, available)) {
         try { pendingAttachments.push(await prepareMilaAttachment(file)); }
-        catch (error) { toast("error", "Attachment rejected", error.message); }
+        catch (error) { toast("error", t("mila.attachRejected"), error.message); }
       }
       drawAttachments();
     }
@@ -424,7 +425,7 @@ export default {
         if (!milaHub.active) await milaHub.start();
         else {
           const muted = milaHub.toggleMute();
-          toast("info", "Mila Live", muted ? "Microphone muted" : "Microphone active");
+          toast("info", "Mila Live", muted ? t("mila.micMuted") : t("mila.micActive"));
         }
       } catch (error) { toast("error", "Mila Live", error.message); }
     };
@@ -434,12 +435,12 @@ export default {
         const next = milaHub.state.videoSource === source ? "off" : source;
         await milaHub.setVideo(next);
         if (next !== "off") {
-          toast("success", "Mila can see", source === "screen" ? "Your screen is shared" : "Your camera is shared");
+          toast("success", t("mila.canSee"), source === "screen" ? t("mila.screenShared") : t("mila.cameraShared"));
         }
       } catch (error) {
         // The browser's own "cancel" on the picker is a choice, not a failure.
         if (error.name === "NotAllowedError" || error.name === "AbortError") return;
-        toast("error", "Video", error.message);
+        toast("error", t("mila.video"), error.message);
       }
     };
     cameraButton.onclick = () => shareVideo("camera");
@@ -471,12 +472,12 @@ export default {
     };
     root.querySelector("#milaClear").onclick = () => milaHub.clearHistory();
     root.querySelector("#milaCopy").onclick = async () => {
-      if (!milaHub.state.history.length) return toast("info", "Transcript", "Nothing to copy yet");
-      try { await navigator.clipboard.writeText(transcriptMarkdown(milaHub.state)); toast("success", "Transcript copied"); }
-      catch { toast("error", "Transcript", "Clipboard access was denied"); }
+      if (!milaHub.state.history.length) return toast("info", t("mila.transcript"), t("mila.nothingToCopy"));
+      try { await navigator.clipboard.writeText(transcriptMarkdown(milaHub.state)); toast("success", t("mila.transcriptCopied")); }
+      catch { toast("error", t("mila.transcript"), t("mila.clipboardDenied")); }
     };
     root.querySelector("#milaExport").onclick = () => {
-      if (!milaHub.state.history.length) return toast("info", "Transcript", "Nothing to export yet");
+      if (!milaHub.state.history.length) return toast("info", t("mila.transcript"), t("mila.nothingToExport"));
       const url = URL.createObjectURL(new Blob([transcriptMarkdown(milaHub.state)], { type: "text/markdown;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
