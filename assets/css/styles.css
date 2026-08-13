@@ -3017,6 +3017,55 @@ body.compact .card.pad-lg { padding: 16px; }
   .chat-bubble { max-width: 86%; }
 }
 
+/* Touch targets. The compact icon buttons are 24px, which is fine for a mouse
+   and too small for a thumb — and several of them delete something. On a touch
+   device the hit area grows to 40px while the glyph stays the same size, so the
+   layout does not change but the button becomes reachable. */
+@media (pointer: coarse) {
+  /* The hit area grows through an absolutely positioned pseudo-element, so the
+     button keeps its 24px box and nothing in the row moves. Resizing the button
+     itself pushed its container past the screen edge. */
+  .icon-btn.sm { position: relative; }
+  .icon-btn.sm::after { content: ""; position: absolute; inset: -8px; }
+  /* The message actions sit shoulder to shoulder, so widen the row to match the
+     grown hit areas. Overlapping them would let a tap meant for "edit" land on
+     "delete", and the later sibling wins. */
+  .chat-actions { gap: 16px; padding: 4px 6px; }
+  .chat-reaction { padding: 5px 10px; }
+  .chat-react-picker button { padding: 7px 9px; font-size: 18px; }
+}
+
+/* Personal memory: what MILA was told about the owner */
+.personal-knows { margin-bottom: 14px; }
+.personal-knows-hint { margin: 12px 16px 0; color: var(--text-3); font-size: 11px; line-height: 1.5; }
+.personal-knows-add { margin: 12px 16px; }
+.personal-knows-group { padding: 0 16px 10px; }
+.personal-knows-cat {
+  margin: 10px 0 5px;
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.personal-knows-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.personal-knows-fact:last-child { border-bottom: 0; }
+.personal-knows-fact span { overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .personal-knows-add { grid-template-columns: 20px minmax(0, 1fr); }
+  .personal-knows-add .btn { grid-column: 1 / -1; }
+}
+
 /* Memory: the day journal the system writes about itself */
 .memory-journal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .memory-journal-head h4 { margin: 0; color: var(--text); font-size: 14px; font-weight: 700; }

@@ -189,3 +189,43 @@ test("deleting the account takes the profile with it", () => {
   const source = fs.readFileSync(new URL("../server/lib/account-lifecycle.js", import.meta.url), "utf8");
   assert.match(source, /profileStore\.clear\(id\)/);
 });
+
+test("the profile is visible and removable outside of asking her", () => {
+  // It shapes every answer she gives, so there has to be a screen for it —
+  // being told what an assistant remembers only by asking it is not visibility.
+  const route = fs.readFileSync(new URL("../server/routes/personal.js", import.meta.url), "utf8");
+  for (const [method, pattern] of [
+    ["list", /r\.get\("\/profile-facts"/],
+    ["add", /r\.post\("\/profile-facts"/],
+    ["forget", /r\.delete\("\/profile-facts\/:id"/],
+  ]) {
+    assert.match(route, pattern, `the ${method} route must exist`);
+  }
+  // Every route reads the caller from the session, never from the request body.
+  const block = route.slice(route.indexOf('r.get("/profile-facts"'), route.indexOf('r.get("/reminders"'));
+  assert.equal(/req\.body\?\.userId|req\.query\.userId|req\.params\.userId/.test(block), false);
+  assert.equal((block.match(/authenticatedUser\(req\)/g) || []).length, 3);
+
+  const page = fs.readFileSync(new URL("../assets/js/pages/personal.js", import.meta.url), "utf8");
+  assert.match(page, /function profileFactsPanel/);
+  assert.match(page, /data-forget=/);
+  assert.match(page, /api\.personal\.forgetFact/);
+  // The screen states where it is kept and who can see it, not just what is in it.
+  const dictionary = fs.readFileSync(new URL("../assets/js/i18n.js", import.meta.url), "utf8");
+  assert.match(dictionary, /Только то, что вы сказали сами/);
+  assert.match(dictionary, /удаляется вместе с аккаунтом/);
+});
+
+test("compact icon buttons stay tappable on a touch screen", () => {
+  // 24px is fine for a mouse and too small for a thumb, and several of these
+  // buttons delete something.
+  const css = fs.readFileSync(new URL("../assets/css/styles.css", import.meta.url), "utf8");
+  const block = css.slice(css.indexOf("@media (pointer: coarse)"));
+  assert.ok(block.length > 0, "there must be a coarse-pointer rule");
+  assert.match(block, /\.icon-btn\.sm::after\s*\{[^}]*position:\s*absolute/);
+  // Grown through a pseudo-element: resizing the button itself pushed its row
+  // past the screen edge.
+  assert.equal(/\.icon-btn\.sm\s*\{[^}]*width:\s*40px/.test(block), false);
+  // Neighbouring actions are spread so the enlarged areas cannot overlap.
+  assert.match(block, /\.chat-actions\s*\{[^}]*gap:\s*16px/);
+});

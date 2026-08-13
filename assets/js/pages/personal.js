@@ -273,10 +273,41 @@ function soulView() {
   </div>`;
 }
 
+// What MILA has been told about the owner. It shapes every answer she gives, so
+// it has to be visible and removable somewhere other than by asking her.
+function profileFactsPanel() {
+  const facts = data.profileFacts || [];
+  const categories = data.profileCategories || [];
+  const labelOf = (id) => categories.find((category) => category.id === id)?.label || id;
+  const grouped = new Map();
+  for (const fact of facts) {
+    if (!grouped.has(fact.category)) grouped.set(fact.category, []);
+    grouped.get(fact.category).push(fact);
+  }
+  return `<section class="personal-panel personal-knows">
+    <header>
+      <div><span>${t("personal.knows.eyebrow")}</span><h3>${t("personal.knows.title")}</h3></div>
+      <span class="badge neutral">${t("personal.knows.count", { count: facts.length })}</span>
+    </header>
+    <p class="personal-knows-hint">${t("personal.knows.hint")}</p>
+    <form class="personal-capture personal-knows-add" data-fact-form>
+      ${icon("brain")}<input maxlength="400" data-fact-input placeholder="${t("personal.knows.placeholder")}"/>
+      <button class="btn btn-secondary sm" type="submit">${icon("plus")}${t("personal.knows.add")}</button>
+    </form>
+    ${facts.length ? [...grouped.entries()].map(([category, items]) => `<div class="personal-knows-group">
+      <div class="personal-knows-cat">${esc(labelOf(category))}</div>
+      ${items.map((fact) => `<div class="personal-knows-fact">
+        <span>${esc(fact.text)}</span>
+        <button class="icon-btn sm" data-forget="${esc(fact.id)}" title="${t("personal.knows.forget")}" aria-label="${t("personal.knows.forget")}">${icon("x")}</button>
+      </div>`).join("")}
+    </div>`).join("") : `<div class="personal-empty">${icon("brain")}<strong>${t("personal.knows.empty")}</strong><span>${t("personal.knows.emptyHint")}</span></div>`}
+  </section>`;
+}
+
 function memoryView(query = "") {
   const normalized = query.trim().toLowerCase();
   const notes = normalized ? data.notes.filter((note) => `${note.title} ${note.content || ""}`.toLowerCase().includes(normalized)) : data.notes;
-  return `<section class="personal-panel personal-memory">
+  return `${profileFactsPanel()}<section class="personal-panel personal-memory">
     <header><div><span>${t("personal.personalContext")}</span><h3>${t("personal.memoryNotes")}</h3></div><a class="btn btn-primary sm" href="#/my-notes">${icon("plus")}${t("personal.newNote")}</a></header>
     <div class="personal-memory-search">${icon("search")}<input data-memory-search value="${esc(query)}" placeholder="${t("personal.searchMemory")}"/></div>
     <div class="personal-memory-grid">${notes.length ? notes.map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}"><span class="personal-memory-glyph">${icon("file")}</span><div><strong>${esc(note.title)}</strong><p>${esc((note.content || t("personal.emptyNote")).slice(0, 180))}</p><small>${t("personal.updated", { date: shortDate(note.updatedAt) })}</small></div></a>`).join("") : `<div class="personal-empty wide">${icon("search")}<strong>${t("personal.notFound")}</strong><span>${t("personal.changeQuery")}</span></div>`}</div>
@@ -354,12 +385,15 @@ async function loadPlan({ refresh = false } = {}) {
 }
 
 async function loadSide() {
-  try {
-    const result = await api.personal.reminders();
-    data.reminders = result.reminders || [];
-  } catch {
-    data.reminders = [];
-  }
+  // Independent of each other and of the plan: one failing must not blank the
+  // others, so each settles on its own.
+  const [reminders, profile] = await Promise.allSettled([
+    api.personal.reminders(),
+    api.personal.profileFacts(),
+  ]);
+  data.reminders = reminders.status === "fulfilled" ? (reminders.value.reminders || []) : [];
+  data.profileFacts = profile.status === "fulfilled" ? (profile.value.facts || []) : [];
+  data.profileCategories = profile.status === "fulfilled" ? (profile.value.categories || []) : [];
 }
 
 async function reload(root, tab = activeTab, { refreshPlan = false } = {}) {
@@ -510,6 +544,25 @@ function wire(root) {
       state.textContent = error.message;
       toast("error", t("personal.profileSaveError"), error.message);
     }
+  });
+  root.querySelector("[data-fact-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = root.querySelector("[data-fact-input]");
+    const fact = input.value.trim();
+    if (fact.length < 3) return input.focus();
+    try {
+      await api.personal.rememberFact({ fact });
+      input.value = "";
+      await reload(root, "memory");
+      toast("success", t("personal.knows.added"));
+    } catch (error) { toast("error", t("personal.knows.error"), error.message); }
+  });
+  root.querySelectorAll("[data-forget]").forEach((button) => button.onclick = async () => {
+    button.disabled = true;
+    try {
+      await api.personal.forgetFact(button.dataset.forget);
+      await reload(root, "memory");
+    } catch (error) { button.disabled = false; toast("error", t("personal.knows.error"), error.message); }
   });
   root.querySelector("[data-brief-now]")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;

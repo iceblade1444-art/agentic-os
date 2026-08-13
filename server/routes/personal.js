@@ -10,6 +10,7 @@ import { personalFiles } from "../lib/personal-files.js";
 import { dayPlanFor } from "../lib/personal-day.js";
 import { spokenPlan } from "../lib/personal-planner.js";
 import { reminders } from "../lib/reminders.js";
+import { personalProfiles, PROFILE_CATEGORIES } from "../lib/personal-profile.js";
 import { morningBrief } from "../lib/morning-brief.js";
 
 const r = Router();
@@ -79,6 +80,36 @@ r.post("/brief", async (req, res, next) => {
     const user = req.user || authenticatedUser(req);
     const result = await morningBrief.sendFor(user);
     res.status(201).json({ ok: true, item: result.item, date: result.plan.date });
+  } catch (error) { next(error); }
+});
+
+// What MILA knows about this person, and the means to take any of it back.
+// The profile shapes every answer she gives, so it has to be visible somewhere
+// other than by asking her.
+r.get("/profile-facts", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.json({
+      facts: personalProfiles.list(user.id),
+      categories: PROFILE_CATEGORIES,
+    });
+  } catch (error) { next(error); }
+});
+
+r.post("/profile-facts", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    res.status(201).json({ fact: personalProfiles.remember(user.id, req.body || {}) });
+  } catch (error) { next(error); }
+});
+
+r.delete("/profile-facts/:id", (req, res, next) => {
+  try {
+    const user = req.user || authenticatedUser(req);
+    if (!personalProfiles.forget(user.id, req.params.id)) {
+      return res.status(404).json({ error: "Fact not found" });
+    }
+    res.json({ ok: true });
   } catch (error) { next(error); }
 });
 
