@@ -6,6 +6,14 @@ import {
   hermesCronRequest, hermesKanbanRawRequest, hermesKanbanRequest, hermesSkillsRequest, resetHermesKanbanToken, withKanbanBoard,
 } from "../server/lib/hermes-kanban.js";
 
+// Reads a phrase out of the English dictionary, so a test can still say which
+// words it expects without those words having to sit in the page source.
+function enCopy(key) {
+  const source = fs.readFileSync(new URL("../assets/js/i18n.js", import.meta.url), "utf8");
+  const en = source.slice(source.indexOf('"en-US": {'), source.indexOf('"uz-UZ": {'));
+  return en.match(new RegExp(`"${key.replaceAll(".", "\\.")}":\\s*"([^"]*)"`))?.[1];
+}
+
 test("Hermes Kanban connector pins requests to the Agentic OS board", () => {
   assert.equal(
     withKanbanBoard("/api/plugins/kanban/board?include_archived=false", "agentic-os"),
@@ -89,8 +97,13 @@ test("Agentic OS exposes a real Hermes fleet Kanban instead of the local workflo
   assert.match(page, /kanban\.agent\.waiting/);
   assert.match(agents, /api\.kanban\.profiles/);
   assert.match(agents, /api\.kanban\.probeProfiles/);
-  assert.match(agents, /Check models/);
-  assert.match(agents, /Waiting input/);
+  // These read as translation keys now; the wording lives in i18n.js. Asserting
+  // the key keeps the intent — the page offers a live model check and can show a
+  // profile waiting on someone — without pinning the English.
+  assert.match(agents, /t\("fleet\.checkModels"\)/);
+  assert.match(agents, /t\("fleet\.status\.waiting"\)/);
+  assert.equal(enCopy("fleet.checkModels"), "Check models");
+  assert.equal(enCopy("fleet.status.waiting"), "Waiting input");
   assert.match(api, /\/api\/kanban\/board/);
   assert.match(api, /\/api\/kanban\/profiles\/probe/);
   assert.match(api, /taskLog/);
@@ -127,7 +140,8 @@ test("Routines UI manages native Hermes Cron jobs and exposes run history", () =
   assert.match(page, /api\.routines\.create/);
   assert.match(page, /api\.routines\.action/);
   assert.match(page, /api\.routines\.runs/);
-  assert.match(page, /Daily operations brief/);
+  assert.match(page, /t\("routines\.preset\.ops"\)/);
+  assert.equal(enCopy("routines.preset.ops"), "Daily operations brief");
   assert.match(api, /\/api\/routines\/delivery-targets/);
   assert.match(routes, /ACTIONS = new Set\(\["pause", "resume", "trigger"\]\)/);
   assert.match(routes, /requireAdmin/);

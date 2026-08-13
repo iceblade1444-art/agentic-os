@@ -861,13 +861,13 @@ function statMini(label, value, ic) {
    Backend-aware helpers (MCP + Integrations)
    ============================================================ */
 function demoNote(txt) {
-  return `<div class="alert info mb-4"><span class="a-ico">${icon("info")}</span><div class="a-body"><div class="a-title">Demo mode — no backend</div><div class="a-desc">${esc(txt)}</div></div></div>`;
+  return `<div class="alert info mb-4"><span class="a-ico">${icon("info")}</span><div class="a-body"><div class="a-title">${esc(t("alert.noBackend"))}</div><div class="a-desc">${esc(txt)}</div></div></div>`;
 }
 function loadingCard(txt) {
   return `<div class="card"><div class="row gap-2"><div class="spinner"></div><span class="muted">${esc(txt)}</span></div></div>`;
 }
 function errCard(msg) {
-  return `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">Request failed</div><div class="a-desc">${esc(msg)}</div></div></div>`;
+  return `<div class="alert error"><span class="a-ico">${icon("x")}</span><div class="a-body"><div class="a-title">${esc(t("alert.requestFailed"))}</div><div class="a-desc">${esc(msg)}</div></div></div>`;
 }
 
 /* ---- MCP ---- */

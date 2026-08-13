@@ -1,11 +1,12 @@
 import { api } from "../api.js";
 import { icon } from "../icons.js";
 import { qs, toast } from "../ui.js";
+import { t } from "../i18n.js";
 
 function statusBadge(status) {
-  if (!status) return `<span class="badge neutral"><span class="dot"></span>Checking</span>`;
-  if (status.ready) return `<span class="badge success"><span class="dot"></span>Hermes online</span>`;
-  return `<span class="badge error"><span class="dot"></span>Hermes unavailable</span>`;
+  if (!status) return `<span class="badge neutral"><span class="dot"></span>${t("hermes.checking")}</span>`;
+  if (status.ready) return `<span class="badge success"><span class="dot"></span>${t("hermes.online")}</span>`;
+  return `<span class="badge error"><span class="dot"></span>${t("hermes.offline")}</span>`;
 }
 
 export default {
@@ -14,17 +15,17 @@ export default {
     <div class="hermes-control">
       <div class="page-head hermes-head">
         <div>
-          <div class="page-title">Hermes Control</div>
-          <div class="page-sub">Primary Agentic OS orchestrator and its complete official dashboard.</div>
+          <div class="page-title">${t("hermes.title")}</div>
+          <div class="page-sub">${t("hermes.sub")}</div>
         </div>
         <div class="spacer"></div>
         <div id="hermesStatus">${statusBadge()}</div>
-        <button class="icon-btn" id="hermesReload" title="Reload Hermes Dashboard">${icon("refresh")}</button>
-        <a class="btn btn-secondary" href="/hermes/" target="_blank" rel="noopener">${icon("external")}Open full screen</a>
+        <button class="icon-btn" id="hermesReload" title="${t("hermes.reload")}">${icon("refresh")}</button>
+        <a class="btn btn-secondary" href="/hermes/" target="_blank" rel="noopener">${icon("external")}${t("hermes.fullscreen")}</a>
       </div>
       <div class="hermes-frame-shell">
         <div class="hermes-frame-loading" id="hermesLoading">
-          <span class="spinner"></span><span>Connecting to Hermes Dashboard...</span>
+          <span class="spinner"></span><span>${t("hermes.connecting")}</span>
         </div>
         <iframe
           id="hermesFrame"
@@ -36,7 +37,7 @@ export default {
       </div>
       <div class="alert error hidden" id="hermesError">
         <span class="a-ico">${icon("alert")}</span>
-        <div class="a-body"><div class="a-title">Hermes Dashboard is not responding</div><div class="a-desc" id="hermesErrorText"></div></div>
+        <div class="a-body"><div class="a-title">${t("hermes.notResponding")}</div><div class="a-desc" id="hermesErrorText"></div></div>
       </div>
     </div>`,
   mount: async (root) => {
@@ -53,10 +54,10 @@ export default {
       try {
         const result = await api.hermes.status();
         status.innerHTML = statusBadge(result);
-        toast(result.ready ? "success" : "error", result.ready ? "Hermes is online" : "Hermes is unavailable");
+        toast(result.ready ? "success" : "error", result.ready ? t("hermes.online") : t("hermes.offline"));
       } catch (e) {
         status.innerHTML = statusBadge({ ready: false });
-        toast("error", "Hermes check failed", e.message);
+        toast("error", t("hermes.checkFailed"), e.message);
       }
     };
 
@@ -65,7 +66,7 @@ export default {
       status.innerHTML = statusBadge(result);
       if (!result.ready) {
         error.classList.remove("hidden");
-        errorText.textContent = result.error || `Dashboard probe returned HTTP ${result.status || 0}.`;
+        errorText.textContent = result.error || t("hermes.probe", { status: result.status || 0 });
       }
     } catch (e) {
       status.innerHTML = statusBadge({ ready: false });
