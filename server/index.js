@@ -66,6 +66,7 @@ import messenger from "./routes/messenger.js";
 import { morningBrief } from "./lib/morning-brief.js";
 import { telegram } from "./lib/telegram.js";
 import { erpWeekly } from "./lib/erp-weekly.js";
+import { eveningSummary } from "./lib/evening-summary.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
 import { salesBot } from "./lib/sales-bot.js";
 
@@ -303,6 +304,7 @@ server.listen(config.port, async () => {
   telegram.start();
   salesBot.start();
   erpWeekly.start();
+  eveningSummary.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {
