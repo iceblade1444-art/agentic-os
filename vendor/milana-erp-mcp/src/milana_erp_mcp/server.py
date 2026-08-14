@@ -57,7 +57,7 @@ async def erp_active_production(limit: int = 25) -> dict[str, Any]:
 
 
 @mcp.tool(structured_output=True)
-async def erp_sewing_daily_report(report_date: str | None = None, factory_code: str = "MIL") -> dict:
+async def erp_sewing_daily_report(report_date: str | None = None, factory_code: str = "MIL") -> dict[str, Any]:
     """Daily sewing report for one date and factory: per-line output plus flow capacity. Dates are YYYY-MM-DD; default is today."""
     return await erp_sewing_daily_report_tool(report_date=report_date, factory_code=factory_code)
 
