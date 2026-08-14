@@ -230,7 +230,13 @@ function pairingUser(payload) {
   return user;
 }
 
-export async function mobilePairExchangeHandler(req, res) {
+// deps exists for tests: the handler creates a real tracked session, and a
+// test that runs against the production data directory (the deploy gate does)
+// must be able to hand in a throwaway store instead of writing a session the
+// owner will find in their device list.
+export async function mobilePairExchangeHandler(req, res, deps = {}) {
+  const sessionStore = deps.sessions || sessions;
+  const commit = deps.commitAuthGroups || commitAuthGroups;
   const now = Date.now();
   for (const [id, expiresAt] of usedPairingGrants) {
     if (expiresAt <= now) usedPairingGrants.delete(id);
@@ -242,12 +248,12 @@ export async function mobilePairExchangeHandler(req, res) {
     return res.status(401).json({ error: "Invalid, expired, or already used connection grant" });
   }
   usedPairingGrants.set(payload.jti, Number(payload.exp) || now + 10 * 60 * 1000);
-  const session = createTrackedSession(req, user, "mobile");
+  const session = sessionStore.create(user.id, { kind: "mobile", label: requestLabel(req, "mobile"), expiresAt: Date.now() + 30 * 864e5 });
   try {
-    await commitAuthGroups("sessions");
+    await commit("sessions");
   } catch (error) {
-    sessions.revoke(user.id, session.id);
-    await commitAuthGroups("sessions").catch(() => {});
+    sessionStore.revoke(user.id, session.id);
+    await commit("sessions").catch(() => {});
     return res.status(error.status || 503).json({ error: error.message, code: error.code });
   }
   res.json({
@@ -271,10 +277,10 @@ export async function loginHandler(req, res) {
   if (requireMfa(user, "web", res)) return;
   const session = createTrackedSession(req, user, "web");
   try {
-    await commitAuthGroups("sessions");
+    await commit("sessions");
   } catch (error) {
-    sessions.revoke(user.id, session.id);
-    await commitAuthGroups("sessions").catch(() => {});
+    sessionStore.revoke(user.id, session.id);
+    await commit("sessions").catch(() => {});
     return res.status(error.status || 503).json({ error: error.message, code: error.code });
   }
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
@@ -333,12 +339,12 @@ export async function mobileLoginHandler(req, res) {
   }
   if (approvalPending(user, res)) return;
   if (requireMfa(user, "mobile", res)) return;
-  const session = createTrackedSession(req, user, "mobile");
+  const session = sessionStore.create(user.id, { kind: "mobile", label: requestLabel(req, "mobile"), expiresAt: Date.now() + 30 * 864e5 });
   try {
-    await commitAuthGroups("sessions");
+    await commit("sessions");
   } catch (error) {
-    sessions.revoke(user.id, session.id);
-    await commitAuthGroups("sessions").catch(() => {});
+    sessionStore.revoke(user.id, session.id);
+    await commit("sessions").catch(() => {});
     return res.status(error.status || 503).json({ error: error.message, code: error.code });
   }
   res.json({
@@ -378,7 +384,7 @@ export async function mobileRegisterHandler(req, res) {
       governance.recordAudit("account.registered", user.name, user.id, "waiting for owner approval");
       return res.status(201).json({ ok: true, approvalRequired: true, user: userFromSession({ user }) });
     }
-    const session = createTrackedSession(req, user, "mobile");
+    const session = sessionStore.create(user.id, { kind: "mobile", label: requestLabel(req, "mobile"), expiresAt: Date.now() + 30 * 864e5 });
     await commitAuthGroups("users", "sessions");
     res.status(201).json({
       ok: true,
@@ -400,7 +406,7 @@ export async function mobileRegisterHandler(req, res) {
 export async function logoutHandler(req, res) {
   const payload = signedPayload(req);
   if (payload?.sid && payload.user?.id) sessions.revoke(String(payload.user.id), payload.sid);
-  await commitAuthGroups("sessions").catch(() => {});
+  await commit("sessions").catch(() => {});
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });
 }

@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { MemberWorkspaceStore } from "../server/lib/member-workspace.js";
 import { PersonalProfileStore } from "../server/lib/personal-profile.js";
 import { ReminderStore } from "../server/lib/reminders.js";
 import { Messenger } from "../server/lib/messenger.js";
@@ -38,6 +39,12 @@ test("the day journal records that a private thing happened, never what it said"
     db: { mcp: { list: () => [], update: () => {} } },
     reminders: new ReminderStore(path.join(tempDir("aos-rem-"), "reminders.json")),
     personalProfiles: new PersonalProfileStore(tempDir("aos-prof-")),
+    // The note store must be a throwaway too. It was not, and these fixture
+    // titles — written to look unmistakably private — landed in the REAL
+    // creator workspace on every run, including the deploy gate's run on the
+    // production server, where they surfaced in Recent memory. A test that
+    // exercises "private data must not leak" leaked private-looking data.
+    memberWorkspaces: new MemberWorkspaceStore(tempDir("aos-ws-")),
   });
 
   const secrets = [

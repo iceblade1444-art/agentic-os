@@ -121,6 +121,17 @@ test("self deletion requires exact ownership proof and removes private data", as
     knowledge: {
       remove: async (note) => calls.push(["knowledge", note]),
     },
+    // Everything else the deletion reaches, stubbed for the same reason as in
+    // account-lifecycle.test.js: an omitted store falls back to the real one,
+    // and this suite runs against the production data directory in the deploy
+    // gate — this exact test was rewriting the real messenger index.
+    googleWorkspace: { disconnect: (id) => calls.push(["google", id]) },
+    personalFiles: { removeUser: (id) => calls.push(["files", id]) },
+    personalProfiles: { clear: (id) => calls.push(["profile", id]) },
+    pushDevices: { removeUser: (id) => calls.push(["push", id]) },
+    reminders: { removeUser: (id) => calls.push(["reminders", id]) },
+    messenger: { removeUser: (id) => calls.push(["messenger", id]) },
+    telegram: { removeUser: (id) => calls.push(["telegram", id]) },
   };
 
   await assert.rejects(

@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { MemberWorkspaceStore } from "../server/lib/member-workspace.js";
 import { TelegramBridge } from "../server/lib/telegram.js";
 import { createMilaActions, PERSONAL_ACTIONS } from "../server/lib/mila-actions.js";
 import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "../assets/js/mila-tools.js";
@@ -119,6 +120,7 @@ test("the MILA action reaches the caller's own chat only, and says when there is
     journal: { append: async () => null, recentText: () => "" },
     onboarding: { get: () => ({ profile: {} }) },
     db: { mcp: { list: () => [], update: () => {} } },
+    memberWorkspaces: new MemberWorkspaceStore(fs.mkdtempSync(path.join(os.tmpdir(), "aos-ws-"))),
   });
 
   assert.ok(PERSONAL_ACTIONS.has("send_telegram"), "own-chat delivery is a personal action, so a Member gets it too");

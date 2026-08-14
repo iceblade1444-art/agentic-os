@@ -17,7 +17,7 @@
     "db:dry-run": "node scripts/postgres-migrate.mjs --dry-run",
     "db:migrate": "node scripts/postgres-migrate.mjs",
     "db:verify": "node scripts/postgres-migrate.mjs --verify-only",
-    "test": "node --test test/*.test.js"
+    "test": "node scripts/test-and-guard-data.mjs test/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
