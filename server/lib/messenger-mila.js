@@ -9,11 +9,28 @@
 // what she says on the phone.
 
 import { buildMilaSystemInstruction } from "../../assets/js/mila-prompt.js";
+import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { db } from "../store.js";
 import { MILA_MEMBER_ID } from "./messenger.js";
+import { KNOWLEDGE_ACTIONS, PERSONAL_ACTIONS, milaActions } from "./mila-actions.js";
 import { milaGeminiChat } from "./mila.js";
 import { sharedAgentContext } from "./onboarding.js";
+import { TOOL_PROTOCOL_LINES, runTextToolLoop } from "./text-tool-loop.js";
+
+// What she may reach from a chat message depends on who reads the answer.
+// Company data — knowledge pages and the read-only ERP trio — is fine in a
+// channel: every member could run the same query themselves. The personal desk
+// exists only in a direct thread, because "напомни мне" from a channel would
+// still be one person's desk, but the confirmation of it would be a message
+// the whole room reads.
+const ERP_READ = ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"];
+const KNOWLEDGE = ["search_company_knowledge", "read_company_knowledge", "list_company_knowledge"];
+const PERSONAL = [
+  "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
+  "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
+  "list_my_calendar", "remember_about_me", "read_about_me", "forget_about_me", "send_telegram",
+];
 
 const HISTORY_TURNS = 12;
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
@@ -46,7 +63,11 @@ export function createMilaResponder(options = {}) {
     const cfg = store.integrations.byProvider("mila")?.config || {};
     if (!cfg.baseUrl) throw Object.assign(new Error("MILA backend is not configured"), { status: 503 });
 
-    const where = conversation.kind === "channel"
+    const inChannel = conversation.kind === "channel";
+    const toolNames = inChannel ? [...KNOWLEDGE, ...ERP_READ] : [...PERSONAL, ...KNOWLEDGE, ...ERP_READ];
+    const allowed = (name) => toolNames.includes(name)
+      && (PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name) || ERP_READ.includes(name));
+    const where = inChannel
       ? `You are writing in the team channel "${clean(conversation.name, 80)}" of the corporate chat. Several colleagues read it.`
       : "You are writing in a private chat with one colleague.";
     const systemPrompt = [
@@ -58,21 +79,34 @@ export function createMilaResponder(options = {}) {
         // day journal — a group room is not the place to be holding either. A
         // direct thread is between her and one person, so it keeps them.
         agentContext: context(asker || { id: "system", role: "Creator" }, undefined, {
-          audience: conversation.kind === "channel" ? "shared" : "owner",
+          audience: inChannel ? "shared" : "owner",
         }),
         mode: "text",
-        // In a chat thread she can only write; the personal desk and ERP tools
-        // live on surfaces that can actually call them.
-        tools: [],
+        tools: toolNames,
+        knowledgeIndex: knowledgePromptIndex(),
       }),
       `${where} Answer the person who addressed you, keep it short enough to read on a phone, and never invent facts about the company: if you do not know, say so and say who could.`,
+      TOOL_PROTOCOL_LINES.join("\n"),
     ].join("\n\n");
 
-    const result = await chat(cfg, "Agentic OS corporate chat", {
-      messages: transcript(history, conversation),
+    const executor = options.actions || milaActions;
+    const { text } = await runTextToolLoop({
+      chat,
+      cfg,
+      label: "Agentic OS corporate chat",
       systemPrompt,
+      messages: transcript(history, conversation),
+      fallback: "Я запуталась в шагах — спросите ещё раз, попроще.",
+      execute: async (name, args) => {
+        if (!allowed(name)) {
+          return { ok: false, error: inChannel
+            ? `Tool "${name}" is not available in a channel — personal actions live in a direct chat with MILA.`
+            : `Tool "${name}" is not available in chat.` };
+        }
+        return executor.call(name, args, { actor: clean(asker?.name, 60) || "Коллега", user: asker });
+      },
     });
-    return clean(result?.text, 4000);
+    return clean(text, 4000);
   }
 
   return { reply };

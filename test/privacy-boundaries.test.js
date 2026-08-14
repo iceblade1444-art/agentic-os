@@ -178,3 +178,36 @@ test("commitments ride the personal brief and never the channel copy", () => {
   assert.equal(/channels\.post\([^)]*item\.body/.test(source), false, "the channel post must not use the personal body");
   assert.match(source, /Ваши обязательства/);
 });
+
+test("chat tools follow the audience: company data in channels, the desk only in directs", async () => {
+  const executed = [];
+  const responder = createMilaResponder({
+    db: { integrations: { byProvider: () => ({ config: { baseUrl: "http://mila.test" } }) } },
+    sharedAgentContext: () => "Workspace: Milana Premium",
+    actions: { call: async (name, args, context) => { executed.push({ name, user: context.user.id }); return { ok: true, rows: [] }; } },
+    chat: (() => {
+      // First turn asks for a tool, second answers in prose — for every reply.
+      let step = 0;
+      const script = [
+        'TOOL_CALL {"name":"get_sewing_daily_report","args":{}}', "Сегодня сшили по плану.",
+        'TOOL_CALL {"name":"remind_me","args":{"title":"тест","dueAt":"2027-01-01T09:00:00+05:00"}}', "В канале напоминания не ставлю — напишите мне в личку.",
+        'TOOL_CALL {"name":"remind_me","args":{"title":"тест","dueAt":"2027-01-01T09:00:00+05:00"}}', "Готово, напомню.",
+      ];
+      return async () => ({ text: script[Math.min(step++, script.length - 1)] });
+    })(),
+  });
+  const history = [{ authorId: COLLEAGUE.id, authorName: COLLEAGUE.name, text: "@mila швейный отчёт?", kind: "user", mentions: [] }];
+  const channel = { id: "c1", kind: "channel", name: "производство", memberIds: [COLLEAGUE.id, "agent:mila"] };
+
+  // Channel: the ERP read runs, as the asker.
+  await responder.reply({ conversation: channel, history, asker: COLLEAGUE });
+  assert.deepEqual(executed, [{ name: "get_sewing_daily_report", user: COLLEAGUE.id }]);
+
+  // Channel: a personal action is refused before it can execute.
+  await responder.reply({ conversation: channel, history, asker: COLLEAGUE });
+  assert.equal(executed.length, 1, "remind_me must not run from a channel");
+
+  // Direct: the same personal action runs, on the asker's own desk.
+  await responder.reply({ conversation: { id: "c2", kind: "direct", memberIds: [COLLEAGUE.id, "agent:mila"] }, history, asker: COLLEAGUE });
+  assert.deepEqual(executed.at(-1), { name: "remind_me", user: COLLEAGUE.id });
+});
