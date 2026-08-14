@@ -212,6 +212,16 @@ export const MILA_TOOLS = [
     }, required: ["title"] },
   },
   {
+    name: "learn_skill",
+    description: "Teach the Hermes fleet a procedure: the operator describes how something is done — or gives feedback on an existing skill by name — and you install it as a structured skill after confirmation. Two-step: the first call stages a draft and returns a confirmation token with a summary; repeat with confirmationToken to install.",
+    parameters: { type: "object", properties: {
+      instruction: { type: "string", description: "The process description or feedback, in the operator's words" },
+      name: { type: "string", description: "Existing skill name to refine; omit to create a new one" },
+      profile: { type: "string", enum: ["default", "scout", "scribe", "reach", "dev"], description: "Fleet profile to attach the skill to" },
+      confirmationToken: { type: "string" },
+    }, required: [] },
+  },
+  {
     name: "delegate_to_hermes",
     description: "Stage or confirm a real orchestration task for Hermes. The confirmed task appears in Kanban and Hermes starts planning it.",
     parameters: { type: "object", properties: {

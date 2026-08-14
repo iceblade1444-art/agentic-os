@@ -165,3 +165,16 @@ test("account deletion actually calls both", () => {
   assert.match(source, /reminderStore\.removeUser\(id\)/);
   assert.match(source, /messengerStore\.removeUser\(id\)/);
 });
+
+test("commitments ride the personal brief and never the channel copy", () => {
+  // The brief has two audiences: the owner's own inbox, and optionally a team
+  // channel. Standing commitments come from the private profile, so the
+  // channel copy is built from briefBody alone — asserted on the source,
+  // because the two bodies are composed a few lines apart and one edit could
+  // quietly merge them.
+  const source = fs.readFileSync(new URL("../server/lib/morning-brief.js", import.meta.url), "utf8");
+  assert.match(source, /const channelBody = briefBody\(plan\)/);
+  assert.match(source, /channels\.post\(channelName, `\*\*\$\{item\.title\}\*\*\\n\$\{channelBody\}`/);
+  assert.equal(/channels\.post\([^)]*item\.body/.test(source), false, "the channel post must not use the personal body");
+  assert.match(source, /Ваши обязательства/);
+});

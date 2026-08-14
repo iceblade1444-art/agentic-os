@@ -16,13 +16,14 @@ import { dayPlanFor } from "./personal-day.js";
 import { spokenPlan } from "./personal-planner.js";
 import { reminders } from "./reminders.js";
 import { telegram } from "./telegram.js";
+import { skillLearner } from "./skill-learner.js";
 import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const WRITE_ACTIONS = new Set([
   "create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool",
   "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
-  "create_erp_task", "send_erp_notification", "save_company_knowledge",
+  "create_erp_task", "send_erp_notification", "save_company_knowledge", "learn_skill",
 ]);
 const ERP_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 const ERP_TARGETS = new Set(["user", "department", "safe_group"]);
@@ -154,6 +155,7 @@ function erpTargetLabel(args = {}) {
 
 function actionSummary(name, args) {
   if (name === "save_company_knowledge") return `Write into company knowledge “${bounded(args.page, 80)}”: ${bounded(args.fact, 160)}`;
+  if (name === "learn_skill") return `Teach the fleet skill “${bounded(args.name || "новый скилл", 80)}”${args.profile ? ` (profile ${bounded(args.profile, 40)})` : ""}`;
   if (name === "create_erp_task") return `Create ERP task “${bounded(args.title, 120)}” for ${args.assigneeUserId ? `user ${args.assigneeUserId}` : `department ${bounded(args.department, 80)}`}`;
   if (name === "send_erp_notification") return `Send ERP notification “${bounded(args.title, 120)}” to ${erpTargetLabel(args)}`;
   if (name === "create_calendar_event") return `Create calendar event “${bounded(args.title, 120)}” at ${bounded(args.start, 40)}`;
@@ -200,10 +202,15 @@ function journalLine(name, args = {}, result = {}) {
   if (name === "create_erp_task") return { kind: "erp", title: `Задача в ERP: ${of(args.title)}`, detail: args.department ? `отдел ${args.department}` : `сотрудник ${args.assigneeUserId}` };
   if (name === "send_erp_notification") return { kind: "erp", title: `Уведомление в ERP: ${of(args.title)}`, detail: erpTargetLabel(args) };
   if (name === "call_mcp_tool") return { kind: "mcp", title: `MCP ${of(args.server)} · ${of(args.tool)}` };
+  if (name === "learn_skill") return { kind: "skill", title: `Флот научен: ${of(args.name)}` };
   return null;
 }
 
 function cleanMutationArgs(name, args = {}) {
+  if (name === "learn_skill") return {
+    instruction: bounded(args.instruction, 20000), name: bounded(args.name, 60),
+    profile: PROFILES.has(args.profile) ? args.profile : "",
+  };
   if (name === "save_company_knowledge") return {
     page: bounded(args.page, 80), section: bounded(args.section, 120), fact: bounded(args.fact, 1500),
   };
@@ -259,6 +266,9 @@ function cleanMutationArgs(name, args = {}) {
 }
 
 function requireFields(name, args) {
+  if (name === "learn_skill") {
+    if (!args.instruction) throw Object.assign(new Error("Describe the process the fleet should learn"), { status: 400 });
+  }
   if (name === "save_company_knowledge") {
     if (!args.page) throw Object.assign(new Error("Name the knowledge page"), { status: 400 });
     if (!args.fact) throw Object.assign(new Error("There is no fact to write"), { status: 400 });
@@ -298,6 +308,7 @@ export function createMilaActions(options = {}) {
   const calendar = options.googleWorkspace || googleWorkspace;
   const reminderStore = options.reminders || reminders;
   const telegramBridge = options.telegram || telegram;
+  const learner = options.skillLearner || skillLearner;
   const profiles = options.personalProfiles || personalProfiles;
   const dayPlan = options.dayPlanFor || dayPlanFor;
   const now = options.now || Date.now;
@@ -395,6 +406,19 @@ export function createMilaActions(options = {}) {
   }
 
   async function executeWrite(name, args, context) {
+    // Teaching the fleet: the draft was already shown at the staging step, so
+    // confirmation installs exactly what was approved.
+    if (name === "learn_skill") {
+      const draft = args.draft || await learner.draft(args);
+      const installed = await learner.install(draft);
+      return {
+        ok: installed?.success !== false,
+        action: name,
+        skill: { name: draft.name, description: draft.description, category: draft.category, updated: draft.update },
+        note: draft.update ? "Existing skill refined with the feedback." : "New skill installed into the Hermes catalog.",
+      };
+    }
+
     // Company knowledge is what every colleague and MILA will quote afterwards,
     // so writing to it is confirmed like anything else that leaves your own desk.
     if (name === "save_company_knowledge") {
@@ -811,6 +835,18 @@ export function createMilaActions(options = {}) {
       }
       const clean = cleanMutationArgs(action, args);
       requireFields(action, clean);
+      if (action === "learn_skill") {
+        // The draft is built BEFORE confirmation, so what the operator approves
+        // is the skill itself, not a promise of one. The stored args carry the
+        // finished draft; confirming installs exactly it.
+        const draft = await learner.draft(clean);
+        const staged = stage(action, { draft }, identity);
+        return {
+          ...staged,
+          summary: `${draft.update ? "Update" : "Create"} fleet skill “${draft.name}” — ${draft.description}`,
+          draft: { name: draft.name, description: draft.description, category: draft.category, body: draft.body.slice(0, 2000), update: draft.update },
+        };
+      }
       return stage(action, clean, identity);
     }
     if (JOURNALLED_PERSONAL_ACTIONS.has(action)) {

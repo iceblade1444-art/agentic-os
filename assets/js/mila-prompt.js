@@ -214,7 +214,7 @@ const PERSONAL_TOOL_NAMES = [
 const ERP_READ_TOOL_NAMES = ["get_erp_business_context", "get_finished_goods_stock", "get_erp_late_orders", "list_erp_employee_tasks", "get_sewing_daily_report"];
 const KNOWLEDGE_TOOL_NAMES = ["search_company_knowledge", "read_company_knowledge", "list_company_knowledge", "save_company_knowledge"];
 const ERP_WRITE_TOOL_NAMES = ["create_erp_task", "send_erp_notification"];
-const OPERATOR_TOOL_NAMES = ["delegate_to_hermes", "create_kanban_task", "write_obsidian_note", "ask_claude_code", "call_mcp_tool"];
+const OPERATOR_TOOL_NAMES = ["delegate_to_hermes", "create_kanban_task", "write_obsidian_note", "ask_claude_code", "call_mcp_tool", "learn_skill"];
 const CONFIRMED_TOOL_NAMES = [
   ...ERP_WRITE_TOOL_NAMES, ...OPERATOR_TOOL_NAMES,
   "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",

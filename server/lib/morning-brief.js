@@ -19,6 +19,7 @@ import { planningInternals, spokenPlan } from "./personal-planner.js";
 import { pushService } from "./push-service.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 import { users } from "./users.js";
+import { personalProfiles } from "./personal-profile.js";
 
 const TICK_MS = 5 * 60 * 1000;
 // A brief that missed its slot by more than this is stale: the owner is already
@@ -90,10 +91,20 @@ export class MorningBrief {
     // day — the slowest one, since the MCP connection and login have gone cold
     // overnight. Give it room rather than shipping a day plan with ERP missing.
     const plan = await buildPlan(user, { now, erpTimeoutMs: 20000 });
+    // Standing commitments from the private profile ride only in the personal
+    // delivery. The brief can also be posted to a team channel below, and what
+    // someone told MILA about their own obligations is not channel material —
+    // the same audience rule as everywhere else.
+    const profiles = deps.personalProfiles || personalProfiles;
+    const commitments = profiles.list(user.id, { category: "commitments" }).slice(0, 3);
+    const channelBody = briefBody(plan);
+    const personalBody = commitments.length
+      ? `${channelBody}\n\nВаши обязательства:\n${commitments.map((fact) => `• ${fact.text}`).join("\n")}`
+      : channelBody;
     const item = workspaces.createInboxItem(user.id, {
       type: "reminder",
       title: `План на ${plan.date}`,
-      body: briefBody(plan),
+      body: personalBody,
       priority: (plan.alerts || []).some((alert) => alert.level === "high") ? "high" : "normal",
       source: "system",
       route: "#/personal",
@@ -106,7 +117,7 @@ export class MorningBrief {
     const channelName = channels.briefChannel(user);
     if (channelName) {
       try {
-        channels.post(channelName, `**${item.title}**\n${item.body}`, { onBehalfOf: user });
+        channels.post(channelName, `**${item.title}**\n${channelBody}`, { onBehalfOf: user });
       } catch (error) {
         console.error(`[morning-brief] could not post to ${channelName}: ${error.message}`);
       }
