@@ -23,6 +23,7 @@ import personal from "./routes/personal.js";
 import telemetry from "./routes/telemetry.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
+import sales from "./routes/sales.js";
 import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import studio from "./routes/studio.js";
@@ -64,6 +65,7 @@ import messenger from "./routes/messenger.js";
 import { morningBrief } from "./lib/morning-brief.js";
 import { telegram } from "./lib/telegram.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
+import { salesBot } from "./lib/sales-bot.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -255,6 +257,7 @@ app.use("/api/operations", requireOperator, operations);
 app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
+app.use("/api/sales", requireAdmin, sales);
 app.use("/api/studio", requireStudio, studio);
 // ERP is readable by every signed-in role; the router keeps its write tools operator-only.
 app.use("/api/erp", erp);
@@ -295,6 +298,7 @@ server.listen(config.port, async () => {
   morningBrief.start();
   telegram.assistant = telegramAssistant;
   telegram.start();
+  salesBot.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {

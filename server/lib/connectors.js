@@ -19,6 +19,8 @@ export const PROVIDERS = {
     fields: [{ key: "baseUrl", label: "MILA backend URL" }, { key: "adminToken", label: "Admin Token", secret: true }] },
   telegram: { name: "Telegram", desc: "Personal delivery: reminders, briefs and anything MILA is asked to send", icon: "send", color: "cyan",
     fields: [{ key: "botToken", label: "Bot Token (from @BotFather)", secret: true }] },
+  salesbot: { name: "Клиентский Telegram-бот", desc: "Public front desk: catalog answers from the knowledge base, lead capture for managers", icon: "chat", color: "pink",
+    fields: [{ key: "botToken", label: "Bot Token (from @BotFather)", secret: true }] },
 };
 
 const ok = (detail) => ({ ok: true, detail });
@@ -41,6 +43,7 @@ export async function testConnection(provider, cfg = {}) {
         const r = await timedFetch(base + "/models", { headers: { Authorization: "Bearer " + key } });
         return r.ok ? ok("Reachable · /models returned 200") : fail("HTTP " + r.status);
       }
+      case "salesbot":
       case "telegram": {
         const token = cfg.botToken || process.env.TELEGRAM_BOT_TOKEN;
         if (!token) return fail("Missing bot token");

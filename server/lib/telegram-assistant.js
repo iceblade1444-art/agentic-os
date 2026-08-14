@@ -14,6 +14,7 @@
 // ERP. Nothing operator-grade is reachable from a Telegram message.
 
 import { buildMilaSystemInstruction } from "../../assets/js/mila-prompt.js";
+import { TOOL_PROTOCOL_LINES, runTextToolLoop } from "./text-tool-loop.js";
 import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { db } from "../store.js";
@@ -100,39 +101,25 @@ export function createTelegramAssistant(options = {}) {
     ].join("\n\n");
 
     remember(user.id, "user", text);
-    const exchange = [...(history.get(user.id) || [])];
 
-    for (let step = 0; step <= MAX_TOOL_STEPS; step += 1) {
-      const result = await chat(cfg, "Telegram assistant", {
-        messages: exchange,
-        systemPrompt,
-      });
-      const reply = clean(result?.text, 8000);
-      const call = reply.match(/^\s*TOOL_CALL\s*(\{[\s\S]*\})\s*$/);
-      if (!call) {
-        remember(user.id, "assistant", reply);
-        return reply || "Я не смогла составить ответ — попробуйте переформулировать.";
-      }
-
-      // A tool round: parse, gate, execute, feed the result back. Every failure
-      // becomes a TOOL_RESULT too — she has to know it did not happen, or she
-      // will tell the person it did.
-      exchange.push({ role: "assistant", content: reply });
-      let outcome;
-      try {
-        const parsed = JSON.parse(call[1]);
-        const name = clean(parsed?.name, 60);
+    const { text: reply } = await runTextToolLoop({
+      chat,
+      cfg,
+      label: "Telegram assistant",
+      systemPrompt,
+      messages: [...(history.get(user.id) || [])],
+      fallback: "Я запуталась в шагах — попробуйте попросить ещё раз, попроще.",
+      execute: async (name, args) => {
         if (!allowed(name)) {
-          outcome = { ok: false, error: `Tool "${name}" is not available in Telegram.` };
-        } else {
-          outcome = await actions.call(name, parsed.args || {}, { actor: user.name, user });
+          return { ok: false, error: `Tool "${name}" is not available in Telegram.` };
         }
-      } catch (error) {
-        outcome = { ok: false, error: clean(error.message, 300) };
-      }
-      exchange.push({ role: "user", content: `TOOL_RESULT ${clean(JSON.stringify(outcome), 4000)}` });
+        return actions.call(name, args, { actor: user.name, user });
+      },
+    });
+    if (reply && !reply.startsWith("Я запуталась")) {
+      remember(user.id, "assistant", reply);
+      return reply;
     }
-
     return "Я запуталась в шагах — попробуйте попросить ещё раз, попроще.";
   }
 
