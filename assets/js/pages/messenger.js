@@ -23,6 +23,8 @@ let search = "";
 let searchResults = null;
 let searchTimer = null;
 let replyTo = null;
+let recapText = "";
+let recapBusy = false;
 let editing = null;
 let pending = [];
 let typingNames = new Map();
@@ -267,8 +269,10 @@ function threadHTML() {
       ${avatar(conversation)}
       <div><strong>${esc(conversationTitle(conversation))}</strong><small>${esc(subtitle)}</small></div>
       <div class="spacer"></div>
+      <button type="button" class="icon-btn" data-recap title="${t("chat.recapTitle")}">${icon("sparkles")}</button>
       ${conversation.kind === "channel" ? `<button type="button" class="icon-btn" data-members title="${t("chat.membersTitle")}">${icon("agents")}</button>` : ""}
     </header>
+    ${recapText ? `<div class="chat-recap"><div><strong>${t("chat.recapHead")}</strong><button type="button" class="icon-btn sm" data-recap-close>${icon("x")}</button></div><p>${esc(recapText)}</p></div>` : ""}
     ${pinned ? `<div class="chat-pinned">${icon("key")}<span>${esc(pinned.text || t("chat.photo"))}</span><button type="button" class="icon-btn sm" data-unpin>${icon("x")}</button></div>` : ""}
     ${showMembers && conversation.kind === "channel" ? membersPanel(conversation) : ""}
     <div class="chat-thread" id="chatThread">${threadBody(conversation)}</div>
@@ -342,6 +346,7 @@ async function openConversation(id, jumpTo = "") {
   loadingThread = true;
   messages = [];
   replyTo = null;
+  recapText = "";
   editing = null;
   pending = [];
   showMembers = false;
@@ -460,11 +465,27 @@ async function toggleRecording(root) {
 // ---------- wiring ----------
 
 function wire(root) {
-  root.querySelectorAll("[data-open]").forEach((button) => button.onclick = () => {
+  /* recap belongs to one thread */ root.querySelectorAll("[data-open]").forEach((button) => button.onclick = () => {
     searchResults = null;
     openConversation(button.dataset.open, button.dataset.jumpTo || "");
   });
   root.querySelector("[data-back]")?.addEventListener("click", () => { activeId = ""; rerender(); });
+  root.querySelector("[data-recap]")?.addEventListener("click", async (event) => {
+    if (recapBusy || !activeId) return;
+    recapBusy = true;
+    const button = event.currentTarget;
+    button.classList.add("loading");
+    try {
+      const result = await api.messenger.recap(activeId);
+      recapText = result.recap || result.note || "";
+    } catch (error) {
+      toast("error", t("chat.recapFailed"), error.message);
+    } finally {
+      recapBusy = false;
+      rerender();
+    }
+  });
+  root.querySelector("[data-recap-close]")?.addEventListener("click", () => { recapText = ""; rerender(); });
   root.querySelector("[data-members]")?.addEventListener("click", () => { showMembers = !showMembers; rerender(); });
   root.querySelector("[data-close-members]")?.addEventListener("click", () => { showMembers = false; rerender(); });
 

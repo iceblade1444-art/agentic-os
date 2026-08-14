@@ -157,6 +157,7 @@ export const api = {
     typing: (id) => j(`/api/messenger/${encodeURIComponent(id)}/typing`, { method: "POST" }),
     upload: (id, body) => j(`/api/messenger/${encodeURIComponent(id)}/files`, { method: "POST", body }),
     markRead: (id) => j(`/api/messenger/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    recap: (id) => j(`/api/messenger/${encodeURIComponent(id)}/recap`, { method: "POST" }),
     stream: (handlers = {}) => {
       const source = new EventSource("/api/messenger/stream");
       const on = (event, handler) => source.addEventListener(event, (raw) => {

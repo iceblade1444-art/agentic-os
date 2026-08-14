@@ -7,6 +7,7 @@ import { messengerFiles } from "../lib/messenger-files.js";
 import { milaResponder, shouldMilaAnswer } from "../lib/messenger-mila.js";
 import { pushService } from "../lib/push-service.js";
 import { users } from "../lib/users.js";
+import { messengerRecap } from "../lib/messenger-recap.js";
 
 const r = Router();
 
@@ -111,6 +112,16 @@ r.get("/:id/messages", (req, res, next) => {
     const user = authenticatedUser(req);
     const result = messenger.messages(req.params.id, user.id, { limit: req.query.limit, before: req.query.before });
     res.json({ ...result, typing: typingIn(req.params.id, user.id) });
+  } catch (error) { next(error); }
+});
+
+// A recap of what the caller missed in a thread they are a member of. The
+// membership check lives inside messengerRecap, on the same call that fetches
+// the messages.
+r.post("/:id/recap", async (req, res, next) => {
+  try {
+    const user = authenticatedUser(req);
+    res.json(await messengerRecap.recap(user, req.params.id));
   } catch (error) { next(error); }
 });
 

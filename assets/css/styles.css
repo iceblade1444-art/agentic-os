@@ -2996,6 +2996,10 @@ body.compact .card.pad-lg { padding: 16px; }
 .chat-new-line { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--primary); font-size: 10px; }
 .chat-new-line::before, .chat-new-line::after { content: ""; flex: 1; height: 1px; background: var(--primary); opacity: .35; }
 .chat-older { display: block; width: 100%; margin-bottom: 10px; padding: 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2); font-size: 11px; cursor: pointer; }
+.chat-recap { margin: 8px 14px 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.chat-recap > div { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: var(--text-sm); }
+.chat-recap p { margin: 0; white-space: pre-wrap; font-size: var(--text-sm); color: var(--text-2); }
+
 .chat-pinned { display: grid; grid-template-columns: 16px minmax(0, 1fr) 24px; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); font-size: 11px; }
 .chat-pinned svg { width: 14px; color: var(--primary); }
 .chat-pinned span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
