@@ -216,7 +216,7 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // actions and the caller's own personal desk pass for a non-operator, everything
   // else (Kanban, Hermes, Obsidian, Claude Code, MCP) 403s regardless of what the
   // client declared.
-  assert.match(milaActionsRoute, /READ_ONLY_ERP_ACTIONS = new Set\(\["get_erp_business_context", "get_finished_goods_stock"\]\)/);
+  assert.match(milaActionsRoute, /READ_ONLY_ERP_ACTIONS = new Set\(\["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"\]\)/);
   // Company knowledge joins the everyone list: it is read-only and scoped to one
   // vault folder, so an employee looking up a price reaches nothing that was not
   // meant for them.
