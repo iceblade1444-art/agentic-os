@@ -1,4 +1,5 @@
 import { icon } from "../icons.js";
+import { t } from "../i18n.js";
 import { api } from "../api.js";
 import { esc, toast } from "../ui.js";
 import { timeAgo } from "../store.js";
@@ -34,27 +35,27 @@ export default {
   title: "Missions",
   render() {
     if (!api.on) {
-      return `<div class="page-head"><div><div class="page-title">Missions</div><div class="page-sub">Give a mission; an orchestrator makes it real via Agentic OS.</div></div></div>
-      <div class="alert info"><span class="a-ico">${icon("info")}</span><div class="a-body"><div class="a-title">Backend required</div><div class="a-desc">Missions need the Node backend. Run <span class="mono">npm start</span> and reload. Then either use the built-in OpenAI orchestrator, or drive missions from external <b>Hermes</b> via the <span class="mono">agentic-os</span> MCP bridge (see the README).</div></div></div>`;
+      return `<div class="page-head"><div><div class="page-title">${t("missions.title")}</div><div class="page-sub">${t("missions.subOffline")}</div></div></div>
+      <div class="alert info"><span class="a-ico">${icon("info")}</span><div class="a-body"><div class="a-title">${t("routines.backendRequired")}</div><div class="a-desc">${t("missions.backendHint")}</div></div></div>`;
     }
     return `
-    <div class="page-head"><div><div class="page-title">Missions</div><div class="page-sub">Give a mission; Hermes or the built-in orchestrator makes it real using Agentic OS tools.</div></div></div>
+    <div class="page-head"><div><div class="page-title">${t("missions.title")}</div><div class="page-sub">${t("missions.sub")}</div></div></div>
     <div class="grid" style="grid-template-columns:380px 1fr;align-items:start">
       <div class="stack gap-4">
         <div class="card pad-lg">
-          <div class="section-title">New mission</div>
-          <div class="field"><label class="label">Title</label><input class="input" id="mTitle" placeholder="e.g. Add 21 + 21 with a tool"/></div>
-          <div class="field"><label class="label">Goal</label><textarea class="textarea" id="mGoal" placeholder="Describe what to accomplish…"></textarea></div>
-          <div class="field"><label class="label">Orchestrator</label><select class="select" id="mOrch"><option value="built-in">Built-in (OpenAI brain)</option><option value="hermes">Hermes (external agent)</option></select></div>
+          <div class="section-title">${t("missions.new")}</div>
+          <div class="field"><label class="label">${t("missions.field.title")}</label><input class="input" id="mTitle" placeholder="${t("missions.field.titleHint")}"/></div>
+          <div class="field"><label class="label">${t("missions.field.goal")}</label><textarea class="textarea" id="mGoal" placeholder="${t("missions.field.goalHint")}"></textarea></div>
+          <div class="field"><label class="label">${t("missions.field.orchestrator")}</label><select class="select" id="mOrch"><option value="built-in">${t("missions.builtIn")}</option><option value="hermes">${t("missions.hermes")}</option></select></div>
           <button class="btn btn-primary block" id="mLaunch">${icon("rocket")}Launch mission</button>
         </div>
         <div class="card pad-lg">
-          <div class="section-title">Missions</div>
-          <div id="mList" class="stack gap-2"><div class="row gap-2"><div class="spinner"></div><span class="muted">Loading…</span></div></div>
+          <div class="section-title">${t("missions.title")}</div>
+          <div id="mList" class="stack gap-2"><div class="row gap-2"><div class="spinner"></div><span class="muted">${t("missions.loading")}</span></div></div>
         </div>
       </div>
       <div class="card pad-lg" id="mDetail">
-        <div class="empty"><div class="empty-ico">${icon("rocket")}</div><h4>No mission selected</h4><p>Launch a mission or pick one from the list to watch it execute live.</p></div>
+        <div class="empty"><div class="empty-ico">${icon("rocket")}</div><h4>${t("missions.noneSelected")}</h4><p>${t("missions.noneSelectedHint")}</p></div>
       </div>
     </div>`;
   },
@@ -67,7 +68,7 @@ export default {
     async function refreshList() {
       let list = [];
       try { list = await api.missions.list(); } catch (e) { listEl.innerHTML = `<span class="muted">${esc(e.message)}</span>`; return; }
-      if (!list.length) { listEl.innerHTML = `<span class="dim text-sm">No missions yet.</span>`; return; }
+      if (!list.length) { listEl.innerHTML = `<span class="dim text-sm">${t("missions.empty")}</span>`; return; }
       listEl.innerHTML = list.map((m) => `<button class="wf-node-btn" data-mid="${m.id}" style="width:100%${m.id === selected ? ";border-color:var(--primary)" : ""}">
         <span class="status-dot" style="background:${m.status === "completed" ? "var(--success)" : m.status === "running" ? "var(--warning)" : m.status === "failed" ? "var(--error)" : "var(--text-3)"};flex:none"></span>
         <div class="stack" style="min-width:0"><span class="t">${esc(m.title)}</span><span class="d">${m.status} · ${m.events} events · ${timeAgo(m.createdAt)}</span></div></button>`).join("");
@@ -86,9 +87,9 @@ export default {
       detailEl.innerHTML = `
         <div class="row between mb-4"><div style="min-width:0"><div class="text-lg fw-700">${esc(m.title)}</div><div class="hint">${esc(m.goal || "")}</div></div>
           <div class="row gap-2">${m.status === "pending" ? `<button class="btn btn-primary sm" id="mRun">${icon("play")}Run</button>` : ""}<span id="mStatus">${statusBadge(m.status)}</span></div></div>
-        ${m.orchestrator ? `<div class="hint mb-4">Orchestrator: <b>${esc(m.orchestrator)}</b></div>` : ""}
-        <div class="section-title">Execution feed</div>
-        <div id="mFeed" class="stack">${(m.events || []).map(eventHTML).join("") || `<span class="dim text-sm">No events yet — run the mission.</span>`}</div>`;
+        ${m.orchestrator ? `<div class="hint mb-4">${t("missions.field.orchestrator")}: <b>${esc(m.orchestrator)}</b></div>` : ""}
+        <div class="section-title">${t("missions.feed")}</div>
+        <div id="mFeed" class="stack">${(m.events || []).map(eventHTML).join("") || `<span class="dim text-sm">${t("missions.noEvents")}</span>`}</div>`;
       const runBtn = detailEl.querySelector("#mRun");
       if (runBtn) runBtn.onclick = () => runMission(m.id);
     }
@@ -106,7 +107,7 @@ export default {
           feed.scrollIntoView({ block: "nearest" });
           if (e.status && statusEl) statusEl.innerHTML = statusBadge(e.status);
         });
-      } catch (e) { toast("error", "Run failed", e.message); }
+      } catch (e) { toast("error", t("missions.runFailed"), e.message); }
       const fresh = await api.missions.get(id);
       renderDetail(fresh);
       refreshList();
@@ -116,15 +117,15 @@ export default {
       const title = root.querySelector("#mTitle").value.trim();
       const goal = root.querySelector("#mGoal").value.trim();
       const orch = root.querySelector("#mOrch").value;
-      if (!title && !goal) return toast("error", "Add a title or goal");
+      if (!title && !goal) return toast("error", t("missions.needTitleOrGoal"));
       let created;
-      try { created = await api.missions.create({ title, goal, orchestrator: orch }); } catch (e) { return toast("error", "Failed", e.message); }
+      try { created = await api.missions.create({ title, goal, orchestrator: orch }); } catch (e) { return toast("error", t("alert.requestFailed"), e.message); }
       root.querySelector("#mTitle").value = "";
       root.querySelector("#mGoal").value = "";
       selected = created.id;
       await refreshList();
-      if (orch === "built-in") { toast("success", "Mission launched", "Running with the built-in orchestrator…"); runMission(created.id); }
-      else { toast("success", "Mission queued for Hermes", "Hermes pulls it via list_missions and reports back here."); openMission(created.id); }
+      if (orch === "built-in") { toast("success", t("missions.launched"), t("missions.launchedHint")); runMission(created.id); }
+      else { toast("success", t("missions.queued"), t("missions.queuedHint")); openMission(created.id); }
     };
 
     refreshList();

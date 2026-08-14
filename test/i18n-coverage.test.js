@@ -13,11 +13,18 @@ import { SUPPORTED_LOCALES, setLocale, t } from "../assets/js/i18n.js";
 const pagesDir = fileURLToPath(new URL("../assets/js/pages/", import.meta.url));
 const pages = fs.readdirSync(pagesDir).filter((name) => name.endsWith(".js"));
 
-// Still English, and known to be. Shrink this list; never grow it. Each entry
-// costs a Russian-speaking operator a page they cannot read, so leaving one here
-// is a decision to postpone, not a decision to skip.
+// Not translated, and known not to be. Shrink this list; never grow it. Each
+// entry costs somebody a page they cannot read, so leaving one here is a
+// decision to postpone with a reason, not a decision to skip.
 const NOT_TRANSLATED_YET = new Set([
-  "claude-code.js", "components.js", "missions.js", "speech.js",
+  // A design-system showcase, reached from an admin menu. Its content is the
+  // component names themselves — there is nothing here a translation makes
+  // readable.
+  "components.js",
+  // Not English: hardcoded *Russian*, which a census of t() calls cannot see.
+  // So it reads fine for a Russian operator and is broken in the other two
+  // languages — the opposite problem from every other page on this list.
+  "speech.js",
 ]);
 
 test("no page quietly falls out of translation", () => {
