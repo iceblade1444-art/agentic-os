@@ -18,9 +18,7 @@ export function createErpBridge(options = {}) {
   const store = options.db || db;
   const mcp = options.mcpManager || mcpManager;
 
-  async function call(tool, args = {}) {
-    const server = findServer(store);
-    if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
+  async function attempt(server, tool, args) {
     if (!mcp.isLive(server.id)) {
       const connected = await mcp.connect(server);
       store.mcp.update(server.id, { status: "active", tools: connected.tools });
@@ -28,6 +26,23 @@ export function createErpBridge(options = {}) {
     const result = await mcp.callTool(server.id, tool, args);
     const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
     try { return JSON.parse(text); } catch { return { ok: true, text }; }
+  }
+
+  async function call(tool, args = {}) {
+    const server = findServer(store);
+    if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
+    try {
+      return await attempt(server, tool, args);
+    } catch (error) {
+      // A held connection dies with the child process — every deploy restarts
+      // the container mid-conversation somewhere. That is a stale pipe, not an
+      // ERP answer, so drop the connection and try once on a fresh one. Real
+      // errors (bad tool, ERP 403) come back identically on the retry and are
+      // reported as themselves.
+      if (!/closed|not connected|EPIPE|terminated/i.test(error.message || "")) throw error;
+      await mcp.disconnect(server.id).catch(() => {});
+      return attempt(server, tool, args);
+    }
   }
 
   const safeCall = (tool, args = {}) => call(tool, args)

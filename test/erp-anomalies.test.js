@@ -53,3 +53,36 @@ test("small moves and missing data stay silent", async () => {
   assert.equal((await f.instance.tick()).length, 0, "missing data can neither trigger nor clear");
   f.cleanup();
 });
+
+test("a dead MCP pipe is retried once on a fresh connection; real errors are not", async () => {
+  const { createErpBridge } = await import("../server/lib/erp-bridge.js");
+  const calls = [];
+  let first = true;
+  const bridge = createErpBridge({
+    db: { mcp: { list: () => [{ id: "mcp_erp", kind: "erp" }], update: () => {} } },
+    mcpManager: {
+      isLive: () => true,
+      connect: async () => ({ tools: [] }),
+      disconnect: async () => calls.push("disconnect"),
+      callTool: async () => {
+        calls.push("call");
+        if (first) { first = false; throw new Error("MCP error -32000: Connection closed"); }
+        return { content: [{ type: "text", text: '{"ok":true,"data":1}' }] };
+      },
+    },
+  });
+  // The deploy window: the held pipe died, the retry answers.
+  const result = await bridge.call("erp_late_orders", {});
+  assert.deepEqual(result, { ok: true, data: 1 });
+  assert.deepEqual(calls, ["call", "disconnect", "call"]);
+
+  // A real error is itself, once — no blind retry loop.
+  const failing = createErpBridge({
+    db: { mcp: { list: () => [{ id: "mcp_erp", kind: "erp" }], update: () => {} } },
+    mcpManager: {
+      isLive: () => true, connect: async () => ({ tools: [] }), disconnect: async () => {},
+      callTool: async () => { throw new Error("Unknown tool erp_nonsense"); },
+    },
+  });
+  await assert.rejects(failing.call("erp_nonsense", {}), /Unknown tool/);
+});
