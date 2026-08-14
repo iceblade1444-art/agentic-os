@@ -12,6 +12,7 @@ import { spokenPlan } from "../lib/personal-planner.js";
 import { reminders } from "../lib/reminders.js";
 import { personalProfiles, PROFILE_CATEGORIES } from "../lib/personal-profile.js";
 import { morningBrief } from "../lib/morning-brief.js";
+import { telegram } from "../lib/telegram.js";
 
 const r = Router();
 
@@ -111,6 +112,25 @@ r.delete("/profile-facts/:id", (req, res, next) => {
     }
     res.json({ ok: true });
   } catch (error) { next(error); }
+});
+
+// ---------- Telegram link ----------
+//
+// Linking is per account and self-service: the code is issued to the signed-in
+// session and consumed by whichever chat opens the deep link, so the chat that
+// ends up linked is provably the caller's own. Nothing here accepts a chat id.
+r.get("/telegram", (req, res) => {
+  res.json({ configured: telegram.configured(), ...telegram.link(authenticatedUser(req).id) });
+});
+
+r.post("/telegram/link", async (req, res, next) => {
+  try {
+    res.json(await telegram.issueLinkCode(authenticatedUser(req)));
+  } catch (error) { next(error); }
+});
+
+r.delete("/telegram", (req, res) => {
+  res.json({ ok: telegram.unlink(authenticatedUser(req).id) });
 });
 
 r.get("/reminders", (req, res) => {

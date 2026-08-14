@@ -202,9 +202,13 @@ test("the profile is visible and removable outside of asking her", () => {
     assert.match(route, pattern, `the ${method} route must exist`);
   }
   // Every route reads the caller from the session, never from the request body.
+  // The same rule covers the Telegram-link routes that live between these two:
+  // linking, status and unlink are all "whoever is signed in", by construction.
   const block = route.slice(route.indexOf('r.get("/profile-facts"'), route.indexOf('r.get("/reminders"'));
   assert.equal(/req\.body\?\.userId|req\.query\.userId|req\.params\.userId/.test(block), false);
-  assert.equal((block.match(/authenticatedUser\(req\)/g) || []).length, 3);
+  const routesInBlock = (block.match(/r\.(get|post|delete)\(/g) || []).length;
+  assert.equal((block.match(/authenticatedUser\(req\)/g) || []).length, routesInBlock,
+    "each route in this stretch identifies the caller exactly once, from the session");
 
   const page = fs.readFileSync(new URL("../assets/js/pages/personal.js", import.meta.url), "utf8");
   assert.match(page, /function profileFactsPanel/);

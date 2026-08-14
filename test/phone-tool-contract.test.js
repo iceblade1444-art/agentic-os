@@ -22,6 +22,7 @@ const SHIPPED_PHONE_TOOLS = [
   "list_my_calendar",
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
   "remember_about_me", "read_about_me", "forget_about_me",
+  "send_telegram",
 ];
 
 // Mirrors the route's own composition, which member-portal.test.js pins to the

@@ -273,6 +273,26 @@ function soulView() {
   </div>`;
 }
 
+// Personal Telegram delivery. Linking is one tap on a deep link, and the panel
+// says plainly where things will arrive and how to turn it off — a channel into
+// someone's personal messenger must never be a surprise.
+function telegramPanel() {
+  const tg = data.telegram || {};
+  const status = !tg.configured
+    ? `<p class="personal-knows-hint">${t("personal.tg.notConfigured")}</p>`
+    : tg.linked
+      ? `<p class="personal-knows-hint">${t("personal.tg.linked", { username: tg.username ? "@" + esc(tg.username) : "Telegram" })}</p>
+        <button class="btn btn-secondary sm" data-tg-unlink>${icon("x")}${t("personal.tg.unlink")}</button>`
+      : `<p class="personal-knows-hint">${t("personal.tg.hint")}</p>
+        <button class="btn btn-primary sm" data-tg-link>${icon("send")}${t("personal.tg.link")}</button>`;
+  return `<section class="personal-panel personal-telegram">
+    <header><div><span>Telegram</span><h3>${t("personal.tg.title")}</h3></div>
+    ${tg.linked ? `<span class="badge success">${t("personal.tg.on")}</span>` : `<span class="badge neutral">${t("personal.tg.off")}</span>`}</header>
+    ${status}
+    <div class="personal-tg-slot" data-tg-slot></div>
+  </section>`;
+}
+
 // What MILA has been told about the owner. It shapes every answer she gives, so
 // it has to be visible and removable somewhere other than by asking her.
 function profileFactsPanel() {
@@ -307,7 +327,7 @@ function profileFactsPanel() {
 function memoryView(query = "") {
   const normalized = query.trim().toLowerCase();
   const notes = normalized ? data.notes.filter((note) => `${note.title} ${note.content || ""}`.toLowerCase().includes(normalized)) : data.notes;
-  return `${profileFactsPanel()}<section class="personal-panel personal-memory">
+  return `${telegramPanel()}${profileFactsPanel()}<section class="personal-panel personal-memory">
     <header><div><span>${t("personal.personalContext")}</span><h3>${t("personal.memoryNotes")}</h3></div><a class="btn btn-primary sm" href="#/my-notes">${icon("plus")}${t("personal.newNote")}</a></header>
     <div class="personal-memory-search">${icon("search")}<input data-memory-search value="${esc(query)}" placeholder="${t("personal.searchMemory")}"/></div>
     <div class="personal-memory-grid">${notes.length ? notes.map((note) => `<a href="#/my-notes/${encodeURIComponent(note.id)}"><span class="personal-memory-glyph">${icon("file")}</span><div><strong>${esc(note.title)}</strong><p>${esc((note.content || t("personal.emptyNote")).slice(0, 180))}</p><small>${t("personal.updated", { date: shortDate(note.updatedAt) })}</small></div></a>`).join("") : `<div class="personal-empty wide">${icon("search")}<strong>${t("personal.notFound")}</strong><span>${t("personal.changeQuery")}</span></div>`}</div>
@@ -387,10 +407,12 @@ async function loadPlan({ refresh = false } = {}) {
 async function loadSide() {
   // Independent of each other and of the plan: one failing must not blank the
   // others, so each settles on its own.
-  const [reminders, profile] = await Promise.allSettled([
+  const [reminders, profile, telegramStatus] = await Promise.allSettled([
     api.personal.reminders(),
     api.personal.profileFacts(),
+    api.personal.telegramStatus(),
   ]);
+  data.telegram = telegramStatus.status === "fulfilled" ? telegramStatus.value : { configured: false };
   data.reminders = reminders.status === "fulfilled" ? (reminders.value.reminders || []) : [];
   data.profileFacts = profile.status === "fulfilled" ? (profile.value.facts || []) : [];
   data.profileCategories = profile.status === "fulfilled" ? (profile.value.categories || []) : [];
@@ -544,6 +566,27 @@ function wire(root) {
       state.textContent = error.message;
       toast("error", t("personal.profileSaveError"), error.message);
     }
+  });
+  root.querySelector("[data-tg-link]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const { url } = await api.personal.telegramLink();
+      const slot = root.querySelector("[data-tg-slot]");
+      // The link opens Telegram itself; the code inside is one-time and short-lived.
+      if (slot) slot.innerHTML = `<a class="btn btn-primary sm" href="${esc(url)}" target="_blank" rel="noopener">${icon("send")}${t("personal.tg.open")}</a>
+        <span class="personal-knows-hint">${t("personal.tg.after")}</span>`;
+      window.open(url, "_blank", "noopener");
+    } catch (error) {
+      toast("error", "Telegram", error.message);
+      button.disabled = false;
+    }
+  });
+  root.querySelector("[data-tg-unlink]")?.addEventListener("click", async () => {
+    try {
+      await api.personal.telegramUnlink();
+      await reload(root, activeTab);
+    } catch (error) { toast("error", "Telegram", error.message); }
   });
   root.querySelector("[data-fact-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();

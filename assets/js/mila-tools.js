@@ -99,6 +99,13 @@ export const MILA_PERSONAL_TOOLS = [
     }, required: ["factId"] },
   },
   {
+    name: "send_telegram",
+    description: "Send text to the owner's own linked Telegram — a summary, a plan, a number they asked to have at hand. Their chat only: there is no way to send to anyone else's. If it comes back linked:false, tell them to link Telegram on the Personal page first.",
+    parameters: { type: "object", properties: {
+      text: { type: "string", description: "What to deliver, ready to read in a chat" },
+    }, required: ["text"] },
+  },
+  {
     name: "list_my_calendar",
     description: "Read real Google Calendar events in a time range. Use it before proposing a meeting time so you never double-book.",
     parameters: { type: "object", properties: {

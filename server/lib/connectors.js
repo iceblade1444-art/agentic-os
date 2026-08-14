@@ -17,6 +17,8 @@ export const PROVIDERS = {
     fields: [{ key: "connectionString", label: "Connection string", secret: true }] },
   mila: { name: "MILA Voice", desc: "Gemini Live voice agent, mobile sessions & releases", icon: "mic", color: "violet",
     fields: [{ key: "baseUrl", label: "MILA backend URL" }, { key: "adminToken", label: "Admin Token", secret: true }] },
+  telegram: { name: "Telegram", desc: "Personal delivery: reminders, briefs and anything MILA is asked to send", icon: "send", color: "cyan",
+    fields: [{ key: "botToken", label: "Bot Token (from @BotFather)", secret: true }] },
 };
 
 const ok = (detail) => ({ ok: true, detail });
@@ -38,6 +40,13 @@ export async function testConnection(provider, cfg = {}) {
         if (!key) return fail("Missing API key");
         const r = await timedFetch(base + "/models", { headers: { Authorization: "Bearer " + key } });
         return r.ok ? ok("Reachable · /models returned 200") : fail("HTTP " + r.status);
+      }
+      case "telegram": {
+        const token = cfg.botToken || process.env.TELEGRAM_BOT_TOKEN;
+        if (!token) return fail("Missing bot token");
+        const r = await timedFetch(`https://api.telegram.org/bot${token}/getMe`);
+        const json = await r.json().catch(() => ({}));
+        return json.ok ? ok(`Reachable · bot @${json.result?.username}`) : fail(json.description || "HTTP " + r.status);
       }
       case "anthropic": {
         const key = cfg.apiKey || config.anthropic.key;

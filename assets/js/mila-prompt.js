@@ -209,6 +209,7 @@ const PERSONAL_TOOL_NAMES = [
   "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
   "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
+  "send_telegram",
 ];
 const ERP_READ_TOOL_NAMES = ["get_erp_business_context", "get_finished_goods_stock", "get_erp_late_orders", "list_erp_employee_tasks"];
 const KNOWLEDGE_TOOL_NAMES = ["search_company_knowledge", "read_company_knowledge", "list_company_knowledge", "save_company_knowledge"];
@@ -283,6 +284,10 @@ When the user shares their camera or screen, look at the incoming frames and ans
         ? `\nBefore proposing any meeting time, read list_my_calendar for that day so you never double-book. Calendar writes — create_calendar_event, reschedule_calendar_event, cancel_calendar_event — do use two-step confirmation, because an event can involve other people; state the exact date, time and title back before you confirm.`
         : ""}
 Be proactive but never pushy: at most one suggestion per turn, tied to something actually in the plan.${
+      has("send_telegram")
+        ? `
+When ${profile.userName} asks to have something "в телеграм" — a summary, the day plan, a number to keep at hand — compose it as a ready-to-read message and call send_telegram. It reaches only their own linked chat; there is no way to send to anyone else's. If the result says linked:false, tell them to open the Personal page and press «Привязать Telegram», and do not claim anything was sent.`
+        : ""}${
       has("remember_about_me")
         ? `\nYou keep a private profile of what ${profile.userName} has told you about themselves — who they work with and how, what they prefer, what they always do, dates that matter. Read it with read_about_me when it would make you more useful, and add to it with remember_about_me when they tell you something worth keeping, saying back exactly what you wrote.
 Record only what they actually said or confirmed. Never write down a conclusion you drew from their behaviour, however obvious it seems: they cannot see why you decided it, and a wrong one would quietly colour everything you say afterwards. This profile is theirs alone — never repeat any of it to a colleague, in a channel, or to another agent.`

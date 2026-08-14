@@ -13,6 +13,7 @@ import { personalProfiles } from "./personal-profile.js";
 import { pushDevices } from "./push-devices.js";
 import { reminders } from "./reminders.js";
 import { messenger } from "./messenger.js";
+import { telegram } from "./telegram.js";
 
 let configuredWorkspaceStore = memberWorkspaces;
 
@@ -30,6 +31,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const pushDeviceStore = dependencies.pushDevices || pushDevices;
   const reminderStore = dependencies.reminders || reminders;
   const messengerStore = dependencies.messenger || messenger;
+  const telegramStore = dependencies.telegram || telegram;
   const user = userStore.get(id);
   if (!user) return null;
 
@@ -47,6 +49,9 @@ export async function deleteUserAccount(id, dependencies = {}) {
   // because one reads raw ids and the other resolves them against the directory.
   reminderStore.removeUser(id);
   messengerStore.removeUser(id);
+  // And the bridge to their Telegram, or a deleted account keeps receiving
+  // company notifications in a chat nobody can unlink any more.
+  telegramStore.removeUser(id);
 
   const slug = safeUserSlug(user);
   for (const note of [

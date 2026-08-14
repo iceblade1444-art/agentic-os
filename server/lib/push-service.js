@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 
 import { config } from "../config.js";
 import { pushDevices } from "./push-devices.js";
+import { telegram } from "./telegram.js";
 
 const oauthUrl = "https://oauth2.googleapis.com/token";
 const messagingScope = "https://www.googleapis.com/auth/firebase.messaging";
@@ -117,6 +118,15 @@ class PushService {
   }
 
   async sendInbox(userId, item) {
+    // Telegram rides along with every notification: this is the one door all
+    // of them leave through — reminders, the morning brief, messenger pushes —
+    // so a user who linked their chat gets each of them there too. Best-effort
+    // and first, because having no FCM devices used to end delivery entirely,
+    // and a phone without the app is exactly who Telegram is for.
+    telegram
+      .sendText(userId, [item?.title, item?.body].filter(Boolean).join("\n"))
+      .catch((error) => console.warn(`[telegram] delivery failed for ${userId}: ${error.message}`));
+
     const devices = pushDevices.list(userId);
     if (!devices.length) return { attempted: 0, delivered: 0, configured: this.configured() };
     try {

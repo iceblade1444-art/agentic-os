@@ -15,6 +15,7 @@ import { memberWorkspaces } from "./member-workspace.js";
 import { dayPlanFor } from "./personal-day.js";
 import { spokenPlan } from "./personal-planner.js";
 import { reminders } from "./reminders.js";
+import { telegram } from "./telegram.js";
 import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
@@ -39,6 +40,7 @@ export const PERSONAL_ACTIONS = new Set([
   "list_my_calendar", "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
   "remember_about_me", "read_about_me", "forget_about_me",
+  "send_telegram",
 ]);
 // Company knowledge every employee may read. It is the one part of the vault
 // that is not operator material, and reading it is how MILA answers a question
@@ -295,6 +297,7 @@ export function createMilaActions(options = {}) {
   const workspaces = options.memberWorkspaces || memberWorkspaces;
   const calendar = options.googleWorkspace || googleWorkspace;
   const reminderStore = options.reminders || reminders;
+  const telegramBridge = options.telegram || telegram;
   const profiles = options.personalProfiles || personalProfiles;
   const dayPlan = options.dayPlanFor || dayPlanFor;
   const now = options.now || Date.now;
@@ -582,6 +585,21 @@ export function createMilaActions(options = {}) {
       if (!id) throw Object.assign(new Error("Which fact should be forgotten?"), { status: 400 });
       if (!profiles.forget(user.id, id)) throw Object.assign(new Error("Fact not found"), { status: 404 });
       return { ok: true, action: name, factId: id };
+    }
+
+    if (name === "send_telegram") {
+      // Delivery to the caller's own linked chat and nowhere else. The bridge
+      // resolves user.id through the link that user created; there is no
+      // argument that can point it at anyone else's Telegram.
+      const text = bounded(args.text, 8000);
+      if (!text) throw Object.assign(new Error("What should be sent?"), { status: 400 });
+      const status = telegramBridge.link(user.id);
+      if (!status.linked) {
+        return { ok: false, linked: false, note: "Telegram is not linked. Tell them to open the Personal page and press «Привязать Telegram» — it takes one tap." };
+      }
+      const sent = await telegramBridge.sendText(user.id, text);
+      if (!sent) throw Object.assign(new Error("Telegram delivery failed"), { status: 502 });
+      return { ok: true, action: name, note: "Delivered to their own linked Telegram." };
     }
 
     if (name === "list_my_reminders") {
