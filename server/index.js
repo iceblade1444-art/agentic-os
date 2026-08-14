@@ -24,6 +24,7 @@ import telemetry from "./routes/telemetry.js";
 import skills from "./routes/skills.js";
 import routines from "./routes/routines.js";
 import sales from "./routes/sales.js";
+import meetings from "./routes/meetings.js";
 import governance from "./routes/governance.js";
 import memory from "./routes/memory.js";
 import studio from "./routes/studio.js";
@@ -258,6 +259,7 @@ app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
 app.use("/api/sales", requireOperator, sales);
+app.use("/api/meetings", requireOperator, meetings);
 app.use("/api/studio", requireStudio, studio);
 // ERP is readable by every signed-in role; the router keeps its write tools operator-only.
 app.use("/api/erp", erp);

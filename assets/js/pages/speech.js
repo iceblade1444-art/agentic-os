@@ -98,9 +98,11 @@ export default {
         </div>
         <div id="dropZone" class="sp-drop">…или перетащи аудиофайл сюда (mp3, wav, ogg, m4a — до 25 МБ)</div>
         <textarea id="sttOut" class="input mt-4" rows="5" placeholder="Здесь появится распознанный текст…"></textarea>
+        <div id="minutesOut" class="mt-4" style="display:none"></div>
         <div class="row between mt-4">
           <div class="hint" id="sttMeta"></div>
           <div class="row" style="gap:6px">
+            <button class="btn btn-primary" id="sttMinutes" title="MILA превратит запись в протокол: решения, поручения, сроки">Протокол совещания</button>
             <button class="btn" id="sttCopy">Копировать</button>
             <button class="btn" id="sttTxt">.txt</button>
             <button class="btn" id="sttSrt" title="Субтитры с таймкодами">.srt</button>
@@ -189,6 +191,53 @@ export default {
         toast(`STT: ${esc(err.message)}`);
       }
     }
+
+    q("#sttMinutes").onclick = async () => {
+      const transcript = q("#sttOut").value.trim();
+      const out = q("#minutesOut");
+      if (transcript.length < 40) { toast("Сначала распознайте запись — протокол строится из текста"); return; }
+      q("#sttMinutes").disabled = true;
+      out.style.display = "";
+      out.innerHTML = `<div class="row gap-2"><div class="spinner"></div><span class="muted">MILA составляет протокол…</span></div>`;
+      try {
+        const res = await fetch("/api/meetings/minutes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.status);
+        out.innerHTML = `<div class="card pad-lg">
+          <div class="section-title">${esc(data.title)}</div>
+          <p>${esc(data.summary)}</p>
+          ${data.decisions.length ? `<div class="fw-600 mt-3">Решения</div><ul>${data.decisions.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
+          ${data.actions.length ? `<div class="fw-600 mt-3">Поручения</div>${data.actions.map((item, index) => `
+            <div class="row between mt-2" style="gap:8px">
+              <span>${esc(item.title)}${item.owner ? ` — <b>${esc(item.owner)}</b>` : ""}${item.due ? ` <span class="muted">(до ${esc(item.due)})</span>` : ""}</span>
+              <button class="btn sm" data-minute-task="${index}">В мои задачи</button>
+            </div>`).join("")}` : ""}
+          ${data.openQuestions.length ? `<div class="fw-600 mt-3">Открытые вопросы</div><ul>${data.openQuestions.map((item) => `<li>❔ ${esc(item)}</li>`).join("")}</ul>` : ""}
+          <div class="hint mt-3">${data.savedTo ? `Сохранено в vault: ${esc(data.savedTo)}` : "В vault не сохранилось — протокол только на экране"}</div>
+        </div>`;
+        out.querySelectorAll("[data-minute-task]").forEach((button) => {
+          button.onclick = async () => {
+            const item = data.actions[Number(button.dataset.minuteTask)];
+            button.disabled = true;
+            try {
+              const created = await fetch("/api/member/tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: item.title, detail: item.owner ? `Поручение: ${item.owner}` : "Из протокола совещания", dueDate: item.due || "", status: "todo" }),
+              });
+              if (!created.ok) throw new Error((await created.json()).error || created.status);
+              button.textContent = "Добавлено ✓";
+            } catch (err) { button.disabled = false; toast(`Задача: ${esc(err.message)}`); }
+          };
+        });
+      } catch (err) {
+        out.innerHTML = `<div class="alert error"><div class="a-body"><div class="a-desc">${esc(err.message)}</div></div></div>`;
+      } finally { q("#sttMinutes").disabled = false; }
+    };
 
     async function recordToggle(stateEl, onDone) {
       if (rec && rec.state === "recording") { rec.stop(); return; }
