@@ -257,7 +257,7 @@ app.use("/api/operations", requireOperator, operations);
 app.use("/api/pulse", requireOperator, pulse);
 app.use("/api/skills", requireOperator, skills);
 app.use("/api/routines", requireOperator, routines);
-app.use("/api/sales", requireAdmin, sales);
+app.use("/api/sales", requireOperator, sales);
 app.use("/api/studio", requireStudio, studio);
 // ERP is readable by every signed-in role; the router keeps its write tools operator-only.
 app.use("/api/erp", erp);

@@ -3,7 +3,7 @@ import { Router } from "express";
 import { salesBot } from "../lib/sales-bot.js";
 
 // Leads captured by the customer bot. Operator-only: the pipeline is company
-// data, and the route is mounted behind requireAdmin in index.js.
+// data, and the route is mounted behind requireOperator in index.js.
 const r = Router();
 
 r.get("/leads", (req, res) => {
