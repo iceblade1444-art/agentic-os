@@ -206,8 +206,11 @@ def _as_reference_wav(path: str) -> str:
     import wave
 
     out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    # apad: a reference that ends mid-breath reads as an unfinished sentence and
+    # the model finishes it before speaking the requested text
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", path,
-                        "-t", str(REF_MAX_SEC), "-ac", "1", "-ar", "16000", out],
+                        "-t", str(REF_MAX_SEC), "-af", "apad=pad_dur=0.5",
+                        "-ac", "1", "-ar", "16000", out],
                        capture_output=True)
     if r.returncode != 0 or not os.path.getsize(out):
         raise RuntimeError("не удалось прочитать образец голоса — "
