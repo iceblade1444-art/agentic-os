@@ -251,6 +251,14 @@ export const MILA_TOOLS = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "get_sewing_daily_report",
+    description: "The daily sewing report for one date and factory: per-line output plus flow capacity — the same data as the ERP page /sewing/daily-report. Use it for questions about сегодняшняя/вчерашняя выработка швейных цехов. If ok is false, read error.message aloud (usually a missing ERP permission) and never invent output numbers.",
+    parameters: { type: "object", properties: {
+      reportDate: { type: "string", description: "YYYY-MM-DD; omit for today" },
+      factoryCode: { type: "string", description: "Factory code, default MIL" },
+    } },
+  },
+  {
     name: "get_erp_business_context",
     description: "Read live Milana ERP business context for questions about production, cutting, sewing flow load, warehouse ETA, finished-goods stock from /warehouse-stock and /warehouse-map, material inventory, finance and operational risks.",
     parameters: { type: "object", properties: {
@@ -330,7 +338,7 @@ export const MILA_TOOLS = [
 // Claude Code or MCP tool — the server enforces this too (server/routes/mila-actions.js),
 // this list only keeps the model from offering actions it cannot actually perform.
 export const MILA_MEMBER_TOOLS = MILA_TOOLS.filter((tool) =>
-  ["get_erp_business_context", "get_finished_goods_stock"].includes(tool.name)
+  ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"].includes(tool.name)
   || MILA_PERSONAL_TOOLS.some((personal) => personal.name === tool.name)
   // Reading company knowledge, but not writing it: an employee looking up the
   // minimum order is the point, an employee rewriting it is not.

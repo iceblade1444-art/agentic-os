@@ -18,6 +18,7 @@ from .tools import (
     erp_me_tool,
     erp_search_tool,
     erp_send_notification_tool,
+    erp_sewing_daily_report_tool,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +54,12 @@ async def erp_search(query: str, limit_per_type: int = 5) -> dict[str, Any]:
 async def erp_active_production(limit: int = 25) -> dict[str, Any]:
     """Return active production status from the ERP dashboard endpoint."""
     return await erp_active_production_tool(limit=limit)
+
+
+@mcp.tool(structured_output=True)
+async def erp_sewing_daily_report(report_date: str | None = None, factory_code: str = "MIL") -> dict:
+    """Daily sewing report for one date and factory: per-line output plus flow capacity. Dates are YYYY-MM-DD; default is today."""
+    return await erp_sewing_daily_report_tool(report_date=report_date, factory_code=factory_code)
 
 
 @mcp.tool(structured_output=True)

@@ -639,6 +639,22 @@ export function createMilaActions(options = {}) {
       return { query, matches: await base.search(query, scope), source_policy: policy };
     }
 
+    if (name === "get_sewing_daily_report") {
+      // The daily sewing report the owner reads at /sewing/daily-report. A 403
+      // here means the MCP service account lacks sewing.daily_reports.view in
+      // the ERP — the result says so, and the prompt rule turns that into an
+      // honest sentence instead of "фабрика ничего не сшила".
+      const result = await erpCall("erp_sewing_daily_report", {
+        ...(args.reportDate ? { report_date: bounded(args.reportDate, 10) } : {}),
+        factory_code: bounded(args.factoryCode, 10) || "MIL",
+      });
+      return {
+        ok: result?.ok !== false,
+        source_policy: "Answer only from these rows. If ok is false, read error.message aloud — usually a missing ERP permission — and never invent output numbers.",
+        sewing: result?.data || result,
+        error: result?.error,
+      };
+    }
     if (name === "get_erp_late_orders") {
       const result = await erpCall("erp_late_orders", { limit: integer(args.limit, 1, 50, 20) });
       return {

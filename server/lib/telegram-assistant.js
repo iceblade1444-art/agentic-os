@@ -26,7 +26,7 @@ import { users } from "./users.js";
 
 const HISTORY_TURNS = 12;
 const MAX_TOOL_STEPS = 4;
-const READ_ONLY_ERP = new Set(["get_erp_business_context", "get_finished_goods_stock"]);
+const READ_ONLY_ERP = new Set(["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"]);
 // The same set a Member's phone may call — a Telegram message must never reach
 // further than the app in that person's hand.
 const allowed = (name) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name) || READ_ONLY_ERP.has(name);
@@ -36,7 +36,7 @@ const TOOL_NAMES = [
   "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
   "list_my_calendar", "remember_about_me", "read_about_me", "forget_about_me",
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
-  "get_erp_business_context", "get_finished_goods_stock",
+  "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
 ];
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);

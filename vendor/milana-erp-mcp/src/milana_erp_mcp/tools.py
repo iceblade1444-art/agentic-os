@@ -910,3 +910,48 @@ def _as_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+async def erp_sewing_daily_report_tool(
+    report_date: str | None = None,
+    factory_code: str = "MIL",
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """Daily sewing report: per-line output for one date, with flow capacity for context.
+
+    Mirrors the ERP page /sewing/daily-report. Needs the ERP permission
+    ``sewing.daily_reports.view`` on the MCP service account; a 403 comes back
+    as ok=False with that requirement named, so the assistant can say what is
+    missing instead of pretending the factory sewed nothing.
+    """
+    args = {"report_date": report_date, "factory_code": factory_code}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        date = (report_date or datetime.now(timezone.utc).date().isoformat())[:10]
+        factory = (factory_code or "MIL")[:10]
+        reports = await api.get(
+            f"/api/sewing-daily-reports?report_date={date}&factory_code={factory}"
+        )
+        # Flow directory: names and daily capacity, so the report reads as
+        # "line SEW-01 (Bozorova, capacity 600)" instead of bare ids.
+        flows: Any = []
+        try:
+            flows = await api.get(f"/api/sewing-flows?factory_code={factory}")
+        except ERPApiError:
+            flows = []
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": {
+                    "report_date": date,
+                    "factory_code": factory,
+                    "reports": reports,
+                    "flows": flows if isinstance(flows, list) else [],
+                },
+                "source": "/api/sewing-daily-reports + /api/sewing-flows",
+            }
+        )
+
+    return await _run_tool("erp_sewing_daily_report", args, handler, settings=settings, client=client)
