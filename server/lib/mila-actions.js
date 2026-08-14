@@ -17,6 +17,7 @@ import { spokenPlan } from "./personal-planner.js";
 import { reminders } from "./reminders.js";
 import { telegram } from "./telegram.js";
 import { skillLearner } from "./skill-learner.js";
+import { createErpBridge } from "./erp-bridge.js";
 import * as mcpManager from "../mcp/manager.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
@@ -144,6 +145,45 @@ function finishedGoodsFacts(data = {}) {
     answer_summary: totalPieces === null
       ? `Finished-goods stock is unavailable from ${sourcePage} + ${mapPage}; do not guess.`
       : `Finished-goods warehouse stock: ${parts.join(", ")}. Source: ${sourcePage} + ${mapPage}.`,
+  };
+}
+
+
+// The raw sewing report is ~23 rows of ~30 mostly-null fields — far past what a
+// text tool result may carry, and a clipped array once cost the owner three
+// quarters of the day's output: the model summed the rows it could still see
+// and answered "1255" against a real 5284. Aggregation happens here, where
+// arithmetic is arithmetic, and the model receives totals it can only read.
+function sewingFacts(data = {}) {
+  const reports = data.reports || {};
+  const rows = Array.isArray(reports.rows) ? reports.rows : [];
+  const capacity = new Map((Array.isArray(data.flows) ? data.flows : []).map((flow) => [flow.code, flow.capacity_per_day]));
+  const lines = new Map();
+  for (const row of rows) {
+    const code = bounded(row.line_code, 20) || "?";
+    const line = lines.get(code) || { code, name: bounded(row.line_name, 80), sewn: 0, defective: 0, models: new Set() };
+    line.sewn += Number(row.sewn_qty) || 0;
+    line.defective += Number(row.defective_qty) || 0;
+    const model = bounded(row.model_no || row.manual_model_no, 40);
+    if (model) line.models.add(model);
+    lines.set(code, line);
+  }
+  const totalSewn = firstNumber(reports.total_sewn_qty) ?? [...lines.values()].reduce((t, line) => t + line.sewn, 0);
+  const totalDefective = firstNumber(reports.total_defective_qty) ?? [...lines.values()].reduce((t, line) => t + line.defective, 0);
+  return {
+    report_date: bounded(data.report_date, 10),
+    factory_code: bounded(data.factory_code, 10),
+    total_sewn: totalSewn,
+    total_defective: totalDefective,
+    lines_reported: lines.size,
+    lines: [...lines.values()]
+      .sort((a, b) => b.sewn - a.sewn)
+      .map((line) => ({
+        code: line.code, name: line.name, sewn: line.sewn, defective: line.defective,
+        capacity_per_day: firstNumber(capacity.get(line.code)),
+        models: [...line.models].slice(0, 8),
+      })),
+    answer_summary: `Швейная выработка за ${bounded(data.report_date, 10)}: ${totalSewn} шт по ${lines.size} линиям, брак ${totalDefective}.`,
   };
 }
 
@@ -337,19 +377,14 @@ export function createMilaActions(options = {}) {
     }
   }
 
-  // One way into the ERP MCP server for everything outside the big context read,
-  // so a tool call cannot quietly skip the connect step.
-  async function erpCall(tool, args = {}) {
-    const server = store.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
-    if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
-    if (!mcp.isLive(server.id)) {
-      const connected = await mcp.connect(server);
-      store.mcp.update(server.id, { status: "active", tools: connected.tools });
-    }
-    const result = await mcp.callTool(server.id, tool, args);
-    const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
-    try { return JSON.parse(text); } catch { return { ok: true, text }; }
-  }
+  // One way into the ERP MCP server, shared with the day planner and the
+  // weekly review: the bridge owns the connect step and the retry over a pipe
+  // that died under a deploy. This used to be a private copy of the same
+  // dance, which meant it silently missed that retry.
+  // Built from the same injected db and MCP manager as everything else here,
+  // so a test that stubs those stubs the ERP too.
+  const bridge = options.erpBridge || createErpBridge({ db: store, mcpManager: mcp });
+  const erpCall = (tool, args = {}) => bridge.call(tool, args);
 
   function requireUser(context) {
     const user = context?.user;
@@ -672,10 +707,11 @@ export function createMilaActions(options = {}) {
         ...(args.reportDate ? { report_date: bounded(args.reportDate, 10) } : {}),
         factory_code: bounded(args.factoryCode, 10) || "MIL",
       });
+      const ok = result?.ok !== false;
       return {
-        ok: result?.ok !== false,
-        source_policy: "Answer only from these rows. If ok is false, read error.message aloud — usually a missing ERP permission — and never invent output numbers.",
-        sewing: result?.data || result,
+        ok,
+        source_policy: "Answer only from these fields. total_sewn is the day's number; lines are per sewing line. If ok is false, read error.message aloud — usually a missing ERP permission — and never invent output numbers.",
+        sewing: ok ? sewingFacts(result?.data || {}) : (result?.data || result),
         error: result?.error,
       };
     }

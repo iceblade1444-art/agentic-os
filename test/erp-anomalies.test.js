@@ -86,3 +86,40 @@ test("a dead MCP pipe is retried once on a fresh connection; real errors are not
   });
   await assert.rejects(failing.call("erp_nonsense", {}), /Unknown tool/);
 });
+
+test("the sewing report reaches the model as totals, not as rows to sum", async () => {
+  const { createMilaActions } = await import("../server/lib/mila-actions.js");
+  const rows = [];
+  // Six lines, several models each — the real shape that overflowed a text
+  // tool result and cost the owner three quarters of the day's output.
+  const plan = [["SEW-06", "Botirova Shaxnoza", [938, 312, 58]], ["SEW-07", "Jalolova Nargiza", [930]],
+    ["SEW-09", "Akbarova Dilafruz", [1575]], ["SEW-10", "Maxmudova Nargiza - 1", [471]],
+    ["SEW-12", "Botirova Muxlisa", [700]], ["SEW-13", "Maxmudova Nargiza - 2", [300]]];
+  for (const [code, name, quantities] of plan) {
+    for (const quantity of quantities) {
+      rows.push({ line_code: code, line_name: name, sewn_qty: quantity, defective_qty: 0, model_no: `M-${quantity}`, filler: "x".repeat(600) });
+    }
+  }
+  const actions = createMilaActions({
+    erpBridge: {
+      available: () => true,
+      call: async () => ({ ok: true, data: {
+        report_date: "2026-08-14", factory_code: "MIL",
+        reports: { rows, total_sewn_qty: 5284, total_defective_qty: 0 },
+        flows: [{ code: "SEW-06", capacity_per_day: 200 }],
+      } }),
+    },
+    journal: { append: async () => null, recentText: () => "" },
+    onboarding: { get: () => ({ profile: {} }) },
+    db: { mcp: { list: () => [], update: () => {} } },
+  });
+
+  const result = await actions.call("get_sewing_daily_report", {}, { actor: "Бахадыр", user: { id: "creator", name: "Бахадыр", role: "Creator" } });
+  assert.equal(result.sewing.total_sewn, 5284);
+  assert.equal(result.sewing.lines_reported, 6);
+  assert.equal(result.sewing.lines[0].code, "SEW-09", "lines come sorted by output");
+  assert.equal(result.sewing.lines.find((line) => line.code === "SEW-06").sewn, 1308);
+  assert.match(result.sewing.answer_summary, /5284 шт по 6 линиям/);
+  // The whole point: the compact result survives the 4000-character tool clamp.
+  assert.ok(JSON.stringify(result).length < 4000, `result is ${JSON.stringify(result).length} chars`);
+});
