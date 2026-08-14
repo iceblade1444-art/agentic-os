@@ -22,7 +22,7 @@ function seed() {
       { id: "mcp_desktop", name: "desktop", kind: "desktop", status: "stopped", tools: [], desc: "Local PC screen, camera and UI automation through the NOVA VOICE desktop bridge" },
       { id: "mcp_erp", name: "milana-erp", kind: "erp", status: "stopped", tools: [], desc: "Milana ERP business data, production, inventory, finance and confirmed ERP actions" },
     ],
-    integrations: ["openai", "anthropic", "github", "notion", "slack", "postgres", "mila"].map((p) => ({
+    integrations: ["openai", "anthropic", "github", "notion", "slack", "postgres", "mila", "telegram"].map((p) => ({
       id: "int_" + p, provider: p, connected: false, config: {}, testedAt: null, lastResult: null,
     })),
     missions: [],

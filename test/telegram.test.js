@@ -156,3 +156,21 @@ test("every notification rides along to a linked chat", () => {
   const noDevices = body.indexOf("if (!devices.length)");
   assert.ok(body.indexOf("telegram") < noDevices, "telegram must go first: no FCM devices used to end delivery entirely");
 });
+
+test("the telegram row exists for installs that predate it", () => {
+  // The Integrations page renders db rows, not the PROVIDERS registry: a
+  // provider registered only in connectors.js renders nowhere. The seed list is
+  // what readOrSeed() backfills into existing databases on boot, so telegram
+  // has to be in it — this is exactly how the card failed to appear the first
+  // time, on a database seeded before the provider existed.
+  const store = fs.readFileSync(new URL("../server/store.js", import.meta.url), "utf8");
+  const seedList = store.match(/integrations: \[([^\]]+)\]\.map/)?.[1] || "";
+  assert.match(seedList, /"telegram"/);
+  const connectors = fs.readFileSync(new URL("../server/lib/connectors.js", import.meta.url), "utf8");
+  for (const provider of seedList.match(/"([a-z]+)"/g).map((name) => name.replaceAll('"', ""))) {
+    assert.ok(
+      new RegExp(`^  ${provider}:`, "m").test(connectors),
+      `${provider} is seeded as a row but has no PROVIDERS entry — it would render blank`,
+    );
+  }
+});
