@@ -63,6 +63,7 @@ import { reminders } from "./lib/reminders.js";
 import messenger from "./routes/messenger.js";
 import { morningBrief } from "./lib/morning-brief.js";
 import { telegram } from "./lib/telegram.js";
+import { telegramAssistant } from "./lib/telegram-assistant.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const app = express();
@@ -292,6 +293,7 @@ server.listen(config.port, async () => {
   postgresAuthReads.start();
   reminders.start();
   morningBrief.start();
+  telegram.assistant = telegramAssistant;
   telegram.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");

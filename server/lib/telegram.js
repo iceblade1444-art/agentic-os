@@ -35,6 +35,10 @@ export class TelegramBridge {
     // code -> { userId, expiresAt }; issued codes live in memory on purpose:
     // a restart invalidates them and the person just taps the button again.
     this.pending = new Map();
+    // Injected at startup rather than imported: the assistant pulls in
+    // mila-actions, which imports this module for send_telegram — a cycle ESM
+    // would technically survive but nobody should have to reason about.
+    this.assistant = options.assistant || null;
     this.timer = null;
     this.offset = 0;
     this.botName = "";
@@ -165,7 +169,9 @@ export class TelegramBridge {
   async handleUpdateForTest(update) {
     const message = update.message;
     const chatId = message?.chat?.id;
-    const text = clean(message?.text, 200);
+    // Commands are short; a real question to MILA is not. 4000 matches one
+    // Telegram message, so nothing a person can type in one go is cut.
+    const text = clean(message?.text, 4000);
     if (!chatId || !text) return;
 
     if (text.startsWith("/start")) {
@@ -208,12 +214,27 @@ export class TelegramBridge {
       return;
     }
 
-    // The bot is a delivery channel, not another chat surface: the assistant
-    // lives in the app and the messenger, and answering here would fork her
-    // memory across a surface with no authentication in front of it.
+    // A linked chat is authenticated by construction — the link exists only
+    // because its owner created it from their signed-in session — so MILA may
+    // answer here with that person's own context, exactly as in a direct
+    // thread. An unlinked chat stays a stranger and gets the pointer.
+    const link = Object.entries(this.#read()).find(([, value]) => value.chatId === chatId);
+    if (link && this.assistant) {
+      await this.#call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+      const reply = await this.assistant.respond(link[0], text);
+      if (reply) {
+        for (let start = 0; start < reply.length; start += CHUNK) {
+          await this.#call("sendMessage", { chat_id: chatId, text: reply.slice(start, start + CHUNK) });
+        }
+        return;
+      }
+      // The account behind the link is gone or disabled: drop the orphan link
+      // rather than keep a dead man's chat half-alive.
+      this.unlink(link[0]);
+    }
     await this.#call("sendMessage", {
       chat_id: chatId,
-      text: "Я приношу сюда данные из Agentic OS, а разговоры живут в приложении MILA. Команды: /stop — отвязать.",
+      text: "Я отвечаю только привязанным сотрудникам. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать». Команды: /stop — отвязать.",
     });
   }
 

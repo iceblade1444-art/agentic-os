@@ -176,3 +176,42 @@ test("the telegram row exists for installs that predate it", () => {
     );
   }
 });
+
+test("a linked chat talks to MILA with that person's own identity", async () => {
+  const b = bridge();
+  const { url } = await b.instance.issueLinkCode(OWNER);
+  await b.instance.handleUpdateForTest({ message: { chat: { id: 777 }, from: {}, text: `/start ${url.split("start=")[1]}` } });
+
+  const seen = [];
+  b.instance.assistant = {
+    respond: async (userId, text) => {
+      seen.push({ userId, text });
+      return "Сегодня две встречи и одна просрочка.";
+    },
+  };
+  await b.instance.handleUpdateForTest({ message: { chat: { id: 777 }, text: "что у меня сегодня?" } });
+
+  // The assistant was asked as the link's owner — identity comes from the
+  // link, never from anything inside the message.
+  assert.deepEqual(seen, [{ userId: OWNER.id, text: "что у меня сегодня?" }]);
+  const replies = b.calls.filter((call) => call.method === "sendMessage" && call.body.chat_id === 777);
+  assert.match(replies.at(-1).body.text, /две встречи/);
+
+  // A stranger's chat never reaches the assistant.
+  await b.instance.handleUpdateForTest({ message: { chat: { id: 555 }, text: "что у него сегодня?" } });
+  assert.equal(seen.length, 1);
+  const refusal = b.calls.filter((call) => call.method === "sendMessage" && call.body.chat_id === 555);
+  assert.match(refusal.at(-1).body.text, /привязанным/);
+  b.cleanup();
+});
+
+test("a link whose account is gone is dropped, not answered", async () => {
+  const b = bridge();
+  const { url } = await b.instance.issueLinkCode(OWNER);
+  await b.instance.handleUpdateForTest({ message: { chat: { id: 777 }, from: {}, text: `/start ${url.split("start=")[1]}` } });
+  // respond() returns null when the account behind the link no longer exists.
+  b.instance.assistant = { respond: async () => null };
+  await b.instance.handleUpdateForTest({ message: { chat: { id: 777 }, text: "привет" } });
+  assert.equal(b.instance.link(OWNER.id).linked, false, "the orphan link is removed");
+  b.cleanup();
+});
