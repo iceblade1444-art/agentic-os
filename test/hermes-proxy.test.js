@@ -63,7 +63,8 @@ test("Hermes proxy rewrites dashboard JS and CSS asset references", () => {
   const css = ".screen{background:url(/assets/background.png)}";
 
   assert.match(rewriteHermesDashboardAsset(js), /"\/hermes\/assets\/chunk\.js"/);
-  assert.match(rewriteHermesDashboardAsset(js), /"\/hermes\/api\/status"/);
+  assert.match(rewriteHermesDashboardAsset(js), /"\/api\/status"/);
+  assert.doesNotMatch(rewriteHermesDashboardAsset(js), /\/hermes\/api\/status/);
   assert.match(rewriteHermesDashboardAsset(js), /"\/login"/);
   assert.match(rewriteHermesDashboardAsset(css), /url\("\/hermes\/assets\/background\.png"\)/);
 });

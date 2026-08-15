@@ -8,7 +8,10 @@ const PREFIX = "/hermes";
 
 const ABSOLUTE_HERMES_PATHS = /(?<attr>\b(?:src|href|action)=["'])\/(?<path>(?:assets|api|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"']*)/g;
 const CSS_ABSOLUTE_URLS = /url\(["']?\/(?<path>(?:assets|favicon\.ico)\b[^)"']*)["']?\)/g;
-const ASSET_ABSOLUTE_STRINGS = /(?<quote>["'`])\/(?<path>(?:assets|api|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"'`]*)\k<quote>/g;
+// The dashboard runtime prefixes API calls with __HERMES_BASE_PATH__ itself.
+// Rewriting `/api/...` inside JavaScript would therefore produce
+// `/hermes/hermes/api/...`. Static assets do not get that runtime prefix.
+const ASSET_ABSOLUTE_STRINGS = /(?<quote>["'`])\/(?<path>(?:assets|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"'`]*)\k<quote>/g;
 
 export function stripHermesPrefix(url = "/") {
   const stripped = url.replace(/^\/hermes(?=\/|\?|$)/, "");
