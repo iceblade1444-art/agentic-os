@@ -6,6 +6,9 @@ import { authenticatedUser, requireRoles } from "./auth.js";
 
 const PREFIX = "/hermes";
 
+const ABSOLUTE_HERMES_PATHS = /(?<attr>\b(?:src|href|action)=["'])\/(?<path>(?:assets|api|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"']*)/g;
+const CSS_ABSOLUTE_URLS = /url\(["']?\/(?<path>(?:assets|favicon\.ico)\b[^)"']*)["']?\)/g;
+
 export function stripHermesPrefix(url = "/") {
   const stripped = url.replace(/^\/hermes(?=\/|\?|$)/, "");
   return stripped || "/";
@@ -24,6 +27,13 @@ export function hermesForwardedHeaders(req) {
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
   const origin = req.headers.origin ? "http://127.0.0.1:9119" : "";
   return { proto, host, origin };
+}
+
+export function rewriteHermesDashboardHtml(html = "") {
+  return String(html)
+    .replace(ABSOLUTE_HERMES_PATHS, `$<attr>${PREFIX}/$<path>`)
+    .replace(CSS_ABSOLUTE_URLS, `url("${PREFIX}/$<path>")`)
+    .replace(/window\.__HERMES_BASE_PATH__="[^"]*"/g, `window.__HERMES_BASE_PATH__="${PREFIX}"`);
 }
 
 function prepareProxyRequest(proxyReq, req) {
@@ -50,10 +60,37 @@ export function createHermesProxy() {
     changeOrigin: true,
     ws: true,
     xfwd: true,
+    selfHandleResponse: true,
   });
 
   proxy.on("proxyReq", prepareProxyRequest);
   proxy.on("proxyReqWs", prepareProxyRequest);
+  proxy.on("proxyRes", (proxyRes, req, res) => {
+    const headers = { ...proxyRes.headers };
+    if (headers.location && String(headers.location).startsWith("/")) {
+      headers.location = `${PREFIX}${headers.location}`;
+    }
+    delete headers["x-frame-options"];
+    delete headers["content-security-policy"];
+
+    const type = String(headers["content-type"] || "");
+    if (!type.includes("text/html")) {
+      res.writeHead(proxyRes.statusCode || 502, headers);
+      proxyRes.pipe(res);
+      return;
+    }
+
+    const chunks = [];
+    proxyRes.on("data", (chunk) => chunks.push(chunk));
+    proxyRes.on("end", () => {
+      const body = rewriteHermesDashboardHtml(Buffer.concat(chunks).toString("utf8"));
+      delete headers["content-length"];
+      headers["content-type"] = type || "text/html; charset=utf-8";
+      headers["content-length"] = Buffer.byteLength(body);
+      res.writeHead(proxyRes.statusCode || 200, headers);
+      res.end(body);
+    });
+  });
   proxy.on("error", (error, req, resOrSocket) => {
     console.error("[hermes-proxy]", error.message);
     if (typeof resOrSocket?.writeHead === "function") {

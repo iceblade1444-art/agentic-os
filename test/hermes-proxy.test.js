@@ -5,6 +5,7 @@ import {
   hermesDashboardStatus,
   hermesForwardedHeaders,
   isBareHermesRequest,
+  rewriteHermesDashboardHtml,
   stripHermesPrefix,
 } from "../server/lib/hermes-proxy.js";
 
@@ -33,6 +34,27 @@ test("Hermes proxy preserves public callback headers and normalizes its private 
     host: "agent.milanapremium.uz",
     origin: "http://127.0.0.1:9119",
   });
+});
+
+test("Hermes proxy rewrites dashboard HTML to stay under the protected mount", () => {
+  const html = [
+    '<script type="module" src="/assets/index.js"></script>',
+    '<link rel="stylesheet" href="/assets/index.css">',
+    '<link rel="icon" href="/favicon.ico">',
+    '<script>window.__HERMES_BASE_PATH__="";</script>',
+  ].join("");
+
+  const rewritten = rewriteHermesDashboardHtml(html);
+  assert.match(rewritten, /src="\/hermes\/assets\/index\.js"/);
+  assert.match(rewritten, /href="\/hermes\/assets\/index\.css"/);
+  assert.match(rewritten, /href="\/hermes\/favicon\.ico"/);
+  assert.match(rewritten, /window\.__HERMES_BASE_PATH__="\/hermes"/);
+});
+
+test("Hermes proxy leaves Agentic OS paths outside the dashboard mount alone", () => {
+  const rewritten = rewriteHermesDashboardHtml('<a href="/login">Login</a><img src="/assets/logo.png">');
+  assert.match(rewritten, /href="\/login"/);
+  assert.match(rewritten, /src="\/hermes\/assets\/logo\.png"/);
 });
 
 test("Hermes control status treats login redirects as a ready dashboard", async () => {
