@@ -5,6 +5,7 @@ import {
   hermesDashboardStatus,
   hermesForwardedHeaders,
   isBareHermesRequest,
+  rewriteHermesDashboardAsset,
   rewriteHermesDashboardHtml,
   stripHermesPrefix,
 } from "../server/lib/hermes-proxy.js";
@@ -55,6 +56,16 @@ test("Hermes proxy leaves Agentic OS paths outside the dashboard mount alone", (
   const rewritten = rewriteHermesDashboardHtml('<a href="/login">Login</a><img src="/assets/logo.png">');
   assert.match(rewritten, /href="\/login"/);
   assert.match(rewritten, /src="\/hermes\/assets\/logo\.png"/);
+});
+
+test("Hermes proxy rewrites dashboard JS and CSS asset references", () => {
+  const js = 'const asset="/assets/chunk.js";const api="/api/status";const login="/login";';
+  const css = ".screen{background:url(/assets/background.png)}";
+
+  assert.match(rewriteHermesDashboardAsset(js), /"\/hermes\/assets\/chunk\.js"/);
+  assert.match(rewriteHermesDashboardAsset(js), /"\/hermes\/api\/status"/);
+  assert.match(rewriteHermesDashboardAsset(js), /"\/login"/);
+  assert.match(rewriteHermesDashboardAsset(css), /url\("\/hermes\/assets\/background\.png"\)/);
 });
 
 test("Hermes control status treats login redirects as a ready dashboard", async () => {

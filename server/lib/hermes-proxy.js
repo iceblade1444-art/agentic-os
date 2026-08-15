@@ -8,6 +8,7 @@ const PREFIX = "/hermes";
 
 const ABSOLUTE_HERMES_PATHS = /(?<attr>\b(?:src|href|action)=["'])\/(?<path>(?:assets|api|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"']*)/g;
 const CSS_ABSOLUTE_URLS = /url\(["']?\/(?<path>(?:assets|favicon\.ico)\b[^)"']*)["']?\)/g;
+const ASSET_ABSOLUTE_STRINGS = /(?<quote>["'`])\/(?<path>(?:assets|api|favicon\.ico|manifest\.webmanifest|robots\.txt)\b[^"'`]*)\k<quote>/g;
 
 export function stripHermesPrefix(url = "/") {
   const stripped = url.replace(/^\/hermes(?=\/|\?|$)/, "");
@@ -36,10 +37,17 @@ export function rewriteHermesDashboardHtml(html = "") {
     .replace(/window\.__HERMES_BASE_PATH__="[^"]*"/g, `window.__HERMES_BASE_PATH__="${PREFIX}"`);
 }
 
+export function rewriteHermesDashboardAsset(text = "") {
+  return String(text)
+    .replace(CSS_ABSOLUTE_URLS, `url("${PREFIX}/$<path>")`)
+    .replace(ASSET_ABSOLUTE_STRINGS, `$<quote>${PREFIX}/$<path>$<quote>`);
+}
+
 function prepareProxyRequest(proxyReq, req) {
   const { proto, host, origin } = hermesForwardedHeaders(req);
   proxyReq.setHeader("X-Forwarded-Prefix", PREFIX);
   proxyReq.setHeader("X-Forwarded-Proto", proto);
+  proxyReq.setHeader("Accept-Encoding", "identity");
   if (host) proxyReq.setHeader("X-Forwarded-Host", host);
   // Hermes is deliberately loopback-only and validates WS/POST origins. The
   // public origin was already authenticated by Agentic OS before this hop.
@@ -74,7 +82,15 @@ export function createHermesProxy() {
     delete headers["content-security-policy"];
 
     const type = String(headers["content-type"] || "");
-    if (!type.includes("text/html")) {
+    const pathname = new URL(req.originalUrl || req.url || "/", "http://agentic-os.local").pathname;
+    const rewritablePath = /\.(?:js|css|json|webmanifest)$/i.test(pathname);
+    const rewritable = type.includes("text/html")
+      || type.includes("javascript")
+      || type.includes("text/css")
+      || type.includes("application/json")
+      || type.includes("manifest+json")
+      || rewritablePath;
+    if (!rewritable) {
       res.writeHead(proxyRes.statusCode || 502, headers);
       proxyRes.pipe(res);
       return;
@@ -83,8 +99,12 @@ export function createHermesProxy() {
     const chunks = [];
     proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
-      const body = rewriteHermesDashboardHtml(Buffer.concat(chunks).toString("utf8"));
+      const raw = Buffer.concat(chunks).toString("utf8");
+      const body = type.includes("text/html")
+        ? rewriteHermesDashboardHtml(raw)
+        : rewriteHermesDashboardAsset(raw);
       delete headers["content-length"];
+      delete headers["content-encoding"];
       headers["content-type"] = type || "text/html; charset=utf-8";
       headers["content-length"] = Buffer.byteLength(body);
       res.writeHead(proxyRes.statusCode || 200, headers);
