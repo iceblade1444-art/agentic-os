@@ -12,6 +12,8 @@ engine="emotion"  — Qwen3-TTS Python with free-form `instruct`. Slowest;
 import io
 import logging
 import os
+
+import numpy as np
 import re
 import subprocess
 import tempfile
@@ -199,6 +201,35 @@ REF_MAX_SEC = float(os.getenv("CLONE_REF_MAX_SEC", "10"))
 REF_MIN_SEC = 1.5
 
 
+
+def _ends_mid_speech(path: str, tail_sec: float = 0.25) -> bool:
+    """Is the speaker still talking at the cut?
+
+    A reference that stops mid-breath makes the model finish that sentence
+    before saying what was asked. Padding fixes it — but padding a reference
+    that already ends in silence causes runaway generation instead (measured:
+    5 of 10 draws ran long, one hit 22 s for a 4 s phrase), so this has to be
+    decided per file rather than applied to all of them.
+    """
+    import wave
+
+    with wave.open(path) as w:
+        sr, n = w.getframerate(), w.getnframes()
+        frames = int(min(tail_sec * sr, n))
+        w.setpos(max(0, n - frames))
+        raw = w.readframes(frames)
+    if not raw:
+        return False
+    tail = np.frombuffer(raw, dtype=np.int16).astype("float32") / 32768.0
+    body_rms = 0.0
+    with wave.open(path) as w:
+        all_raw = w.readframes(w.getnframes())
+    body = np.frombuffer(all_raw, dtype=np.int16).astype("float32") / 32768.0
+    body_rms = float(np.sqrt((body ** 2).mean() + 1e-12))
+    tail_rms = float(np.sqrt((tail ** 2).mean() + 1e-12))
+    return tail_rms > body_rms * 0.25
+
+
 def _as_reference_wav(path: str) -> str:
     """Browsers record ogg/opus/webm; VoxCPM wants a short 16 kHz mono wav."""
     import subprocess
@@ -206,11 +237,8 @@ def _as_reference_wav(path: str) -> str:
     import wave
 
     out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-    # apad: a reference that ends mid-breath reads as an unfinished sentence and
-    # the model finishes it before speaking the requested text
     r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", path,
-                        "-t", str(REF_MAX_SEC), "-af", "apad=pad_dur=0.5",
-                        "-ac", "1", "-ar", "16000", out],
+                        "-t", str(REF_MAX_SEC), "-ac", "1", "-ar", "16000", out],
                        capture_output=True)
     if r.returncode != 0 or not os.path.getsize(out):
         raise RuntimeError("не удалось прочитать образец голоса — "
@@ -220,6 +248,13 @@ def _as_reference_wav(path: str) -> str:
     if seconds < REF_MIN_SEC:
         raise RuntimeError(f"образец слишком короткий ({seconds:.1f} с) — "
                            "нужно 3-10 секунд непрерывной речи")
+    if _ends_mid_speech(out):
+        padded = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", out,
+                        "-af", "apad=pad_dur=0.5", padded], capture_output=True)
+        if os.path.getsize(padded):
+            log.info("clone reference: %.1fs, cut mid-speech — padded", seconds)
+            return padded
     log.info("clone reference: %.1fs used (max %.0fs)", seconds, REF_MAX_SEC)
     return out
 
