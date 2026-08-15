@@ -59,10 +59,11 @@ test("Hermes proxy leaves Agentic OS paths outside the dashboard mount alone", (
 });
 
 test("Hermes proxy rewrites dashboard JS and CSS asset references", () => {
-  const js = 'const asset="/assets/chunk.js";const api="/api/status";const login="/login";';
+  const js = 'const asset="/assets/chunk.js";const lazy="assets/SessionsPage-Bkl76shK.js";const api="/api/status";const login="/login";';
   const css = ".screen{background:url(/assets/background.png)}";
 
   assert.match(rewriteHermesDashboardAsset(js), /"\/hermes\/assets\/chunk\.js"/);
+  assert.match(rewriteHermesDashboardAsset(js), /"hermes\/assets\/SessionsPage-Bkl76shK\.js"/);
   assert.match(rewriteHermesDashboardAsset(js), /"\/api\/status"/);
   assert.doesNotMatch(rewriteHermesDashboardAsset(js), /\/hermes\/api\/status/);
   assert.match(rewriteHermesDashboardAsset(js), /"\/login"/);
