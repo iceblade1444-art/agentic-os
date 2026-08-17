@@ -94,6 +94,25 @@ services:
       - ${QWEN_TTS_MODELS_DIR:-./speech-qwen-models}:/app/models-qwen:ro
       - speech-hf-cache:/root/.cache/huggingface
 
+  speech-bot:
+    build:
+      context: ./speech-bot
+    image: agentos-speech-bot:latest
+    container_name: speech-bot
+    restart: unless-stopped
+    depends_on:
+      - speech
+    environment:
+      - SPEECH_TELEGRAM_BOT_TOKEN=${SPEECH_TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_ALLOWED_IDS=${TELEGRAM_ALLOWED_IDS:-}
+      - TELEGRAM_RATE_PER_HOUR=${TELEGRAM_RATE_PER_HOUR:-60}
+      - BOT_DEFAULT_LANG=${BOT_DEFAULT_LANG:-uz}
+      - SPEECH_URL=http://speech:4400
+      - INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
+      - BOT_STATE=/data/bot_state.json
+    volumes:
+      - speech-bot-data:/data
+
   agentos-runtime:
     build:
       context: ./agentos-runtime
@@ -125,5 +144,6 @@ services:
       - /home/admilana/.local/bin/hermes:/home/admilana/.local/bin/hermes:ro
 
 volumes:
+  speech-bot-data:
   speech-hf-cache:
   postgres-data:
