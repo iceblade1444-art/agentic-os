@@ -28,6 +28,15 @@ import memberInbox from "./pages/member-inbox.js";
 import testApps from "./pages/test-apps.js";
 import * as misc from "./pages/misc.js";
 
+// A Telegram web app is opened with ?start=<route>: its init data goes into the
+// hash fragment, which would overwrite any route we put there.
+(function applyStartRoute() {
+  const start = new URLSearchParams(location.search).get("start");
+  if (!start) return;
+  const route = start.replace(/[^a-z0-9/-]/gi, "");
+  if (route && !location.hash.startsWith(`#/${route}`)) location.hash = `#/${route}`;
+})();
+
 /* ---------------- Navigation config ---------------- */
 const OPERATOR_NAV = [
   { group: null, items: [
