@@ -1,4 +1,5 @@
 node_modules/
+atlas-releases/
 data/
 .venv-erp-mcp/
 .tmp-erp-mcp-handoff/

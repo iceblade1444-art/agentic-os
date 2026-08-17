@@ -46,6 +46,7 @@ import {
 } from "./lib/mfa-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
+import { mountAtlasProxy } from "./lib/atlas-proxy.js";
 import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
 import { PostgresMemberReadAdapter } from "./lib/postgres-member-read.js";
 import { PostgresMemberWriteAdapter } from "./lib/postgres-member-write.js";
@@ -148,6 +149,7 @@ app.use((req, res, next) => {
 // before body parsers so config forms, uploads and streaming bodies stay intact.
 mountHermesProxy(app, server);
 mountLiveKitProxy(app, server);
+mountAtlasProxy(app);
 
 // CORS: same-origin only unless ALLOW_ORIGIN is set explicitly
 if (config.allowOrigin) app.use(cors({ origin: config.allowOrigin.split(",").map((s) => s.trim()), credentials: true }));
@@ -272,6 +274,14 @@ app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
 // ---- Static frontend (only assets + index.html; never expose server/, .env, node_modules) ----
 app.use("/assets", express.static(path.join(ROOT, "assets"), { maxAge: 0 }));
+app.use("/atlas-downloads", express.static(process.env.ATLAS_RELEASES_DIR || path.join(ROOT, "atlas-releases"), {
+  fallthrough: false,
+  immutable: true,
+  maxAge: "1h",
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".apk")) res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  },
+}));
 app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(ROOT, "index.html")));
 // SPA fallback for any non-API GET
 app.use((req, res, next) => {

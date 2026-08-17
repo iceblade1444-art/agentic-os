@@ -25,6 +25,7 @@ import erp from "./pages/erp.js";
 import { analytics, design, media } from "./pages/studio.js";
 import { memberHome, memberNotes, memberTasks } from "./pages/member.js";
 import memberInbox from "./pages/member-inbox.js";
+import testApps from "./pages/test-apps.js";
 import * as misc from "./pages/misc.js";
 
 /* ---------------- Navigation config ---------------- */
@@ -42,6 +43,7 @@ const OPERATOR_NAV = [
     { route: "kanban", icon: "workflow", label: "Kanban" },
     { route: "routines", icon: "calendar", label: "Routines" },
     { route: "tools", icon: "tools", label: "Skill Studio" },
+    { route: "test-apps", icon: "layers", label: "Test Apps" },
   ]},
   { group: "Context", items: [
     { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },
@@ -110,7 +112,7 @@ const OPERATOR_PAGES = {
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
   design, media, analytics,
-  erp,
+  erp, "test-apps": testApps,
 };
 const MEMBER_PAGES = { "": erp, personal, chat, mila, inbox: memberInbox, "my-tasks": memberTasks, "my-notes": memberNotes, settings, erp };
 // Design keeps the original personal dashboard as its landing page and has no Mila
@@ -125,7 +127,7 @@ const NAV_KEYS = {
   integrations: "integrations", evaluations: "evaluations", observability: "observability",
   guardrails: "guardrails", secrets: "secrets", settings: "settings", "my-tasks": "myTasks",
   "my-notes": "myNotes",
-  inbox: "inbox",
+  inbox: "inbox", "test-apps": "testApps",
   design: "design", media: "media", analytics: "analytics", erp: "erp",
 };
 const navLabel = (item) => tr(`nav.${item.navKey || NAV_KEYS[item.route] || item.route}`) || item.label;

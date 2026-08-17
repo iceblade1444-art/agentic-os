@@ -12,7 +12,7 @@ const COPY = {
     "nav.kanban": "Канбан", "nav.routines": "Регламенты", "nav.tools": "Студия навыков",
     "nav.knowledge": "Библиотека Obsidian", "nav.memory": "Память", "nav.mcp": "MCP-серверы",
     "nav.integrations": "Интеграции", "nav.evaluations": "Оценки", "nav.observability": "Наблюдение",
-    "nav.guardrails": "Ограничения", "nav.secrets": "Секреты", "nav.settings": "Настройки",
+    "nav.guardrails": "Ограничения", "nav.secrets": "Секреты", "nav.settings": "Настройки", "nav.testApps": "Тестовые приложения",
     "nav.myTasks": "Мои задачи", "nav.myNotes": "Мои заметки", "nav.inbox": "Входящие", "nav.context": "Контекст",
     "inbox.title": "Входящие", "inbox.subtitle": "Сообщения, напоминания и результаты агентов на всех устройствах.",
     "inbox.all": "Все", "inbox.unread": "Непрочитанные", "inbox.read": "Прочитанные", "inbox.archived": "Архив",
@@ -680,7 +680,7 @@ const COPY = {
     "nav.kanban": "Kanban", "nav.routines": "Routines", "nav.tools": "Skill Studio",
     "nav.knowledge": "Obsidian Library", "nav.memory": "Memory", "nav.mcp": "MCP Servers",
     "nav.integrations": "Integrations", "nav.evaluations": "Evaluations", "nav.observability": "Observability",
-    "nav.guardrails": "Guardrails", "nav.secrets": "Secrets", "nav.settings": "Settings",
+    "nav.guardrails": "Guardrails", "nav.secrets": "Secrets", "nav.settings": "Settings", "nav.testApps": "Test applications",
     "nav.myTasks": "My Tasks", "nav.myNotes": "My Notes", "nav.inbox": "Inbox", "nav.context": "Context",
     "inbox.title": "Inbox", "inbox.subtitle": "Messages, reminders, and agent results synced across your devices.",
     "inbox.all": "All", "inbox.unread": "Unread", "inbox.read": "Read", "inbox.archived": "Archive",
@@ -1348,7 +1348,7 @@ const COPY = {
     "nav.kanban": "Kanban", "nav.routines": "Rejalar", "nav.tools": "Ko‘nikmalar studiyasi",
     "nav.knowledge": "Obsidian kutubxonasi", "nav.memory": "Xotira", "nav.mcp": "MCP serverlar",
     "nav.integrations": "Integratsiyalar", "nav.evaluations": "Baholash", "nav.observability": "Kuzatuv",
-    "nav.guardrails": "Cheklovlar", "nav.secrets": "Sirlar", "nav.settings": "Sozlamalar",
+    "nav.guardrails": "Cheklovlar", "nav.secrets": "Sirlar", "nav.settings": "Sozlamalar", "nav.testApps": "Sinov ilovalari",
     "nav.myTasks": "Vazifalarim", "nav.myNotes": "Qaydlarim", "nav.inbox": "Kiruvchi", "nav.context": "Kontekst",
     "inbox.title": "Kiruvchi", "inbox.subtitle": "Barcha qurilmalardagi xabarlar, eslatmalar va agent natijalari.",
     "inbox.all": "Barchasi", "inbox.unread": "O'qilmagan", "inbox.read": "O'qilgan", "inbox.archived": "Arxiv",
@@ -2400,6 +2400,28 @@ Object.assign(COPY["uz-UZ"], {
   "erp.trackedOrders": "Kuzatilayotgan buyurtmalar", "erp.processTracking": "Jarayon kuzatuvi", "erp.busiestFlow": "Eng yuklangan oqim", "erp.nextWarehouse": "Keyingi ombor", "erp.blockedOrders": "Bloklanganlar", "erp.noData": "Ma'lumot yo'q",
   "erp.qtyShort": "dona", "erp.flow": "Oqim", "erp.plannedQty": "Reja", "erp.actualQty": "Fakt", "erp.inProgress": "Ishda", "erp.blocked": "Blok", "erp.model": "Model", "erp.qty": "Soni", "erp.warehouseEta": "Ombor ETA",
   "erp.flowLoad": "Tikuv oqimlari yuklamasi", "erp.flowLoadHint": "Ish qayerda yig'ilgan va qaysi oqim yuklangan.", "erp.warehouseEtaHint": "Buyurtmalar qachon omborga o'tishi kerak.", "erp.stageLoad": "Bosqich yuklamasi", "erp.stageLoadHint": "Bichish, tikuv, qadoqlash va ombor kesimi.",
+});
+
+Object.assign(COPY["ru-RU"], {
+  "testApps.title": "Тестовые приложения", "testApps.subtitle": "Сборки, которые агенты развивают и показывают владельцу.",
+  "testApps.badge": "Тестовый контур", "testApps.install": "Скачать APK", "testApps.health": "Проверить backend",
+  "testApps.source": "Среда разработки", "testApps.online": "Backend доступен", "testApps.offline": "Backend недоступен",
+  "testApps.checking": "Проверяем…", "testApps.desc": "Персональная AI-система обучения до уровня AI Transformation Architect.",
+  "testApps.agents": "Агенты разработки", "testApps.agentsText": "Product, Android, Backend, QA и Release работают через общий Agentic OS workspace.",
+});
+Object.assign(COPY["en-US"], {
+  "testApps.title": "Test applications", "testApps.subtitle": "Builds that agents develop and present to the owner.",
+  "testApps.badge": "Test channel", "testApps.install": "Download APK", "testApps.health": "Check backend",
+  "testApps.source": "Development environment", "testApps.online": "Backend online", "testApps.offline": "Backend unavailable",
+  "testApps.checking": "Checking…", "testApps.desc": "A personal AI learning system toward AI Transformation Architect.",
+  "testApps.agents": "Development agents", "testApps.agentsText": "Product, Android, Backend, QA and Release share the Agentic OS workspace.",
+});
+Object.assign(COPY["uz-UZ"], {
+  "testApps.title": "Sinov ilovalari", "testApps.subtitle": "Agentlar ishlab chiqadigan va egasiga ko‘rsatadigan buildlar.",
+  "testApps.badge": "Sinov muhiti", "testApps.install": "APK yuklab olish", "testApps.health": "Backendni tekshirish",
+  "testApps.source": "Dasturlash muhiti", "testApps.online": "Backend ishlayapti", "testApps.offline": "Backend ishlamayapti",
+  "testApps.checking": "Tekshirilmoqda…", "testApps.desc": "AI Transformation Architect darajasigacha shaxsiy AI ta’lim tizimi.",
+  "testApps.agents": "Dasturlash agentlari", "testApps.agentsText": "Product, Android, Backend, QA va Release umumiy Agentic OS workspace orqali ishlaydi.",
 });
 
 const normalize = (value) => SUPPORTED_LOCALES.some(([code]) => code === value) ? value : "ru-RU";

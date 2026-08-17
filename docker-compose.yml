@@ -39,6 +39,8 @@ services:
       - PYTHONPATH=${PYTHONPATH:-/app/vendor/milana-erp-mcp/src}
       - OPS_STATE_FILE=/run/agentic-os/operations.json
       - OPS_BACKUP_REQUEST_FILE=/run/agentic-os/backup.request
+      - ATLAS_API_URL=${ATLAS_API_URL:-http://host.docker.internal:8000}
+      - ATLAS_RELEASES_DIR=/app/atlas-releases
     ports:
       # Keep localhost for a proxy on this host. Set BIND_ADDRESS to the server's
       # private/LAN IP when the reverse proxy runs on another machine.
@@ -53,6 +55,7 @@ services:
       - ${CLAUDE_CONFIG_DIR:-/home/admilana/.claude}:/root/.claude
       - ${CLAUDE_CONFIG_FILE:-/home/admilana/.claude.json}:/root/.claude.json
       - /home/admilana/.local/state/agentic-os:/run/agentic-os
+      - ./atlas-releases:/app/atlas-releases:ro
     depends_on:
       - agentos-runtime
       - speech
