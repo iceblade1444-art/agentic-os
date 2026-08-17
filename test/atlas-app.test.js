@@ -9,7 +9,7 @@ test("ATLAS is registered as an operator test application", () => {
   const page = read("assets/js/pages/test-apps.js");
   assert.match(app, /route: "test-apps"/);
   assert.match(app, /"test-apps": testApps/);
-  assert.match(page, /atlas-academy-0\.1\.0\.apk/);
+  assert.match(page, /atlas-academy-0\.1\.1\.apk/);
   assert.match(page, /\/atlas-api\/health/);
 });
 

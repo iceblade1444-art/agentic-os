@@ -17,8 +17,8 @@ export default {
         <section class="card pad-lg">
           <div class="card-head"><div>${icon("layers")}</div><div><h3>ATLAS Academy</h3><span class="badge warning"><span class="dot"></span>${t.badge}</span></div></div>
           <p>${t.desc}</p>
-          <div class="stack" style="margin:16px 0"><span><strong>Android</strong> · v0.1.0</span><span class="cell-sub">Kotlin · Compose · FastAPI · PostgreSQL · Redis</span><span id="atlasHealth" class="badge neutral">${t.checking}</span></div>
-          <div class="row wrap"><a class="btn btn-primary" href="/atlas-downloads/atlas-academy-0.1.0.apk" download>${icon("download")}${t.install}</a><button class="btn btn-secondary" id="atlasCheck">${icon("activity")}${t.health}</button></div>
+          <div class="stack" style="margin:16px 0"><span><strong>Android</strong> · v0.1.1</span><span class="cell-sub">Kotlin · Compose · FastAPI · PostgreSQL · Redis</span><span id="atlasHealth" class="badge neutral">${t.checking}</span></div>
+          <div class="row wrap"><a class="btn btn-primary" href="/atlas-downloads/atlas-academy-0.1.1.apk" download>${icon("download")}${t.install}</a><button class="btn btn-secondary" id="atlasCheck">${icon("activity")}${t.health}</button></div>
         </section>
         <section class="card pad-lg"><div class="card-head"><div>${icon("code")}</div><h3>${t.source}</h3></div>
           <code>/app/work/atlas-academy</code><p class="page-sub" style="margin-top:12px">${t.agentsText}</p>
