@@ -5,6 +5,14 @@ const LANGS = [
   ["", "Auto"], ["uz", "O'zbekcha"], ["kk", "Qazaqsha"], ["ky", "Kyrgyzcha"], ["ru", "Русский"], ["en", "English"],
 ];
 const TTS_LANGS = [["Russian", "Русский"], ["Uzbek", "O'zbekcha — Милана"], ["English", "English"]];
+// pitch measured on our own round-trip test; all nine read Russian cleanly
+const TTS_VOICES = [
+  ["uncle_fu", "Дядя Фу — низкий мужской"], ["dylan", "Дилан — мужской"],
+  ["ryan", "Райан — мужской"], ["aiden", "Эйден — молодой мужской"],
+  ["serena", "Серена — женский"], ["sohee", "Сохи — женский"],
+  ["eric", "Эрик — высокий"], ["vivian", "Вивиан — женский"],
+  ["ono_anna", "Анна — высокий женский"],
+];
 
 let rec = null;
 let chunks = [];
@@ -135,6 +143,10 @@ export default {
           <label>Язык</label>
           <select id="ttsLang" class="input" style="width:auto">
             ${TTS_LANGS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}
+          </select>
+          <label id="ttsSpeakerLabel">Голос</label>
+          <select id="ttsSpeaker" class="input" style="width:auto">
+            ${TTS_VOICES.map(([v, l]) => `<option value="${v}"${v === "vivian" ? " selected" : ""}>${l}</option>`).join("")}
           </select>
           <label>Режим</label>
           <select id="ttsEngine" class="input" style="width:auto">
@@ -368,11 +380,17 @@ export default {
     // ---------- TTS ----------
     const engineUI = () => {
       const eng = q("#ttsEngine").value;
+      // the picker belongs to the Qwen engines; Uzbek has our single trained voice
+      const canPickVoice = (eng === "quality" || eng === "emotion")
+        && q("#ttsLang").value !== "Uzbek";
+      q("#ttsSpeaker").style.display = canPickVoice ? "" : "none";
+      q("#ttsSpeakerLabel").style.display = canPickVoice ? "" : "none";
       q("#ttsInstruct").style.display = eng === "emotion" ? "" : "none";
       q("#cloneRow").style.display = eng === "clone" ? "" : "none";
       q("#speedRow").style.display = eng === "fast" ? "" : "none";
     };
     q("#ttsEngine").addEventListener("change", engineUI);
+    q("#ttsLang").addEventListener("change", engineUI);
     q("#ttsSpeed").addEventListener("input", () => { q("#speedVal").textContent = `${Number(q("#ttsSpeed").value).toFixed(2)}x`; });
     q("#ttsText").addEventListener("input", () => { q("#ttsCount").textContent = q("#ttsText").value.length; });
     q("#ttsCount").textContent = q("#ttsText").value.length;
@@ -441,7 +459,7 @@ export default {
             body: JSON.stringify({
               text, engine,
               language: q("#ttsLang").value,
-              speaker: "vivian",
+              speaker: q("#ttsSpeaker").value,
               speed: engine === "fast" ? Number(q("#ttsSpeed").value) : undefined,
               instruct: engine === "emotion" ? q("#ttsInstruct").value.trim() : "",
             }),

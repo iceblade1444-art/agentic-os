@@ -55,6 +55,29 @@ LANGS = {"uz": "O'zbekcha", "ru": "Русский", "en": "English",
 VOICE_LANGS = {"uz": "Uzbek", "ru": "Russian", "en": "English"}
 LANG_NAMES_RU = {"uz": "узбекский", "ru": "русский", "en": "английский",
                  "kk": "казахский", "ky": "киргизский"}
+
+# measured on Russian: every one of them reads it cleanly, so the split is by
+# timbre rather than by quality. Pitch in Hz from our own measurement.
+VOICES = {
+    "uncle_fu": "Дядя Фу — низкий мужской",
+    "dylan": "Дилан — мужской",
+    "ryan": "Райан — мужской",
+    "aiden": "Эйден — молодой мужской",
+    "serena": "Серена — женский",
+    "sohee": "Сохи — женский",
+    "eric": "Эрик — высокий",
+    "vivian": "Вивиан — женский",
+    "ono_anna": "Анна — высокий женский",
+}
+DEFAULT_VOICE = "vivian"
+
+# what each engine costs, because that is what decides which one to pick
+ENGINES = {
+    "fast": "Быстрый — доли секунды",
+    "quality": "Качественный — около 40 с",
+    "emotion": "Эмоциональный — по описанию",
+}
+SPEEDS = {"0.8": "медленно", "1.0": "обычно", "1.2": "быстро"}
 DEFAULT_LANG = os.getenv("BOT_DEFAULT_LANG", "uz")
 
 HELP = (
@@ -62,14 +85,19 @@ HELP = (
     "Напишите текст — озвучу нашим голосом.\n\n"
     "Под расшифровкой есть кнопки: перевести и озвучить перевод.\n\n"
     "Команды:\n"
+    "/settings — все настройки одним экраном\n"
     "/lang — язык распознавания\n"
     "/voice — язык озвучки\n"
+    "/speaker — выбрать голос (9 на выбор)\n"
+    "/engine — быстрый, качественный, эмоциональный\n"
+    "/speed — темп речи\n"
+    "/emotion весело и бодро — задать настроение\n"
     "/tr uz Добрый день — перевести и озвучить\n"
     "/help — эта справка"
 )
 
 _lock = threading.Lock()
-_state = {"lang": {}, "voice": {}}
+_state = {"lang": {}, "voice": {}, "speaker": {}, "engine": {}, "speed": {}}
 _hits = defaultdict(deque)
 # last transcript per user, so the buttons under it have something to act on
 _last_text = {}
@@ -81,8 +109,8 @@ def load_state():
         _state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
     except Exception:
         _state = {}
-    _state.setdefault("lang", {})
-    _state.setdefault("voice", {})
+    for key in ("lang", "voice", "speaker", "engine", "speed"):
+        _state.setdefault(key, {})
 
 
 def save_state():
@@ -106,6 +134,10 @@ def voice_lang(uid) -> str:
         return lang
     heard = user_lang(uid)
     return heard if heard in VOICE_LANGS else "uz"
+
+
+def setting(uid, key, default):
+    return _state.setdefault(key, {}).get(str(uid), default)
 
 
 def rate_ok(uid) -> bool:
@@ -165,13 +197,22 @@ def transcribe(content, filename, lang):
     return r.json()
 
 
-def synthesize(text, lang):
-    r = requests.post(f"{SPEECH_URL}/tts",
-                      data={"text": text[:MAX_TTS_CHARS],
-                            "language": VOICE_LANGS.get(lang, "Uzbek"),
-                            "engine": "fast"},
+def synthesize(text, lang, uid=None):
+    engine = setting(uid, "engine", "fast") if uid is not None else "fast"
+    # our Uzbek voice is piper-only; the quality engine has no Uzbek at all
+    if lang == "uz":
+        engine = "fast"
+    data = {"text": text[:MAX_TTS_CHARS],
+            "language": VOICE_LANGS.get(lang, "Uzbek"),
+            "engine": engine,
+            "speed": setting(uid, "speed", "1.0") if uid is not None else "1.0"}
+    if engine in ("quality", "emotion"):
+        data["speaker"] = setting(uid, "speaker", DEFAULT_VOICE)
+    if engine == "emotion":
+        data["instruct"] = setting(uid, "instruct", "дружелюбно и спокойно")
+    r = requests.post(f"{SPEECH_URL}/tts", data=data,
                       headers={"x-internal-secret": SECRET} if SECRET else {},
-                      timeout=300)
+                      timeout=900)
     r.raise_for_status()
     return r.content
 
@@ -187,6 +228,27 @@ def translate(text, target):
 
 
 # --- keyboards --------------------------------------------------------------
+def settings_text(uid):
+    engine = setting(uid, "engine", "fast")
+    lines = [
+        "Текущие настройки:",
+        "",
+        f"Распознавание: {LANGS.get(user_lang(uid), user_lang(uid))}",
+        f"Озвучка: {LANGS.get(voice_lang(uid), voice_lang(uid))}",
+        f"Режим: {ENGINES.get(engine, engine)}",
+    ]
+    if voice_lang(uid) == "uz":
+        lines.append("Голос: наш узбекский (единственный)")
+    elif engine in ("quality", "emotion"):
+        lines.append(f"Голос: {VOICES.get(setting(uid, 'speaker', DEFAULT_VOICE))}")
+    else:
+        lines.append("Голос: выбор доступен в режимах «качественный» и «эмоциональный»")
+    lines.append(f"Темп: {SPEEDS.get(setting(uid, 'speed', '1.0'), '1.0')}")
+    if engine == "emotion":
+        lines.append(f"Настроение: {setting(uid, 'instruct', 'дружелюбно и спокойно')}")
+    return "\n".join(lines)
+
+
 def keyboard(prefix, options, per_row=2):
     row, rows = [], []
     for code, title in options.items():
@@ -303,7 +365,7 @@ def handle_tts(chat_id, uid, text, caption=""):
     call("sendChatAction", chat_id=chat_id, action="record_voice")
     started = time.time()
     try:
-        wav = synthesize(text, voice_lang(uid))
+        wav = synthesize(text, voice_lang(uid), uid)
     except Exception as exc:
         log.warning("озвучка не удалась для %s: %s", uid, exc)
         send(chat_id, "Не получилось озвучить. Попробуйте текст покороче.")
@@ -354,6 +416,27 @@ def handle_callback(cq):
             _state["voice"][str(uid)] = code
             save_state()
         send(chat_id, f"Язык озвучки: {LANGS.get(code, code)}")
+    elif data.startswith("spk:"):
+        code = data.split(":", 1)[1]
+        with _lock:
+            _state.setdefault("speaker", {})[str(uid)] = code
+            if setting(uid, "engine", "fast") == "fast":
+                _state.setdefault("engine", {})[str(uid)] = "quality"
+            save_state()
+        send(chat_id, f"Голос: {VOICES.get(code, code)}\n"
+                      f"Режим переключён на качественный — иначе голос не применится.")
+    elif data.startswith("eng:"):
+        code = data.split(":", 1)[1]
+        with _lock:
+            _state.setdefault("engine", {})[str(uid)] = code
+            save_state()
+        send(chat_id, f"Режим: {ENGINES.get(code, code)}")
+    elif data.startswith("spd:"):
+        code = data.split(":", 1)[1]
+        with _lock:
+            _state.setdefault("speed", {})[str(uid)] = code
+            save_state()
+        send(chat_id, f"Темп: {SPEEDS.get(code, code)}")
     elif data == "say:":
         text = _last_text.get(uid)
         if not text:
@@ -405,6 +488,40 @@ def handle_update(upd):
         send(chat_id, f"Сейчас: {LANGS.get(voice_lang(uid))}. Язык озвучки:",
              reply_markup=keyboard("voice:", VOICE_LANGS and
                                    {k: LANGS[k] for k in VOICE_LANGS}))
+        return
+    if text.startswith("/settings"):
+        send(chat_id, settings_text(uid))
+        return
+    if text.startswith("/speaker"):
+        if voice_lang(uid) == "uz":
+            send(chat_id, "Для узбекского у нас один собственный голос — тот, что "
+                          "мы обучили. Выбор голосов работает для русского и "
+                          "английского: смените язык через /voice.")
+            return
+        send(chat_id, "Голос для режимов «качественный» и «эмоциональный»:",
+             reply_markup=keyboard("spk:", VOICES, per_row=1))
+        return
+    if text.startswith("/engine"):
+        send(chat_id, f"Сейчас: {ENGINES.get(setting(uid, 'engine', 'fast'))}. Режим:",
+             reply_markup=keyboard("eng:", ENGINES, per_row=1))
+        return
+    if text.startswith("/speed"):
+        send(chat_id, f"Сейчас: {SPEEDS.get(setting(uid, 'speed', '1.0'))}. Темп речи:",
+             reply_markup=keyboard("spd:", SPEEDS, per_row=3))
+        return
+    if text.startswith("/emotion"):
+        mood = text[len("/emotion"):].strip()
+        if not mood:
+            send(chat_id, "Опишите настроение словами, например:\n"
+                          "/emotion весело и бодро\n"
+                          "/emotion спокойно, с сочувствием\n\n"
+                          "Работает в режиме «эмоциональный» (/engine).")
+            return
+        with _lock:
+            _state.setdefault("instruct", {})[str(uid)] = mood[:200]
+            _state.setdefault("engine", {})[str(uid)] = "emotion"
+            save_state()
+        send(chat_id, f"Настроение: {mood[:200]}\nРежим переключён на эмоциональный.")
         return
     if text.startswith("/tr"):
         parts = text.split(maxsplit=2)
@@ -463,6 +580,10 @@ def main():
     call("setMyCommands", commands=[
         {"command": "lang", "description": "Язык распознавания"},
         {"command": "voice", "description": "Язык озвучки"},
+        {"command": "speaker", "description": "Выбрать голос"},
+        {"command": "engine", "description": "Режим синтеза"},
+        {"command": "speed", "description": "Темп речи"},
+        {"command": "settings", "description": "Все настройки"},
         {"command": "tr", "description": "Перевести и озвучить"},
         {"command": "help", "description": "Как пользоваться"},
     ])
