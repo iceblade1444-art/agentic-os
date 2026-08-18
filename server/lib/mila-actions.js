@@ -217,21 +217,29 @@ export function staffFacts(data = {}) {
 // they exist, without inventing names for fields we have not seen.
 export function attendanceFacts(data = {}) {
   const overview = data.overview && typeof data.overview === "object" ? data.overview : {};
+  // The live ERP nests the totals under overview.summary (Hikvision turnstile:
+  // total_people / used_today / not_used_today); older or other shapes may keep
+  // them at the top level, so both are searched.
+  const source = overview.summary && typeof overview.summary === "object" ? { ...overview, ...overview.summary } : overview;
   const summary = {};
   for (const [ours, theirs] of [
-    ["present", ["present", "present_count", "checked_in", "in_count"]],
-    ["absent", ["absent", "absent_count", "missing"]],
+    ["present", ["present", "present_count", "checked_in", "in_count", "used_today"]],
+    ["absent", ["absent", "absent_count", "missing", "not_used_today"]],
     ["late", ["late", "late_count", "latecomers"]],
-    ["total", ["total", "total_count", "expected", "headcount"]],
+    ["total", ["total", "total_count", "expected", "headcount", "total_people"]],
+    ["unmatched_events", ["unmatched_events"]],
   ]) {
     for (const key of theirs) {
-      if (Number.isFinite(Number(overview[key]))) { summary[ours] = Number(overview[key]); break; }
+      if (Number.isFinite(Number(source[key]))) { summary[ours] = Number(source[key]); break; }
     }
   }
   const raw = JSON.stringify(overview);
   return {
     date: bounded(data.date, 10),
     ...summary,
+    ...(Number.isFinite(summary.present) && Number.isFinite(summary.total)
+      ? { answer_summary: `Прошли турникет за ${bounded(data.date, 10)}: ${summary.present} из ${summary.total}${Number.isFinite(summary.absent) ? `, не отмечены ${summary.absent}` : ""}.` }
+      : {}),
     // The raw overview rides along only while it fits: cutting JSON mid-string
     // to force it in would hand the model a broken object.
     ...(raw.length <= 2500 ? { overview } : { overview_note: `full overview omitted (${raw.length} chars); the totals above are extracted from it` }),

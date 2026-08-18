@@ -34,6 +34,24 @@ test("the attendance overview keeps recognizable totals and never hands over bro
   assert.equal(known.late, 12);
   assert.equal(known.total, 1500);
 
+  // The shape the live ERP actually returns: a Hikvision turnstile overview
+  // with the totals nested under summary and a people array too big to carry.
+  const live = attendanceFacts({
+    date: "2026-08-18",
+    overview: {
+      date: "2026-08-18",
+      summary: { total_people: 1500, used_today: 207, not_used_today: 1293, events_today: 626, unmatched_events: 417 },
+      devices: [{ id: 1, name: "Main turnstile", vendor: "Hikvision" }],
+      people: Array.from({ length: 300 }, (_, index) => ({ id: index, full_name: `Сотрудник ${index}` })),
+    },
+  });
+  assert.equal(live.present, 207);
+  assert.equal(live.absent, 1293);
+  assert.equal(live.total, 1500);
+  assert.equal(live.unmatched_events, 417);
+  assert.match(live.answer_summary, /207 из 1500/);
+  assert.equal(live.overview, undefined, "the people list stays behind");
+
   const huge = attendanceFacts({ date: "2026-08-18", overview: { rows: Array.from({ length: 200 }, (_, index) => ({ name: `x${index}`, detail: "y".repeat(40) })) } });
   assert.equal(huge.overview, undefined, "an oversized overview is omitted");
   assert.match(huge.overview_note, /omitted/);
