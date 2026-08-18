@@ -20,6 +20,7 @@ import { pushService } from "./push-service.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
 import { users } from "./users.js";
 import { personalProfiles } from "./personal-profile.js";
+import { companyBrief } from "./company-brief.js";
 
 const TICK_MS = 5 * 60 * 1000;
 // A brief that missed its slot by more than this is stale: the owner is already
@@ -98,9 +99,15 @@ export class MorningBrief {
     const profiles = deps.personalProfiles || personalProfiles;
     const commitments = profiles.list(user.id, { category: "commitments" }).slice(0, 3);
     const channelBody = briefBody(plan);
-    const personalBody = commitments.length
-      ? `${channelBody}\n\nВаши обязательства:\n${commitments.map((fact) => `• ${fact.text}`).join("\n")}`
-      : channelBody;
+    // The company morning — production with its direction, leads, the team
+    // chat, yesterday's journal — is appended for operators, in the personal
+    // delivery only. Best-effort like everything around a brief: a slow ERP
+    // costs its block, never the brief.
+    const company = deps.companyBrief || companyBrief;
+    const companyBlocks = await company.blocks(user, plan.timezone || "Asia/Tashkent").catch(() => "");
+    const personalBody = `${channelBody}${commitments.length
+      ? `\n\nВаши обязательства:\n${commitments.map((fact) => `• ${fact.text}`).join("\n")}`
+      : ""}${companyBlocks}`;
     const item = workspaces.createInboxItem(user.id, {
       type: "reminder",
       title: `План на ${plan.date}`,

@@ -154,7 +154,7 @@ function finishedGoodsFacts(data = {}) {
 // quarters of the day's output: the model summed the rows it could still see
 // and answered "1255" against a real 5284. Aggregation happens here, where
 // arithmetic is arithmetic, and the model receives totals it can only read.
-function sewingFacts(data = {}) {
+export function sewingFacts(data = {}) {
   const reports = data.reports || {};
   const rows = Array.isArray(reports.rows) ? reports.rows : [];
   const capacity = new Map((Array.isArray(data.flows) ? data.flows : []).map((flow) => [flow.code, flow.capacity_per_day]));
