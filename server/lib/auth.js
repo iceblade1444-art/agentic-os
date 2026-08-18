@@ -277,10 +277,10 @@ export async function loginHandler(req, res) {
   if (requireMfa(user, "web", res)) return;
   const session = createTrackedSession(req, user, "web");
   try {
-    await commit("sessions");
+    await commitAuthGroups("sessions");
   } catch (error) {
-    sessionStore.revoke(user.id, session.id);
-    await commit("sessions").catch(() => {});
+    sessions.revoke(user.id, session.id);
+    await commitAuthGroups("sessions").catch(() => {});
     return res.status(error.status || 503).json({ error: error.message, code: error.code });
   }
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
