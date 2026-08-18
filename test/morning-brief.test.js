@@ -23,6 +23,10 @@ function fixture() {
     deps: (profile = { timezone: TZ, briefTime: "08:00", completedAt: "2026-01-01T00:00:00.000Z" }) => ({
       users: { list: () => [] },
       creatorUser: () => OWNER,
+      // Without this stub the real companyBrief spawns the real ERP MCP child;
+      // on machines where that python actually starts (the docker image, CI)
+      // the leaked process kept node --test alive for the full 6-hour cap.
+      companyBrief: { blocks: async () => "" },
       onboarding: { get: () => ({ profile }) },
       memberWorkspaces: {
         createInboxItem: (userId, item) => { inbox.push({ userId, item }); return { id: `inb_${inbox.length}`, ...item }; },

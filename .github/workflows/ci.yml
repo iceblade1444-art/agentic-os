@@ -9,6 +9,7 @@ on:
 jobs:
   node:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,6 +34,7 @@ jobs:
 
   runtime:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: agentos-runtime
@@ -47,6 +49,7 @@ jobs:
 
   container:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - run: docker build --tag agentic-os:ci .
