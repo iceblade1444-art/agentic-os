@@ -78,6 +78,27 @@ ENGINES = {
     "emotion": "Эмоциональный — по описанию",
 }
 SPEEDS = {"0.8": "медленно", "1.0": "обычно", "1.2": "быстро"}
+
+# A reply keyboard survives until replaced, and the previous owner of this bot
+# left one behind. Buttons arrive as plain text, so each is mapped to a command
+# before the "speak whatever was typed" fallback can read it aloud.
+BUTTONS = {
+    "⚙️ Настройки": "/settings",
+    "🎙 Голос": "/speaker",
+    "🌐 Перевести": "/tr",
+    "🈯 Язык": "/lang",
+    "⚡ Режим": "/engine",
+    "❓ Помощь": "/help",
+}
+REPLY_KEYBOARD = {
+    "keyboard": [
+        [{"text": "⚙️ Настройки"}, {"text": "🎙 Голос"}],
+        [{"text": "🈯 Язык"}, {"text": "⚡ Режим"}],
+        [{"text": "🌐 Перевести"}, {"text": "❓ Помощь"}],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
 DEFAULT_LANG = os.getenv("BOT_DEFAULT_LANG", "uz")
 
 HELP = (
@@ -475,10 +496,25 @@ def handle_update(upd):
     text = (msg.get("text") or "").strip()
 
     if text.startswith("/start"):
-        send(chat_id, "Здравствуйте! " + HELP)
+        send(chat_id, "Здравствуйте! " + HELP, reply_markup=REPLY_KEYBOARD)
         return
+    if text.startswith("/keyboard"):
+        send(chat_id, "Кнопки внизу обновлены.", reply_markup=REPLY_KEYBOARD)
+        return
+    if text.startswith("/nokeyboard"):
+        send(chat_id, "Кнопки убраны.", reply_markup={"remove_keyboard": True})
+        return
+
+    # a tapped button is just text; translate it back into a command before the
+    # fallback below reads it aloud
+    if text in BUTTONS:
+        text = BUTTONS[text]
+        if text == "/tr":
+            send(chat_id, "Пришлите запись или текст, затем нажмите «Перевести» "
+                          "под расшифровкой.\nИли сразу: /tr uz Добрый день")
+            return
     if text.startswith("/help"):
-        send(chat_id, HELP)
+        send(chat_id, HELP, reply_markup=REPLY_KEYBOARD)
         return
     if text.startswith("/lang"):
         send(chat_id, f"Сейчас: {LANGS.get(user_lang(uid))}. Язык распознавания:",
@@ -584,6 +620,7 @@ def main():
         {"command": "engine", "description": "Режим синтеза"},
         {"command": "speed", "description": "Темп речи"},
         {"command": "settings", "description": "Все настройки"},
+        {"command": "keyboard", "description": "Показать кнопки"},
         {"command": "tr", "description": "Перевести и озвучить"},
         {"command": "help", "description": "Как пользоваться"},
     ])
