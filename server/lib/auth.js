@@ -127,16 +127,16 @@ export function requireRoles(...allowed) {
 
 export function requireWriteAccess(req, res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-  return requireRoles("Creator", "Admin", "Design", "Member")(req, res, next);
+  return requireRoles("Creator", "Admin", "CEO", "Design", "Member")(req, res, next);
 }
 
 export function capabilities(user) {
   const role = user?.role || "Viewer";
   return {
-    canWrite: ["Creator", "Admin", "Design", "Member"].includes(role),
-    canAdmin: ["Creator", "Admin"].includes(role),
-    canManageUsers: ["Creator", "Admin"].includes(role),
-    canStudio: ["Creator", "Admin", "Design"].includes(role),
+    canWrite: ["Creator", "Admin", "CEO", "Design", "Member"].includes(role),
+    canAdmin: ["Creator", "Admin", "CEO"].includes(role),
+    canManageUsers: ["Creator", "Admin", "CEO"].includes(role),
+    canStudio: ["Creator", "Admin", "CEO", "Design"].includes(role),
   };
 }
 

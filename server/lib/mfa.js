@@ -18,7 +18,7 @@ function fail(message, code, status = 400) {
 }
 
 function eligible(user) {
-  return ["Creator", "Admin"].includes(user?.role);
+  return ["Creator", "Admin", "CEO"].includes(user?.role);
 }
 
 function encryptionKey() {

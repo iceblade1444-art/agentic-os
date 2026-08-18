@@ -193,7 +193,7 @@ r.post("/inbox", async (req, res) => {
 r.post("/inbox/publish", async (req, res) => {
   try {
     const actor = currentUser(req);
-    if (!new Set(["Creator", "Admin"]).has(actor.role)) {
+    if (!new Set(["Creator", "Admin", "CEO"]).has(actor.role)) {
       return res.status(403).json({ error: "Operator access required" });
     }
     const userId = String(req.body?.userId || "").trim();

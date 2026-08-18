@@ -76,7 +76,7 @@ function rerender() {
 const byId = (id) => state?.people.find((person) => person.id === id) || null;
 const isAgent = (id) => String(id || "").startsWith("agent:");
 const active = () => state?.conversations.find((conversation) => conversation.id === activeId) || null;
-const canModerate = () => ["Creator", "Admin"].includes(state?.me.role);
+const canModerate = () => ["Creator", "Admin", "CEO"].includes(state?.me.role);
 
 function clockOf(value) {
   try {

@@ -67,7 +67,7 @@ r.get("/", async (req, res) => {
   });
 });
 
-r.post("/approvals/:id/:decision", requireRoles("Creator", "Admin"), async (req, res) => {
+r.post("/approvals/:id/:decision", requireRoles("Creator", "Admin", "CEO"), async (req, res) => {
   try { res.json(await decideApproval(req.params.id, req.params.decision)); }
   catch (error) {
     const status = error.status >= 400 && error.status < 600 ? error.status : 502;

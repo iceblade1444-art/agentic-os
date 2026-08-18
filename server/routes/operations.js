@@ -5,7 +5,7 @@ import { readOperationsState, requestOperationsBackup, requestOperationsRestoreD
 import { readFourCReadiness } from "../lib/readiness.js";
 
 const r = Router();
-const requireAdmin = requireRoles("Creator", "Admin");
+const requireAdmin = requireRoles("Creator", "Admin", "CEO");
 
 r.get("/status", async (req, res) => {
   const state = readOperationsState();

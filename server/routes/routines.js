@@ -4,7 +4,7 @@ import { requireRoles } from "../lib/auth.js";
 import { hermesCronRequest } from "../lib/hermes-kanban.js";
 
 const r = Router();
-const requireAdmin = requireRoles("Creator", "Admin");
+const requireAdmin = requireRoles("Creator", "Admin", "CEO");
 const bounded = (value, max = 200) => String(value || "").trim().slice(0, max);
 const JOB_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const ACTIONS = new Set(["pause", "resume", "trigger"]);

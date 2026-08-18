@@ -6,7 +6,7 @@ import { milaConnectionCode, milaDevices, milaGeminiChat, milaLiveKitToken, mila
 import { authenticatedUser, mobilePairingGrant, requireRoles } from "../lib/auth.js";
 
 const r = Router();
-const requireAdmin = requireRoles("Creator", "Admin");
+const requireAdmin = requireRoles("Creator", "Admin", "CEO");
 
 const mask = (cfg = {}) => Object.fromEntries(Object.entries(cfg).map(([k, v]) => [k, v ? "••••••" + String(v).slice(-4) : ""]));
 const view = (i) => {

@@ -241,12 +241,12 @@ app.post("/api/auth/account/password", rateLimit({ windowMs: 10 * 60000, max: 5 
 app.get("/api/auth/account/export", exportOwnDataHandler);
 app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
 app.use("/api", requireWriteAccess);
-const requireOperator = requireRoles("Creator", "Admin");
+const requireOperator = requireRoles("Creator", "Admin", "CEO");
 // Design shares the studio surface with operators, nothing else.
-const requireStudio = requireRoles("Creator", "Admin", "Design");
-app.get("/api/auth/users", requireRoles("Creator", "Admin"), listUsersHandler);
-app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin"), updateUserHandler);
-app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin"), deleteUserHandler);
+const requireStudio = requireRoles("Creator", "Admin", "CEO", "Design");
+app.get("/api/auth/users", requireRoles("Creator", "Admin", "CEO"), listUsersHandler);
+app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), updateUserHandler);
+app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), deleteUserHandler);
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);

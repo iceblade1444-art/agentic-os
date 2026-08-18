@@ -8,7 +8,7 @@ import { authenticatedUser, requireRoles } from "../lib/auth.js";
 import { knowledge } from "../lib/knowledge.js";
 
 const r = Router();
-const requireAdmin = requireRoles("Creator", "Admin");
+const requireAdmin = requireRoles("Creator", "Admin", "CEO");
 
 const view = (s) => ({
   id: s.id, name: s.name, kind: s.kind, desc: s.desc || "",

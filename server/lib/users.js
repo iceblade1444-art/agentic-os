@@ -4,8 +4,9 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
+import { ASSIGNABLE_ROLE_SET, rolesSentence } from "./roles.js";
 
-const ROLES = new Set(["Admin", "Design", "Member", "Viewer"]);
+const ROLES = ASSIGNABLE_ROLE_SET;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function publicUser(user) {
@@ -152,7 +153,7 @@ export class UserStore {
     let revokeSessions = false;
     if (patch.role !== undefined) {
       const role = String(patch.role);
-      if (!ROLES.has(role)) fail("Role must be Admin, Design, Member, or Viewer", "invalid_role");
+      if (!ROLES.has(role)) fail(`Role must be ${rolesSentence()}`, "invalid_role");
       if (role !== user.role) { user.role = role; revokeSessions = true; }
     }
     if (patch.disabled !== undefined && !!patch.disabled !== !!user.disabled) {

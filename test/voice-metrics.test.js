@@ -12,7 +12,7 @@ test("voice telemetry is passive, bounded and never stores speech contents", () 
   assert.match(store, /turn_response/);
   assert.match(store, /turnCompletionRate/);
   assert.doesNotMatch(store, /transcript|audioData|speechText/);
-  assert.match(route, /requireRoles\("Creator", "Admin"\)/);
+  assert.match(route, /requireRoles\("Creator", "Admin", "CEO"\)/);
   assert.match(session, /this\.metric\("stt_warning"\)/);
   assert.match(session, /this\.metric\("turn_completed"/);
   assert.match(server, /app\.use\("\/api\/telemetry", telemetry\)/);

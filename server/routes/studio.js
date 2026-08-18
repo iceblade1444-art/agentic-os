@@ -25,7 +25,7 @@ const buckets = {
 };
 // Design may run the creative buckets; analytics signals and the Higgsfield
 // account connection stay with operators.
-const requireOperator = requireRoles("Creator", "Admin");
+const requireOperator = requireRoles("Creator", "Admin", "CEO");
 const OPERATOR_BUCKETS = new Set(["signals"]);
 
 const audit = (req, action, target, detail = "") =>

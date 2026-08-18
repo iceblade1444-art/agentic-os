@@ -274,7 +274,7 @@ export class Messenger extends EventEmitter {
     if (Object.hasOwn(input, "memberIds")) {
       // Anyone in the channel can retitle it; only its creator or an operator can
       // change who is in it, because that is what controls access.
-      const operator = ["Creator", "Admin"].includes(user.role);
+      const operator = ["Creator", "Admin", "CEO"].includes(user.role);
       if (!operator && conversation.createdBy !== user.id) fail("Only the channel owner can change its members", 403);
       conversation.memberIds = [...new Set([conversation.createdBy, ...input.memberIds.map((id) => clean(id, 120))])]
         .filter(Boolean)
@@ -448,7 +448,7 @@ export class Messenger extends EventEmitter {
     const messages = this.#messages(conversationId);
     const message = messages.find((item) => item.id === messageId);
     if (!message || message.deletedAt) fail("Message not found", 404);
-    const operator = ["Creator", "Admin"].includes(user.role);
+    const operator = ["Creator", "Admin", "CEO"].includes(user.role);
     if (message.authorId !== user.id && !operator) fail("You can only delete your own messages", 403);
     message.deletedAt = now();
     message.text = "";

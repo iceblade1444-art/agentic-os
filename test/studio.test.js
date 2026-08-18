@@ -79,7 +79,7 @@ test("Studio pages are operator- or Design-only and generation jobs route throug
   const page = fs.readFileSync(new URL("../assets/js/pages/studio.js", import.meta.url), "utf8");
 
   assert.match(index, /app\.use\("\/api\/studio", requireStudio, studio\)/);
-  assert.match(index, /const requireStudio = requireRoles\("Creator", "Admin", "Design"\)/);
+  assert.match(index, /const requireStudio = requireRoles\("Creator", "Admin", "CEO", "Design"\)/);
   assert.match(route, /Use the official Higgsfield MCP connector/);
   assert.match(route, /assignee:\s*"reach"/);
   assert.match(route, /config\.hermesKanbanBoard/);

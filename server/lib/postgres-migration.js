@@ -4,6 +4,8 @@ import path from "node:path";
 
 import pg from "pg";
 
+import { rolesSqlList } from "./roles.js";
+
 const { Pool } = pg;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const SCHEMA = "agentic_os_shadow";
@@ -121,7 +123,7 @@ const schemaSql = `
     id text PRIMARY KEY,
     name text NOT NULL,
     email text NOT NULL UNIQUE,
-    role text NOT NULL CHECK (role IN ('Admin', 'Member', 'Viewer')),
+    role text NOT NULL CONSTRAINT users_role_check CHECK (role IN (${rolesSqlList()})),
     avatar text NOT NULL DEFAULT '',
     disabled boolean NOT NULL DEFAULT false,
     salt text NOT NULL,
@@ -232,6 +234,14 @@ const schemaSql = `
     orphan_workspace_files jsonb NOT NULL,
     migrated_at timestamptz NOT NULL DEFAULT now()
   );
+
+  -- A database created before a role existed keeps the old CHECK forever:
+  -- CREATE TABLE IF NOT EXISTS never revisits an existing table. That is how
+  -- Design accounts came to fail every replication run while the JSON side
+  -- accepted them happily. Re-assert the constraint from the canonical list on
+  -- each run so the schema follows roles.js instead of drifting behind it.
+  ALTER TABLE ${SCHEMA}.users DROP CONSTRAINT IF EXISTS users_role_check;
+  ALTER TABLE ${SCHEMA}.users ADD CONSTRAINT users_role_check CHECK (role IN (${rolesSqlList()}));
 `;
 
 const tableByCount = {

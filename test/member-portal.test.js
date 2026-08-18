@@ -109,7 +109,7 @@ test("frontend and server expose distinct member and operator surfaces", () => {
   for (const route of ["mcp", "kanban", "claude-code", "operations", "skills"]) {
     assert.equal(server.includes(`app.use("/api/${route}", requireOperator`), true);
   }
-  assert.match(proxy, /requireRoles\("Creator", "Admin"\)/);
+  assert.match(proxy, /requireRoles\("Creator", "Admin", "CEO"\)/);
   assert.match(proxy, /hasHermesAccess/);
 });
 
@@ -127,7 +127,7 @@ test("Design gets the studio surface without operator controls", () => {
     assert.equal(designNav.includes(`route: "${route}"`), false, `DESIGN_NAV must not expose ${route}`);
   }
 
-  assert.match(server, /const requireStudio = requireRoles\("Creator", "Admin", "Design"\)/);
+  assert.match(server, /const requireStudio = requireRoles\("Creator", "Admin", "CEO", "Design"\)/);
   assert.match(server, /app\.use\("\/api\/studio", requireStudio, studio\)/);
   assert.match(server, /app\.use\("\/api\/knowledge", requireStudio, knowledge\)/);
   for (const route of ["mcp", "kanban", "operations"]) {

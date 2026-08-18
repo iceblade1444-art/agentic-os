@@ -30,7 +30,7 @@ export async function dayPlanFor(user, options = {}) {
   const digest = options.erpDigest || erpDigest;
   const approvalsOf = options.pendingApprovals || pendingApprovals;
   const state = (options.onboarding || onboarding).get(user);
-  const operator = ["Creator", "Admin"].includes(user.role);
+  const operator = ["Creator", "Admin", "CEO"].includes(user.role);
   const google = calendar.status(user.id);
 
   const [events, approvals, erp] = await Promise.all([

@@ -50,5 +50,5 @@ strict custom logic, binary data, streaming or a dedicated authentication flow.
 
 - Add profile-aware UI behavior in `assets/js/pages/misc.js`.
 - Add bounded Hermes endpoints only through `hermesSkillsRequest()`.
-- Keep write routes protected by `requireRoles("Creator", "Admin")`.
+- Keep write routes protected by `requireRoles("Creator", "Admin", "CEO")`.
 - Add connector and frontend contract tests in `test/kanban.test.js`.

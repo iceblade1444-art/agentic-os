@@ -10,7 +10,7 @@ r.post("/voice", (req, res, next) => {
   catch (error) { next(error); }
 });
 
-r.get("/voice", requireRoles("Creator", "Admin"), (_req, res) => {
+r.get("/voice", requireRoles("Creator", "Admin", "CEO"), (_req, res) => {
   res.json(voiceMetricSummary());
 });
 

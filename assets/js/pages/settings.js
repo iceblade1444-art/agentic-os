@@ -165,7 +165,7 @@ function teamSection() {
     <div class="table-wrap"><table class="tbl"><thead><tr><th>${t("settings.user")}</th><th>${t("settings.role")}</th><th>${t("settings.status")}</th><th>${t("settings.access")}</th></tr></thead><tbody>
       ${teamUsers.map((user) => `<tr>
         <td><div class="fw-600">${esc(user.name)}</div><div class="cell-sub">${esc(user.email || t("settings.serverOwner"))}</div></td>
-        <td>${user.id === "creator" ? `<span class="badge primary">Creator</span>` : `<select class="select sm team-role" data-user-id="${esc(user.id)}" ${user.disabled ? "disabled" : ""}>${["Admin", "Design", "Member", "Viewer"].map((role) => `<option ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}</select>`}</td>
+        <td>${user.id === "creator" ? `<span class="badge primary">Creator</span>` : `<select class="select sm team-role" data-user-id="${esc(user.id)}" ${user.disabled ? "disabled" : ""}>${["Admin", "CEO", "Design", "Member", "Viewer"].map((role) => `<option ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}</select>`}</td>
         <td>${user.id === "creator" ? `<span class="badge success">${t("settings.approved")}</span>`
           : user.approved === false
             ? `<button class="btn btn-primary sm team-approval" data-user-id="${esc(user.id)}" data-approved="false">${icon("check")}${t("settings.approve")}</button>`

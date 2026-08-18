@@ -20,7 +20,7 @@ export async function readMemorySnapshot(user, dependencies = {}) {
   const profile = state.profile || {};
   const workspace = state.workspace || {};
   const dashboard = workspaceStore.dashboard(user.id);
-  const operator = ["Creator", "Admin"].includes(user.role);
+  const operator = ["Creator", "Admin", "CEO"].includes(user.role);
   const [vault, usage] = operator
     ? await Promise.all([
       library.status().catch(() => ({ ready: false, notes: 0 })),

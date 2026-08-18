@@ -62,7 +62,7 @@ export class OnboardingStore {
 
   get(user) {
     const profile = this.data.users[user.id] || {};
-    const canEditWorkspace = ["Creator", "Admin"].includes(user.role);
+    const canEditWorkspace = ["Creator", "Admin", "CEO"].includes(user.role);
     const workspace = canEditWorkspace ? (this.data.workspace || {}) : {};
     return {
       version: 1,
@@ -224,7 +224,7 @@ updated: ${profile.updatedAt}
     },
     userSoulDocument(user, state),
   ];
-  if (!["Creator", "Admin"].includes(user.role)) return personalDocuments;
+  if (!["Creator", "Admin", "CEO"].includes(user.role)) return personalDocuments;
   return [
     {
       path: "Agentic OS/Workspace Context.md",
@@ -314,7 +314,7 @@ export function sharedAgentContext(
   const workspace = state.workspace || {};
   const profile = state.profile || {};
   const context = [];
-  if (workspace.completedAt && ["Creator", "Admin"].includes(user?.role)) {
+  if (workspace.completedAt && ["Creator", "Admin", "CEO"].includes(user?.role)) {
     context.push(
       "Authoritative Agentic OS workspace context:",
       `Workspace: ${workspace.name || "Not specified"}`,
@@ -342,7 +342,7 @@ export function sharedAgentContext(
 ${personal}`);
   }
   let out = context.join("\n").slice(0, CONTEXT_BUDGET);
-  if (!(forOwnerOnly && workspace.completedAt && ["Creator", "Admin"].includes(user?.role))) return out;
+  if (!(forOwnerOnly && workspace.completedAt && ["Creator", "Admin", "CEO"].includes(user?.role))) return out;
 
   // The other half of the memory loop. Facts and playbooks flow down into every
   // agent; without this, nothing flowed back, so each session began knowing

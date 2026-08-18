@@ -118,7 +118,7 @@ export function createCompanyBrief(options = {}) {
   // The operator's company morning, as appendable text blocks. Members get an
   // empty string: their brief stays their own plan.
   async function blocks(user, timeZone = "Asia/Tashkent") {
-    if (!["Creator", "Admin"].includes(user?.role)) return "";
+    if (!["Creator", "Admin", "CEO"].includes(user?.role)) return "";
     const parts = [
       await production(timeZone),
       customers(timeZone),

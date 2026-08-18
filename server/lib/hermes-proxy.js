@@ -26,7 +26,7 @@ export function isBareHermesRequest(method, url) {
 }
 
 export function hasHermesAccess(req) {
-  return ["Creator", "Admin"].includes(authenticatedUser(req)?.role);
+  return ["Creator", "Admin", "CEO"].includes(authenticatedUser(req)?.role);
 }
 
 export function hermesForwardedHeaders(req) {
@@ -136,11 +136,11 @@ export function createHermesProxy() {
 export function mountHermesProxy(app, server, proxy = createHermesProxy()) {
   app.use((req, res, next) => {
     if (isBareHermesRequest(req.method, req.originalUrl || req.url)) {
-      return requireRoles("Creator", "Admin")(req, res, () => res.redirect(302, `${PREFIX}/`));
+      return requireRoles("Creator", "Admin", "CEO")(req, res, () => res.redirect(302, `${PREFIX}/`));
     }
     next();
   });
-  app.use(PREFIX, requireRoles("Creator", "Admin"), (req, res) => {
+  app.use(PREFIX, requireRoles("Creator", "Admin", "CEO"), (req, res) => {
     req.url = stripHermesPrefix(req.originalUrl || req.url);
     proxy.web(req, res);
   });
