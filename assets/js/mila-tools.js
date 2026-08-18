@@ -261,6 +261,18 @@ export const MILA_TOOLS = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "get_attendance_today",
+    description: "Turnstile attendance overview for a date (default today): who is in, late, absent — staff data, so it stays with operators. If ok is false, read error.message aloud (usually the missing ERP permission attendance.view) and never guess who came to work.",
+    parameters: { type: "object", properties: {
+      date: { type: "string", description: "YYYY-MM-DD; omit for today" },
+    } },
+  },
+  {
+    name: "get_staff_summary",
+    description: "Headcount from the ERP employee directory, aggregated by department with active counts. Use for questions like «сколько у нас швей» or «сколько человек в отделе кроя».",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "get_sewing_daily_report",
     description: "The daily sewing report for one date and factory: per-line output plus flow capacity — the same data as the ERP page /sewing/daily-report. Use it for questions about сегодняшняя/вчерашняя выработка швейных цехов. If ok is false, read error.message aloud (usually a missing ERP permission) and never invent output numbers.",
     parameters: { type: "object", properties: {

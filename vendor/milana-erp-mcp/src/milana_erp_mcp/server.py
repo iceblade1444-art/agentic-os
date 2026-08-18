@@ -19,6 +19,8 @@ from .tools import (
     erp_search_tool,
     erp_send_notification_tool,
     erp_sewing_daily_report_tool,
+    erp_attendance_overview_tool,
+    erp_staff_directory_tool,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +56,18 @@ async def erp_search(query: str, limit_per_type: int = 5) -> dict[str, Any]:
 async def erp_active_production(limit: int = 25) -> dict[str, Any]:
     """Return active production status from the ERP dashboard endpoint."""
     return await erp_active_production_tool(limit=limit)
+
+
+@mcp.tool(structured_output=True)
+async def erp_attendance_overview(date: str | None = None) -> dict[str, Any]:
+    """Turnstile attendance overview for one date (YYYY-MM-DD, default today): who is in, late, absent."""
+    return await erp_attendance_overview_tool(date=date)
+
+
+@mcp.tool(structured_output=True)
+async def erp_staff_directory() -> dict[str, Any]:
+    """Employee directory with departments, raw rows for caller-side aggregation."""
+    return await erp_staff_directory_tool()
 
 
 @mcp.tool(structured_output=True)

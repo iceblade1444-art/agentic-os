@@ -955,3 +955,52 @@ async def erp_sewing_daily_report_tool(
         )
 
     return await _run_tool("erp_sewing_daily_report", args, handler, settings=settings, client=client)
+
+
+async def erp_attendance_overview_tool(
+    date: str | None = None,
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """Turnstile attendance overview for one date. Needs ``attendance.view``
+    on the MCP service account; a 403 names the requirement so the assistant
+    can say what is missing instead of guessing who came to work."""
+    args = {"date": date}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        day = (date or datetime.now(timezone.utc).date().isoformat())[:10]
+        data = await api.get(f"/api/attendance/overview?date={day}")
+        return ToolExecution({"ok": True, "data": {"date": day, "overview": data}, "source": "/api/attendance/overview"})
+
+    return await _run_tool("erp_attendance_overview", args, handler, settings=settings, client=client)
+
+
+async def erp_staff_directory_tool(
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """The employee directory with the department list, raw. The caller
+    aggregates: the full list is hundreds of rows and belongs in code, not in
+    a model's context."""
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        employees = await api.get("/api/employees")
+        departments: Any = []
+        try:
+            departments = await api.get("/api/departments")
+        except ERPApiError:
+            departments = []
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": {
+                    "employees": employees if isinstance(employees, list) else [],
+                    "departments": departments if isinstance(departments, list) else [],
+                },
+                "source": "/api/employees + /api/departments",
+            }
+        )
+
+    return await _run_tool("erp_staff_directory", {}, handler, settings=settings, client=client)

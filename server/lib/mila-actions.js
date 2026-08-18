@@ -187,6 +187,57 @@ export function sewingFacts(data = {}) {
   };
 }
 
+
+// Hundreds of employee rows collapse to what a question about staff actually
+// needs: headcount by department and status. Raw rows stay in code.
+export function staffFacts(data = {}) {
+  const employees = Array.isArray(data.employees) ? data.employees : [];
+  const departmentNames = new Map((Array.isArray(data.departments) ? data.departments : [])
+    .map((department) => [department.id, bounded(department.name || department.title, 80)]));
+  const byDepartment = new Map();
+  let active = 0;
+  for (const person of employees) {
+    if (person.status === "active") active += 1;
+    const key = departmentNames.get(person.department_id) || bounded(person.department || "Без отдела", 80) || "Без отдела";
+    const bucket = byDepartment.get(key) || { department: key, total: 0, active: 0 };
+    bucket.total += 1;
+    if (person.status === "active") bucket.active += 1;
+    byDepartment.set(key, bucket);
+  }
+  return {
+    total: employees.length,
+    active,
+    departments: [...byDepartment.values()].sort((a, b) => b.total - a.total).slice(0, 20),
+    answer_summary: `В справочнике ${employees.length} сотрудников, активных ${active}, отделов ${byDepartment.size}.`,
+  };
+}
+
+// The attendance overview shape belongs to the ERP; this trims it to a size a
+// text tool result can carry and pulls the recognizable totals forward when
+// they exist, without inventing names for fields we have not seen.
+export function attendanceFacts(data = {}) {
+  const overview = data.overview && typeof data.overview === "object" ? data.overview : {};
+  const summary = {};
+  for (const [ours, theirs] of [
+    ["present", ["present", "present_count", "checked_in", "in_count"]],
+    ["absent", ["absent", "absent_count", "missing"]],
+    ["late", ["late", "late_count", "latecomers"]],
+    ["total", ["total", "total_count", "expected", "headcount"]],
+  ]) {
+    for (const key of theirs) {
+      if (Number.isFinite(Number(overview[key]))) { summary[ours] = Number(overview[key]); break; }
+    }
+  }
+  const raw = JSON.stringify(overview);
+  return {
+    date: bounded(data.date, 10),
+    ...summary,
+    // The raw overview rides along only while it fits: cutting JSON mid-string
+    // to force it in would hand the model a broken object.
+    ...(raw.length <= 2500 ? { overview } : { overview_note: `full overview omitted (${raw.length} chars); the totals above are extracted from it` }),
+  };
+}
+
 function erpTargetLabel(args = {}) {
   if (args.targetType === "department") return `department ${bounded(args.department, 80)}`;
   if (args.targetType === "safe_group") return `group ${bounded(args.safeGroup, 80)}`;
@@ -698,6 +749,28 @@ export function createMilaActions(options = {}) {
       return { query, matches: await base.search(query, scope), source_policy: policy };
     }
 
+    if (name === "get_attendance_today") {
+      // Turnstile data is staff data: operator-only, and the route gate keeps
+      // it that way because this name is in no everyone-list.
+      const result = await erpCall("erp_attendance_overview", args.date ? { date: bounded(args.date, 10) } : {});
+      const ok = result?.ok !== false;
+      return {
+        ok,
+        source_policy: "Answer only from these fields. If ok is false, read error.message aloud — usually the missing ERP permission attendance.view — and never guess who came to work.",
+        attendance: ok ? attendanceFacts(result?.data || {}) : (result?.data || result),
+        error: result?.error,
+      };
+    }
+    if (name === "get_staff_summary") {
+      const result = await erpCall("erp_staff_directory", {});
+      const ok = result?.ok !== false;
+      return {
+        ok,
+        source_policy: "Headcount by department, from the ERP directory. If ok is false, say the directory could not be read.",
+        staff: ok ? staffFacts(result?.data || {}) : (result?.data || result),
+        error: result?.error,
+      };
+    }
     if (name === "get_sewing_daily_report") {
       // The daily sewing report the owner reads at /sewing/daily-report. A 403
       // here means the MCP service account lacks sewing.daily_reports.view in

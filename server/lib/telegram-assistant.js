@@ -29,7 +29,8 @@ const MAX_TOOL_STEPS = 4;
 const READ_ONLY_ERP = new Set(["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"]);
 // The same set a Member's phone may call — a Telegram message must never reach
 // further than the app in that person's hand.
-const allowed = (name) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name) || READ_ONLY_ERP.has(name);
+const allowed = (name, user) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name) || READ_ONLY_ERP.has(name)
+  || (isOperator(user) && OPERATOR_TOOLS.includes(name));
 
 const TOOL_NAMES = [
   "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
@@ -38,6 +39,11 @@ const TOOL_NAMES = [
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
   "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
 ];
+// Staff data — the turnstile and the employee directory — follows the person,
+// not the channel: an operator keeps it in their own linked chat, a Member
+// does not get it anywhere.
+const OPERATOR_TOOLS = ["get_attendance_today", "get_staff_summary"];
+const isOperator = (user) => ["Creator", "Admin"].includes(user?.role);
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
 
@@ -94,7 +100,7 @@ export function createTelegramAssistant(options = {}) {
         // exactly as in a direct thread.
         agentContext: context(user),
         mode: "text",
-        tools: TOOL_NAMES,
+        tools: isOperator(user) ? [...TOOL_NAMES, ...OPERATOR_TOOLS] : TOOL_NAMES,
         knowledgeIndex: knowledgePromptIndex(),
       }),
       toolProtocol(),
@@ -110,7 +116,7 @@ export function createTelegramAssistant(options = {}) {
       messages: [...(history.get(user.id) || [])],
       fallback: "Я запуталась в шагах — попробуйте попросить ещё раз, попроще.",
       execute: async (name, args) => {
-        if (!allowed(name)) {
+        if (!allowed(name, user)) {
           return { ok: false, error: `Tool "${name}" is not available in Telegram.` };
         }
         return actions.call(name, args, { actor: user.name, user });
