@@ -52,7 +52,10 @@ export function createCompanyBrief(options = {}) {
       ]);
       if (current?.ok !== false) {
         const facts = sewingFacts(current?.data || {});
-        const before = previous && previous.ok !== false ? sewingFacts(previous?.data || {}) : null;
+        const rawBefore = previous && previous.ok !== false ? sewingFacts(previous?.data || {}) : null;
+        // No report the day before — a Sunday, a holiday — is not a zero to
+        // beat: "▲ 6981 к выходному" congratulates the factory for existing.
+        const before = rawBefore && rawBefore.lines_reported > 0 ? rawBefore : null;
         if (Number.isFinite(facts.total_sewn) && facts.lines_reported > 0) {
           lines.push(`Швейка вчера: ${facts.total_sewn} шт по ${facts.lines_reported} линиям${delta(facts.total_sewn, before?.total_sewn)}${facts.total_defective ? `, брак ${facts.total_defective}` : ""}`);
         }

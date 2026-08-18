@@ -82,3 +82,25 @@ test("a quiet company prints nothing extra, and a dead ERP costs its block only"
   assert.equal(text.includes("Производство"), false, "the ERP block is absent, not zeroed");
   assert.match(text, /Непрочитанных/, "the team block survives an ERP outage");
 });
+
+test("a day off before yesterday produces no delta, not a triumph over zero", async () => {
+  const brief = fixtureWithEmptyDayBefore();
+  const text = await brief.blocks(OWNER, "Asia/Tashkent");
+  assert.match(text, /Швейка вчера: 5284 шт по 6 линиям/);
+  assert.equal(text.includes("▲"), false, "▲ against a Sunday is not information");
+});
+
+function fixtureWithEmptyDayBefore() {
+  return createCompanyBrief({
+    now: NOW,
+    erpBridge: {
+      call: async (_tool, args) => args.report_date === "2026-08-17"
+        ? SEWING(5284, 6)
+        : { ok: true, data: { reports: { rows: [], total_sewn_qty: 0 }, flows: [] } },
+    },
+    erpDigest: { read: async () => ({ available: false }) },
+    salesBot: { configured: () => false, leads: () => [] },
+    messenger: { listFor: () => [] },
+    journal: { recentEntries: () => [] },
+  });
+}
