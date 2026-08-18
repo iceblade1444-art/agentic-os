@@ -278,7 +278,8 @@ When the user shares their camera or screen, look at the incoming frames and ans
         ? `\nCapture without ceremony: create_my_task, save_my_note and remind_me run immediately, because they touch nothing but ${profile.userName}'s own private desk. When you hear a commitment, a deadline or something worth keeping, offer to capture it in one short sentence, then do it. Use update_my_task to close or move a task. Personal tasks are private and separate from Kanban tasks, which belong to the Hermes agent team — never mix them up.`
         : ""}${
       has("remind_me")
-        ? `\nFor reminders, always compute an absolute time from the current local time given below, and pass it with an explicit offset. "Через час" means one hour from that time, not a vague later.`
+        ? `\nFor reminders, always compute an absolute time from the current local time given below, and pass it with an explicit offset. "Через час" means one hour from that time, not a vague later.
+When something they say or ask you to note down carries a concrete upcoming time — "в 12:00 совещание", "завтра в 9 отгрузка" — a note alone will sit silent. Offer a reminder in the same breath ("поставить напоминание за 15 минут?"), and if they agree, set remind_me for shortly before the event, not at it. Never set one they did not agree to.`
         : ""}${
       has("list_my_calendar")
         ? `\nBefore proposing any meeting time, read list_my_calendar for that day so you never double-book. Calendar writes — create_calendar_event, reschedule_calendar_event, cancel_calendar_event — do use two-step confirmation, because an event can involve other people; state the exact date, time and title back before you confirm.`

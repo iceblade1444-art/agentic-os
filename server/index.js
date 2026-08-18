@@ -69,6 +69,7 @@ import { telegram } from "./lib/telegram.js";
 import { erpWeekly } from "./lib/erp-weekly.js";
 import { eveningSummary } from "./lib/evening-summary.js";
 import { erpAnomalies } from "./lib/erp-anomalies.js";
+import { eventAlerts } from "./lib/event-alerts.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
 import { salesBot } from "./lib/sales-bot.js";
 
@@ -142,6 +143,12 @@ app.use((req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Content-Security-Policy", CSP);
+  // Only on connections that already arrived over TLS (req.secure reads
+  // X-Forwarded-Proto because trust proxy is on). Sending HSTS from a plain-HTTP
+  // install would pin browsers to a scheme that install does not serve.
+  if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // The browser needs the microphone for MILA Live; nothing else is ours to use.
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()");
   next();
 });
 
@@ -317,6 +324,7 @@ server.listen(config.port, async () => {
   erpWeekly.start();
   eveningSummary.start();
   erpAnomalies.start();
+  eventAlerts.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
   if (config.autoConnectObsidian) {
