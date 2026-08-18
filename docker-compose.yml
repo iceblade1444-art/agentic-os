@@ -110,6 +110,9 @@ services:
       - SPEECH_URL=http://speech:4400
       - INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
       - BOT_STATE=/data/bot_state.json
+      # translation reuses the router that already corrects transcripts
+      - LLM_COMPLETE_URL=http://agentic-os:8787/api/llm/complete
+      - LLM_INTERNAL_SECRET=${INTERNAL_SECRET:-}
     volumes:
       - speech-bot-data:/data
 

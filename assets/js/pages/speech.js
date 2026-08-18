@@ -99,6 +99,23 @@ export default {
         <div id="dropZone" class="sp-drop">…или перетащи аудиофайл сюда (mp3, wav, ogg, m4a — до 25 МБ)</div>
         <textarea id="sttOut" class="input mt-4" rows="5" placeholder="Здесь появится распознанный текст…"></textarea>
         <div id="minutesOut" class="mt-4" style="display:none"></div>
+        <div class="row mt-4" style="gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="hint">Перевести на</span>
+          <select id="sttTrLang" class="input" style="width:auto">
+            <option value="uz">O'zbekcha</option>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+            <option value="kk">Қазақша</option>
+            <option value="ky">Кыргызча</option>
+          </select>
+          <button class="btn" id="sttTranslate">Перевести</button>
+          <span class="hint" id="sttTrState"></span>
+        </div>
+        <textarea id="sttTrOut" class="input mt-4" rows="4" placeholder="Здесь появится перевод…" style="display:none"></textarea>
+        <div class="row mt-4" id="sttTrActions" style="gap:6px;display:none">
+          <button class="btn btn-primary" id="sttTrSpeak">Озвучить перевод</button>
+          <button class="btn" id="sttTrCopy">Копировать перевод</button>
+        </div>
         <div class="row between mt-4">
           <div class="hint" id="sttMeta"></div>
           <div class="row" style="gap:6px">
@@ -277,6 +294,61 @@ export default {
       e.preventDefault(); dz.style.background = "";
       const f = e.dataTransfer.files[0];
       if (f) transcribeBlob(f, f.name);
+    });
+
+    q("#sttTranslate").addEventListener("click", async () => {
+      const text = q("#sttOut").value.trim();
+      if (!text) { toast("Сначала распознай аудио или введи текст"); return; }
+      const btn = q("#sttTranslate");
+      const target = q("#sttTrLang").value;
+      btn.disabled = true;
+      const started = Date.now();
+      const tick = setInterval(() => {
+        q("#sttTrState").textContent = `перевожу… ${Math.round((Date.now() - started) / 1000)} с`;
+      }, 500);
+      q("#sttTrState").textContent = "перевожу…";
+      try {
+        const res = await fetch("/api/speech/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, target }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || res.status);
+        const data = await res.json();
+        q("#sttTrOut").value = data.text || "";
+        q("#sttTrOut").style.display = "";
+        q("#sttTrActions").style.display = "";
+        q("#sttTrState").textContent = `готово за ${Math.round((Date.now() - started) / 1000)} с`;
+      } catch (err) {
+        q("#sttTrState").textContent = `ошибка: ${err.message}`;
+        toast(`Перевод: ${esc(err.message)}`);
+      } finally {
+        clearInterval(tick);
+        btn.disabled = false;
+      }
+    });
+
+    // the whole point of the chain: translation goes straight into the voice
+    q("#sttTrSpeak").addEventListener("click", () => {
+      const text = q("#sttTrOut").value.trim();
+      if (!text) { toast("Сначала переведи текст"); return; }
+      const target = q("#sttTrLang").value;
+      const voiced = { uz: "Uzbek", ru: "Russian", en: "English" }[target];
+      if (!voiced) {
+        toast("Голос есть для узбекского, русского и английского");
+        return;
+      }
+      q("#ttsText").value = text;
+      q("#ttsCount").textContent = text.length;
+      q("#ttsLang").value = voiced;
+      q("#ttsLang").dispatchEvent(new Event("change"));
+      q("#ttsBtn").click();
+      q("#ttsText").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    q("#sttTrCopy").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(q("#sttTrOut").value);
+      toast("Перевод скопирован");
     });
 
     q("#sttCopy").addEventListener("click", async () => {

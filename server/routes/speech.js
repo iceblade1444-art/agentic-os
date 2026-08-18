@@ -117,4 +117,43 @@ r.post(
   },
 );
 
+// Body: { text, target } -> { text }
+// Same router that corrects transcripts; no translation model on this box.
+const LANG_NAMES = {
+  uz: "узбекский", ru: "русский", en: "английский",
+  kk: "казахский", ky: "киргизский",
+};
+
+r.post("/translate", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 4000);
+    const target = String(req.body?.target || "").toLowerCase();
+    if (!text) return res.status(400).json({ error: "text is required" });
+    if (!LANG_NAMES[target]) return res.status(400).json({ error: "unsupported target language" });
+
+    const prompt =
+      `Переведи на ${LANG_NAMES[target]} язык. Верни ТОЛЬКО перевод, ` +
+      `без пояснений и без кавычек.\n\n${text}`;
+    const secret = process.env.INTERNAL_SECRET || "";
+    const upstream = await fetch(
+      process.env.LLM_COMPLETE_URL || "http://agentic-os:8787/api/llm/complete",
+      {
+        method: "POST",
+        headers: secret
+          ? { "Content-Type": "application/json", "x-internal-secret": secret }
+          : { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, temperature: 0 }),
+      },
+    );
+    if (!upstream.ok) {
+      const detail = (await upstream.text()).slice(0, 300);
+      return res.status(502).json({ error: `translation unavailable: ${detail}` });
+    }
+    const data = await upstream.json();
+    const translated = String(data.text || "").trim();
+    if (!translated) return res.status(502).json({ error: "empty translation" });
+    res.json({ text: translated });
+  } catch (error) { res.status(502).json({ error: error.message }); }
+});
+
 export default r;
