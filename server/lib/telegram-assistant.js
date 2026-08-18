@@ -57,6 +57,7 @@ function toolProtocol() {
     'TOOL_CALL {"name":"remind_me","args":{"title":"...","dueAt":"..."}}',
     "The system will execute it and send you the result as a message starting with TOOL_RESULT. Then answer the person in plain prose.",
     "Never write TOOL_RESULT yourself, never claim an action happened without a TOOL_RESULT proving it, and never put a TOOL_CALL and prose in the same reply.",
+    "A tool that failed earlier in this chat is not broken now: deploys restart things. When asked again, always try the TOOL_CALL fresh instead of repeating an old apology.",
   ].join("\n");
 }
 
