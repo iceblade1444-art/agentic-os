@@ -246,6 +246,65 @@ export function attendanceFacts(data = {}) {
   };
 }
 
+// Stage names the way the factory says them, so "какой заказ на каком этапе"
+// gets "крой", not "cutting/waiting".
+const STAGE_RU = { cutting: "крой", sewing: "швейка", packaging: "упаковка", completed: "готово" };
+const STAGE_STATUS_RU = { waiting: "ожидание", in_progress: "в работе", completed: "завершён", blocked: "заблокирован" };
+
+// ~46 orders × 3KB of raw ERP each; the model gets one line per order and
+// honest totals. Optional filters keep a pointed question pointed.
+export function processFacts(data = {}, args = {}) {
+  const all = Array.isArray(data.orders) ? data.orders : [];
+  const byStage = {};
+  let overdueCount = 0;
+  for (const row of all) {
+    const stage = STAGE_RU[row.current_stage] || row.current_stage || "неизвестно";
+    byStage[stage] = (byStage[stage] || 0) + 1;
+    if (row.po_overdue) overdueCount += 1;
+  }
+
+  const stageFilter = bounded(args.stage, 20).toLowerCase();
+  const query = bounded(args.query, 80).toLowerCase();
+  const matches = (row) => {
+    if (stageFilter && row.current_stage !== stageFilter && STAGE_RU[row.current_stage] !== stageFilter) return false;
+    if (!query) return true;
+    return [row.production_no, row.order_no, row.sales_order_no, row.model_code, row.model_name, row.customer_name]
+      .some((field) => String(field ?? "").toLowerCase().includes(query));
+  };
+
+  const compact = (row) => ({
+    order: bounded(row.production_no, 30),
+    ...(row.sales_order_no ? { sales_order: bounded(row.sales_order_no, 30) } : {}),
+    ...(row.customer_name ? { customer: bounded(row.customer_name, 60) } : {}),
+    model: bounded([row.model_code, row.model_name].filter(Boolean).join(" "), 60),
+    stage: STAGE_RU[row.current_stage] || bounded(row.current_stage, 20),
+    status: STAGE_STATUS_RU[row.current_stage_status] || bounded(row.current_stage_status, 20) || undefined,
+    plan: Number(row.planned_quantity) || 0,
+    done: Number(row.actual_quantity) || 0,
+    deadline: bounded(row.po_deadline, 10) || undefined,
+    ...(row.po_overdue ? { overdue: true } : {}),
+    ...(row.is_blocked ? { blocked_by: bounded(row.blocked_by, 60) || true } : {}),
+  });
+
+  const filtered = all.filter(matches);
+  // Overdue orders first, then the nearest deadlines: the ones worth speaking
+  // about before the clamp cuts the tail.
+  filtered.sort((a, b) => (b.po_overdue === true) - (a.po_overdue === true)
+    || String(a.po_deadline || "9999").localeCompare(String(b.po_deadline || "9999")));
+  const LIMIT = 25;
+  const orders = filtered.slice(0, LIMIT).map(compact);
+
+  return {
+    total_in_work: all.length,
+    by_stage: byStage,
+    overdue: overdueCount,
+    answer_summary: `Заказов в работе: ${all.length} (${Object.entries(byStage).map(([stage, count]) => `${stage} ${count}`).join(", ")})${overdueCount ? `, просрочено: ${overdueCount}` : ""}.`,
+    ...(filtered.length !== all.length ? { filtered_count: filtered.length } : {}),
+    orders,
+    ...(filtered.length > LIMIT ? { orders_note: `showing ${LIMIT} of ${filtered.length}; narrow with stage or query args` } : {}),
+  };
+}
+
 function erpTargetLabel(args = {}) {
   if (args.targetType === "department") return `department ${bounded(args.department, 80)}`;
   if (args.targetType === "safe_group") return `group ${bounded(args.safeGroup, 80)}`;
@@ -776,6 +835,18 @@ export function createMilaActions(options = {}) {
         ok,
         source_policy: "Headcount by department, from the ERP directory. If ok is false, say the directory could not be read.",
         staff: ok ? staffFacts(result?.data || {}) : (result?.data || result),
+        error: result?.error,
+      };
+    }
+    if (name === "get_order_stages") {
+      // The /processes board: every production order and its stage. Customer
+      // names ride along, so this stays operator-only like the staff tools.
+      const result = await erpCall("erp_process_tracking", {});
+      const ok = result?.ok !== false;
+      return {
+        ok,
+        source_policy: "Answer only from these fields: stage/status per order, plan vs done, deadlines. If ok is false, say the process board could not be read — never guess where an order is.",
+        processes: ok ? processFacts(result?.data || {}, args) : (result?.data || result),
         error: result?.error,
       };
     }

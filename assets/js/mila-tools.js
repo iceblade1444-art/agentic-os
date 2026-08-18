@@ -273,6 +273,14 @@ export const MILA_TOOLS = [
     parameters: { type: "object", properties: {} },
   },
   {
+    name: "get_order_stages",
+    description: "The production process board (/processes): every order with its current stage — крой, швейка, упаковка — plan vs done, deadlines, overdue and blocked flags. Use for «какой заказ на каком этапе», «что в крое», «что просрочено». Operator data: customer names ride along.",
+    parameters: { type: "object", properties: {
+      stage: { type: "string", description: "Filter: cutting|sewing|packaging|completed or крой|швейка|упаковка|готово" },
+      query: { type: "string", description: "Match order no, model or customer name" },
+    } },
+  },
+  {
     name: "get_sewing_daily_report",
     description: "The daily sewing report for one date and factory: per-line output plus flow capacity — the same data as the ERP page /sewing/daily-report. Use it for questions about сегодняшняя/вчерашняя выработка швейных цехов. If ok is false, read error.message aloud (usually a missing ERP permission) and never invent output numbers.",
     parameters: { type: "object", properties: {

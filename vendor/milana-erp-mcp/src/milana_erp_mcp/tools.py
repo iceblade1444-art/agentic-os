@@ -1004,3 +1004,25 @@ async def erp_staff_directory_tool(
         )
 
     return await _run_tool("erp_staff_directory", {}, handler, settings=settings, client=client)
+
+
+async def erp_process_tracking_tool(
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """Every production order with its current stage, raw. Mirrors the ERP
+    page /processes. Rows are ~3KB each (sizes, stages, image urls), so the
+    caller compacts them: the list belongs in code, not in a model's context."""
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        rows = await api.get("/api/process-tracking?page=1&page_size=200")
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": {"orders": rows if isinstance(rows, list) else []},
+                "source": "/api/process-tracking",
+            }
+        )
+
+    return await _run_tool("erp_process_tracking", {}, handler, settings=settings, client=client)

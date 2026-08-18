@@ -21,6 +21,7 @@ from .tools import (
     erp_sewing_daily_report_tool,
     erp_attendance_overview_tool,
     erp_staff_directory_tool,
+    erp_process_tracking_tool,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +69,12 @@ async def erp_attendance_overview(date: str | None = None) -> dict[str, Any]:
 async def erp_staff_directory() -> dict[str, Any]:
     """Employee directory with departments, raw rows for caller-side aggregation."""
     return await erp_staff_directory_tool()
+
+
+@mcp.tool(structured_output=True)
+async def erp_process_tracking() -> dict[str, Any]:
+    """Every production order with its current stage (cutting/sewing/packaging), raw rows for caller-side aggregation."""
+    return await erp_process_tracking_tool()
 
 
 @mcp.tool(structured_output=True)

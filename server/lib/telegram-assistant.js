@@ -42,7 +42,7 @@ const TOOL_NAMES = [
 // Staff data — the turnstile and the employee directory — follows the person,
 // not the channel: an operator keeps it in their own linked chat, a Member
 // does not get it anywhere.
-const OPERATOR_TOOLS = ["get_attendance_today", "get_staff_summary"];
+const OPERATOR_TOOLS = ["get_attendance_today", "get_staff_summary", "get_order_stages"];
 const isOperator = (user) => ["Creator", "Admin"].includes(user?.role);
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
