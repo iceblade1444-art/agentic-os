@@ -249,6 +249,48 @@ def translate(text, target):
 
 
 # --- keyboards --------------------------------------------------------------
+# measured from this bot's own log: the emotion engine took 487 s for 327
+# characters and 275 s for 347. piper answers in a fraction of a second.
+SECONDS_PER_CHAR = {"fast": 0.005, "quality": 1.2, "emotion": 1.2, "premium": 1.2}
+CHUNK_CHARS = 180          # about two minutes on the slow engines
+WARN_SECONDS = 45
+
+
+def split_sentences(text, limit=CHUNK_CHARS):
+    """Split on sentence ends, then on commas, and only then mid-phrase."""
+    import re
+
+    parts, current = [], ""
+    for piece in re.split(r"(?<=[.!?…])\s+", text.strip()):
+        if len(current) + len(piece) + 1 <= limit:
+            current = f"{current} {piece}".strip()
+            continue
+        if current:
+            parts.append(current)
+        while len(piece) > limit:
+            cut = piece.rfind(",", 0, limit)
+            if cut < limit // 2:
+                cut = piece.rfind(" ", 0, limit)
+            if cut < limit // 2:
+                cut = limit
+            parts.append(piece[:cut].strip())
+            piece = piece[cut:].strip(" ,")
+        current = piece
+    if current:
+        parts.append(current)
+    return [p for p in parts if p]
+
+
+def estimate_seconds(text, engine):
+    return len(text) * SECONDS_PER_CHAR.get(engine, 0.005)
+
+
+def human_time(seconds):
+    if seconds < 60:
+        return f"около {int(seconds)} с"
+    return f"около {round(seconds / 60)} мин"
+
+
 def settings_text(uid):
     engine = setting(uid, "engine", "fast")
     lines = [
@@ -383,17 +425,34 @@ def handle_tts(chat_id, uid, text, caption=""):
         send(chat_id, f"Слишком длинный текст для озвучки — не больше "
                       f"{MAX_TTS_CHARS} символов.")
         return
-    call("sendChatAction", chat_id=chat_id, action="record_voice")
+
+    engine = setting(uid, "engine", "fast")
+    if voice_lang(uid) == "uz":
+        engine = "fast"
+    total = estimate_seconds(text, engine)
+
+    # the slow engines take minutes on long text; splitting means the first
+    # audio arrives quickly and no single request can hit the timeout
+    chunks = split_sentences(text) if total > WARN_SECONDS else [text]
+    if total > WARN_SECONDS:
+        send(chat_id, f"Режим «{ENGINES.get(engine, engine)}» — это {human_time(total)}"
+                      f"{f', пришлю {len(chunks)} частями' if len(chunks) > 1 else ''}."
+                      f"\nБыстрее будет через /engine.")
+
     started = time.time()
-    try:
-        wav = synthesize(text, voice_lang(uid), uid)
-    except Exception as exc:
-        log.warning("озвучка не удалась для %s: %s", uid, exc)
-        send(chat_id, "Не получилось озвучить. Попробуйте текст покороче.")
-        return
-    log.info("озвучено: %s, %s, %.1f с, %d символов",
-             uid, voice_lang(uid), time.time() - started, len(text))
-    send_voice(chat_id, wav, caption=caption)
+    for i, part in enumerate(chunks, 1):
+        call("sendChatAction", chat_id=chat_id, action="record_voice")
+        try:
+            wav = synthesize(part, voice_lang(uid), uid)
+        except Exception as exc:
+            log.warning("озвучка не удалась для %s (часть %d): %s", uid, i, exc)
+            send(chat_id, f"Не получилось озвучить{f' часть {i}' if len(chunks) > 1 else ''}. "
+                          "Попробуйте текст покороче или быстрый режим (/engine).")
+            return
+        label = caption if len(chunks) == 1 else f"{i} из {len(chunks)}"
+        send_voice(chat_id, wav, caption=label)
+    log.info("озвучено: %s, %s, %s, %.1f с, %d символов, частей %d",
+             uid, voice_lang(uid), engine, time.time() - started, len(text), len(chunks))
 
 
 def handle_translate(chat_id, uid, text, target, speak=True):
