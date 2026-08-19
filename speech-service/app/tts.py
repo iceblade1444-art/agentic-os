@@ -414,8 +414,14 @@ def synthesize(text: str, language: str | None = None, speaker: str | None = Non
             text, lang, max_attempts=2)
         cache.put(text, wav, **ck)
         return wav
+    # emotion: same caching as quality above — repeats of a phrase the assistant
+    # says all day should not cost 20 s every time
     if not do_verify:
-        return _qwen_python(text, lang, speaker, instruct or "")
-    return quality.synthesize_verified(
+        wav = _qwen_python(text, lang, speaker, instruct or "")
+        cache.put(text, wav, **ck)
+        return wav
+    wav = quality.synthesize_verified(
         lambda text, language, seed, **kw: _qwen_python(text, _norm_lang(language), speaker, instruct or ""),
         text, lang, max_attempts=2)
+    cache.put(text, wav, **ck)
+    return wav
