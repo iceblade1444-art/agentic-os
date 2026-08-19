@@ -3,11 +3,16 @@
 // being satisfied by the proxy, not bypassed by it.
 
 import assert from "node:assert/strict";
+import http from "node:http";
 import { test } from "node:test";
 
+import express from "express";
+
 import {
+  createDshProxy,
   dshStatus,
   isBareDshRequest,
+  mountDshProxy,
   rewriteDshAsset,
   rewriteDshHtml,
   stripDshPrefix,
@@ -52,6 +57,47 @@ test("agentic os paths and relative chunks stay untouched", () => {
   assert.match(rewritten, /href="\/login"/);
   assert.match(rewritten, /"assets\/chunk\.js"/);
   assert.equal(rewritten.includes("/dsh/login"), false);
+});
+
+test("a chunked upstream response is re-framed, not double-framed", async () => {
+  // dsh streams its HTML chunked. The proxy rewrites the body and sets a
+  // content-length; if the upstream's transfer-encoding header survived next
+  // to it, the openresty in front of production answered with a bare 502.
+  const upstream = http.createServer((req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.write('<script src="/assets/a.js"></script>');
+    res.end("<p>ok</p>");
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+
+  const app = express();
+  const server = http.createServer(app);
+  // The auth wrapper is not under test here — the framing lives in the proxy
+  // itself, so mount it the way mountDshProxy does, minus requireRoles.
+  const proxy = createDshProxy({ target: `http://127.0.0.1:${upstream.address().port}` });
+  app.use("/dsh", (req, res) => {
+    req.url = stripDshPrefix(req.originalUrl || req.url);
+    proxy.web(req, res);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const raw = await new Promise((resolve, reject) => {
+      const request = http.get({ host: "127.0.0.1", port: server.address().port, path: "/dsh/" }, (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => resolve({ headers: response.headers, status: response.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+      });
+      request.on("error", reject);
+    });
+    assert.equal(raw.status, 200);
+    assert.equal(raw.headers["transfer-encoding"], undefined, "framing belongs to this hop, not the upstream");
+    assert.equal(Number(raw.headers["content-length"]) > 0, true);
+    assert.match(raw.body, /\/dsh\/assets\/a\.js/);
+  } finally {
+    server.close();
+    upstream.close();
+  }
 });
 
 test("an unreachable dsh reports itself instead of throwing", async () => {

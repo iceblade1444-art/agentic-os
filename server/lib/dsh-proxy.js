@@ -65,9 +65,9 @@ function rejectUpgrade(socket, status = "401 Unauthorized") {
   socket.destroy();
 }
 
-export function createDshProxy() {
+export function createDshProxy(options = {}) {
   const proxy = httpProxy.createProxyServer({
-    target: config.dshUrl,
+    target: options.target || config.dshUrl,
     ws: true,
     selfHandleResponse: true,
   });
@@ -76,6 +76,13 @@ export function createDshProxy() {
   proxy.on("proxyReqWs", prepareProxyRequest);
   proxy.on("proxyRes", (proxyRes, req, res) => {
     const headers = { ...proxyRes.headers };
+    // dsh streams chunked responses. We re-frame the body ourselves (rewritten
+    // bodies get a content-length, piped ones get Node's own chunking), so the
+    // upstream's framing headers must not ride along: content-length next to
+    // transfer-encoding is malformed HTTP, and the openresty in front of the
+    // site answers it with a hard 502.
+    delete headers["transfer-encoding"];
+    delete headers.connection;
     if (headers.location && String(headers.location).startsWith("/")) {
       headers.location = `${PREFIX}${headers.location}`;
     }
