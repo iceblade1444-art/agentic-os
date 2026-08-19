@@ -47,7 +47,6 @@ export const config = {
   autoConnectObsidian: env.AUTO_CONNECT_OBSIDIAN !== "false",
   agentosRuntimeUrl: strip(env.AGENTOS_RUNTIME_URL, "http://agentos-runtime:8765"),
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
-  dshUrl: strip(env.DSH_URL, "http://dsh:3081"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
   livekitUrl: strip(env.LIVEKIT_URL, "http://host.docker.internal:7880"),

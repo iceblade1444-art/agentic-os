@@ -355,7 +355,6 @@ export const api = {
     file: (workdir, filePath) => j(`/api/claude-code/file?workdir=${encodeURIComponent(workdir)}&path=${encodeURIComponent(filePath)}`),
   },
   hermes: { status: () => j("/api/hermes/control/status") },
-  dsh: { status: () => j("/api/dsh/status") },
   llm: { status: () => j("/api/llm/status") },
   pulse: {
     status: () => j("/api/pulse"),

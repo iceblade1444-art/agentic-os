@@ -45,7 +45,6 @@ import {
   mfaDisableHandler, mfaEnableHandler, mfaRecoveryHandler, mfaSetupHandler, mfaStatusHandler,
 } from "./lib/mfa-self-service.js";
 import { hermesDashboardStatus, mountHermesProxy } from "./lib/hermes-proxy.js";
-import { dshStatus, mountDshProxy } from "./lib/dsh-proxy.js";
 import { mountLiveKitProxy } from "./lib/livekit-proxy.js";
 import { mountAtlasProxy } from "./lib/atlas-proxy.js";
 import { PostgresShadowOutbox } from "./lib/postgres-shadow-outbox.js";
@@ -140,9 +139,6 @@ const CSP = [
 ].join("; ");
 app.use((req, res, next) => {
   if (req.path === "/hermes" || req.path.startsWith("/hermes/")) return next();
-  // Same exemption for the embedded DeepSeek Harness: DENY/'none' here would
-  // block its own tab's iframe.
-  if (req.path === "/dsh" || req.path.startsWith("/dsh/")) return next();
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -159,7 +155,6 @@ app.use((req, res, next) => {
 // Hermes serves its official dashboard here, including PTY WebSockets. Mount
 // before body parsers so config forms, uploads and streaming bodies stay intact.
 mountHermesProxy(app, server);
-mountDshProxy(app, server);
 mountLiveKitProxy(app, server);
 mountAtlasProxy(app);
 
@@ -282,7 +277,6 @@ app.use("/api/studio", requireStudio, studio);
 app.use("/api/erp", erp);
 app.use("/api/governance", requireOperator, governance);
 app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
-app.get("/api/dsh/status", requireOperator, async (req, res) => res.json(await dshStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 
 // ---- Static frontend (only assets + index.html; never expose server/, .env, node_modules) ----

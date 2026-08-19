@@ -12,7 +12,6 @@ import dashboard from "./pages/dashboard.js";
 import agents from "./pages/agents.js";
 import missions from "./pages/missions.js";
 import hermes from "./pages/hermes.js";
-import dsh from "./pages/dsh.js";
 import claude from "./pages/claude-code.js";
 import mila from "./pages/mila.js";
 import chat from "./pages/messenger.js";
@@ -45,7 +44,6 @@ const OPERATOR_NAV = [
     { route: "personal", icon: "user", label: "Personal" },
     { route: "missions", icon: "rocket", label: "Missions" },
     { route: "hermes", icon: "brain", label: "Hermes Control" },
-    { route: "dsh", icon: "brain", label: "DeepSeek Harness" },
     { route: "claude", icon: "code", label: "Claude Workspace" },
     { route: "mila", icon: "mic", label: "Mila Live" },
     { route: "speech", icon: "mic", label: "Speech Studio" },
@@ -117,7 +115,7 @@ const DESIGN_NAV = [
 ];
 
 const OPERATOR_PAGES = {
-  "": dashboard, personal, agents, missions, hermes, dsh, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
+  "": dashboard, personal, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
   "my-tasks": memberTasks, "my-notes": memberNotes,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
@@ -132,7 +130,7 @@ const DESIGN_PAGES = { ...MEMBER_PAGES, "": memberHome, mila: undefined, design,
 const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : api.auth.canStudio ? DESIGN_NAV : MEMBER_NAV;
 const pages = () => api.auth.canAdmin ? OPERATOR_PAGES : api.auth.canStudio ? DESIGN_PAGES : MEMBER_PAGES;
 const NAV_KEYS = {
-  "": "home", personal: "personal", missions: "missions", hermes: "hermes", dsh: "dsh", claude: "claude",
+  "": "home", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
   mila: "mila", speech: "speech", agents: "agents", chat: "chat", kanban: "kanban",
   routines: "routines", tools: "tools", knowledge: "knowledge", memory: "memory", mcp: "mcp",
   integrations: "integrations", evaluations: "evaluations", observability: "observability",
