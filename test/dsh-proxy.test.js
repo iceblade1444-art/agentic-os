@@ -100,6 +100,13 @@ test("a chunked upstream response is re-framed, not double-framed", async () => 
   }
 });
 
+test("the global anti-embedding headers exempt the /dsh mount", async () => {
+  // frame-ancestors 'none' on /dsh would blank the tab's own iframe — the
+  // browser reports "the site does not allow the connection".
+  const source = (await import("node:fs")).readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
+  assert.match(source, /req\.path === "\/dsh" \|\| req\.path\.startsWith\("\/dsh\/"\)/);
+});
+
 test("an unreachable dsh reports itself instead of throwing", async () => {
   const status = await dshStatus(async () => { throw new Error("connect ECONNREFUSED"); });
   assert.equal(status.ready, false);

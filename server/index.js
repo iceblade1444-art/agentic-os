@@ -140,6 +140,9 @@ const CSP = [
 ].join("; ");
 app.use((req, res, next) => {
   if (req.path === "/hermes" || req.path.startsWith("/hermes/")) return next();
+  // Same exemption for the embedded DeepSeek Harness: DENY/'none' here would
+  // block its own tab's iframe.
+  if (req.path === "/dsh" || req.path.startsWith("/dsh/")) return next();
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
