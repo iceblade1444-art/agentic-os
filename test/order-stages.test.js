@@ -33,8 +33,9 @@ test("a full board compacts to totals plus one line per order, worst first", () 
   assert.equal(facts.total_in_work, 46);
   assert.deepEqual(facts.by_stage, { "крой": 17, "швейка": 20, "упаковка": 8, "готово": 1 });
   assert.equal(facts.overdue, 1);
+  assert.equal(facts.overdue_not_started, 1, "the late order with nothing produced is counted apart");
   assert.match(facts.answer_summary, /Заказов в работе: 46/);
-  assert.match(facts.answer_summary, /просрочено: 1/);
+  assert.match(facts.answer_summary, /просрочено: 1 \(не начаты 1\)/);
   assert.equal(facts.orders[0].order, "PO-LATE", "the overdue order speaks first");
   assert.equal(facts.orders[0].overdue, true);
   assert.equal(facts.orders[0].customer, "ООО Заказчик");

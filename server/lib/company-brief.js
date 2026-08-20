@@ -13,7 +13,7 @@
 
 import { journal } from "./journal.js";
 import { messenger } from "./messenger.js";
-import { sewingFacts } from "./mila-actions.js";
+import { processFacts, sewingFacts } from "./mila-actions.js";
 import { erpBridge } from "./erp-bridge.js";
 import { erpDigest } from "./erp-digest.js";
 import { salesBot } from "./sales-bot.js";
@@ -62,11 +62,29 @@ export function createCompanyBrief(options = {}) {
       }
     } catch { /* ERP quiet — the block just loses this line */ }
 
+    // The process board answers the question the sewing total cannot: whether
+    // the orders themselves are on time. An overdue order that has produced
+    // nothing is called out separately — that is the one needing a decision
+    // today, not a nudge.
+    try {
+      const board = await bridge.call("erp_process_tracking", {});
+      if (board?.ok !== false) {
+        const facts = processFacts(board?.data || {});
+        if (facts.total_in_work > 0) {
+          const stages = Object.entries(facts.by_stage).map(([stage, count]) => `${stage} ${count}`).join(", ");
+          lines.push(`Заказы в работе: ${facts.total_in_work}${stages ? ` — ${stages}` : ""}`);
+          if (facts.overdue) {
+            lines.push(`За сроком: ${facts.overdue}${facts.overdue_not_started ? `, из них ${facts.overdue_not_started} ещё не начаты` : ""}`);
+          }
+        }
+      }
+    } catch { /* the board is quiet — the block just loses these lines */ }
+
     try {
       const value = await digest.read();
       if (value.available) {
         if (Number.isFinite(value.lateOrders)) {
-          lines.push(`Просрочки: ${value.lateOrders}${value.lateOrders && value.lateOrdersDetail ? ` — ${value.lateOrdersDetail}` : ""}`);
+          lines.push(`Просрочки по клиентским заказам: ${value.lateOrders}${value.lateOrders && value.lateOrdersDetail ? ` — ${value.lateOrdersDetail}` : ""}`);
         }
         if (Number.isFinite(value.finishedGoodsPieces)) lines.push(`Склад готовой продукции: ${value.finishedGoodsPieces} шт`);
         if (value.financeFlag) lines.push(`Финансы: ${clean(value.financeFlag, 120)}`);

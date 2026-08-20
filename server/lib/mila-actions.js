@@ -257,10 +257,16 @@ export function processFacts(data = {}, args = {}) {
   const all = Array.isArray(data.orders) ? data.orders : [];
   const byStage = {};
   let overdueCount = 0;
+  // An overdue order that has produced nothing is a different problem from one
+  // that is late but nearly finished, and only the first needs someone today.
+  let overdueNotStarted = 0;
   for (const row of all) {
     const stage = STAGE_RU[row.current_stage] || row.current_stage || "неизвестно";
     byStage[stage] = (byStage[stage] || 0) + 1;
-    if (row.po_overdue) overdueCount += 1;
+    if (row.po_overdue) {
+      overdueCount += 1;
+      if (!Number(row.actual_quantity)) overdueNotStarted += 1;
+    }
   }
 
   const stageFilter = bounded(args.stage, 20).toLowerCase();
@@ -298,7 +304,8 @@ export function processFacts(data = {}, args = {}) {
     total_in_work: all.length,
     by_stage: byStage,
     overdue: overdueCount,
-    answer_summary: `Заказов в работе: ${all.length} (${Object.entries(byStage).map(([stage, count]) => `${stage} ${count}`).join(", ")})${overdueCount ? `, просрочено: ${overdueCount}` : ""}.`,
+    ...(overdueNotStarted ? { overdue_not_started: overdueNotStarted } : {}),
+    answer_summary: `Заказов в работе: ${all.length} (${Object.entries(byStage).map(([stage, count]) => `${stage} ${count}`).join(", ")})${overdueCount ? `, просрочено: ${overdueCount}${overdueNotStarted ? ` (не начаты ${overdueNotStarted})` : ""}` : ""}.`,
     ...(filtered.length !== all.length ? { filtered_count: filtered.length } : {}),
     orders,
     ...(filtered.length > LIMIT ? { orders_note: `showing ${LIMIT} of ${filtered.length}; narrow with stage or query args` } : {}),

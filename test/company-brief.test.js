@@ -22,11 +22,27 @@ const SEWING = (total, lines) => ({
   },
 });
 
+
+// The real board on 2026-08-19: late is the norm, and seven of those never
+// started — the distinction the brief has to carry.
+const BOARD = {
+  ok: true,
+  data: {
+    orders: [
+      ...Array.from({ length: 16 }, (_, i) => ({ production_no: `PO-C${i}`, current_stage: "cutting", po_overdue: i < 7, actual_quantity: i < 7 ? 0 : 100 })),
+      ...Array.from({ length: 22 }, (_, i) => ({ production_no: `PO-S${i}`, current_stage: "sewing", po_overdue: i < 20, actual_quantity: 300 })),
+      ...Array.from({ length: 8 }, (_, i) => ({ production_no: `PO-P${i}`, current_stage: "packaging", po_overdue: i < 8, actual_quantity: 500 })),
+    ],
+  },
+};
+
 function fixture(overrides = {}) {
   return createCompanyBrief({
     now: NOW,
     erpBridge: {
-      call: async (_tool, args) => args.report_date === "2026-08-17" ? SEWING(5284, 6) : SEWING(4800, 6),
+      call: async (tool, args) => tool === "erp_process_tracking"
+        ? BOARD
+        : (args.report_date === "2026-08-17" ? SEWING(5284, 6) : SEWING(4800, 6)),
     },
     erpDigest: { read: async () => ({ available: true, lateOrders: 0, lateOrdersDetail: "", finishedGoodsPieces: 12900, financeFlag: "Касса в норме" }) },
     salesBot: { configured: () => true, leads: () => [
@@ -50,7 +66,9 @@ function fixture(overrides = {}) {
 test("an operator gets the four blocks, with yesterday's sewing and its direction", async () => {
   const text = await fixture().blocks(OWNER, "Asia/Tashkent");
   assert.match(text, /Швейка вчера: 5284 шт по 6 линиям \(▲ 484\)/);
-  assert.match(text, /Просрочки: 0/);
+  assert.match(text, /Заказы в работе: 46 — крой 16, швейка 22, упаковка 8/);
+  assert.match(text, /За сроком: 35, из них 7 ещё не начаты/);
+  assert.match(text, /Просрочки по клиентским заказам: 0/);
   assert.match(text, /Склад готовой продукции: 12900 шт/);
   assert.match(text, /Новых лидов за вчера: 2/);
   assert.match(text, /Ждут ответа менеджера: 2/);
