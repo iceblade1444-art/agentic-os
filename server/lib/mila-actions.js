@@ -248,7 +248,7 @@ export function attendanceFacts(data = {}) {
 
 // Stage names the way the factory says them, so "какой заказ на каком этапе"
 // gets "крой", not "cutting/waiting".
-const STAGE_RU = { cutting: "крой", sewing: "швейка", packaging: "упаковка", completed: "готово" };
+const STAGE_RU = { cutting: "крой", sewing: "швейка", packaging: "упаковка", storage_transfer: "на склад", completed: "готово" };
 const STAGE_STATUS_RU = { waiting: "ожидание", in_progress: "в работе", completed: "завершён", blocked: "заблокирован" };
 
 // ~46 orders × 3KB of raw ERP each; the model gets one line per order and

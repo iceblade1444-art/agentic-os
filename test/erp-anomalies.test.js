@@ -87,6 +87,40 @@ test("a dead MCP pipe is retried once on a fresh connection; real errors are not
   await assert.rejects(failing.call("erp_nonsense", {}), /Unknown tool/);
 });
 
+test("a lost connection is asked again; a refusal is reported as itself", async () => {
+  const { createErpBridge } = await import("../server/lib/erp-bridge.js");
+  const harness = (replies) => {
+    const seen = [];
+    const bridge = createErpBridge({
+      db: { mcp: { list: () => [{ id: "mcp_erp", kind: "erp" }], update: () => {} } },
+      mcpManager: {
+        isLive: () => true, connect: async () => ({ tools: [] }), disconnect: async () => {},
+        callTool: async () => { seen.push("call"); return { content: [{ type: "text", text: JSON.stringify(replies[seen.length - 1] ?? replies.at(-1)) }] }; },
+      },
+    });
+    return { bridge, seen };
+  };
+
+  // The exact payload a failed DNS lookup produced while the ERP was serving
+  // the page: MILA said the report was unavailable, and it was not.
+  const blip = { ok: false, error: { status_code: 502, message: "ERP login request failed", path: "/api/auth/login" } };
+  const good = { ok: true, data: { orders: [] } };
+  const flaky = harness([blip, good]);
+  assert.deepEqual(await flaky.bridge.call("erp_process_tracking", {}), good);
+  assert.equal(flaky.seen.length, 2, "the blip is asked again");
+
+  // A missing permission is the ERP answering, not the network failing.
+  const denied = { ok: false, error: { status_code: 403, message: "Missing permission. Need any of: ['attendance.view']" } };
+  const refused = harness([denied]);
+  assert.deepEqual(await refused.bridge.call("erp_attendance_overview", {}), denied);
+  assert.equal(refused.seen.length, 1, "a refusal is not retried");
+
+  // Twice unreachable is an outage: report it, do not spin.
+  const down = harness([blip, blip]);
+  assert.deepEqual(await down.bridge.call("erp_process_tracking", {}), blip);
+  assert.equal(down.seen.length, 2);
+});
+
 test("the sewing report reaches the model as totals, not as rows to sum", async () => {
   const { createMilaActions } = await import("../server/lib/mila-actions.js");
   const rows = [];

@@ -72,7 +72,7 @@ export function createCompanyBrief(options = {}) {
         const facts = processFacts(board?.data || {});
         if (facts.total_in_work > 0) {
           const stages = Object.entries(facts.by_stage).map(([stage, count]) => `${stage} ${count}`).join(", ");
-          lines.push(`Заказы в работе: ${facts.total_in_work}${stages ? ` — ${stages}` : ""}`);
+          lines.push(`Заказы в производстве: ${facts.total_in_work}${stages ? ` — ${stages}` : ""}`);
           if (facts.overdue) {
             lines.push(`За сроком: ${facts.overdue}${facts.overdue_not_started ? `, из них ${facts.overdue_not_started} ещё не начаты` : ""}`);
           }

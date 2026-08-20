@@ -66,7 +66,7 @@ function fixture(overrides = {}) {
 test("an operator gets the four blocks, with yesterday's sewing and its direction", async () => {
   const text = await fixture().blocks(OWNER, "Asia/Tashkent");
   assert.match(text, /Швейка вчера: 5284 шт по 6 линиям \(▲ 484\)/);
-  assert.match(text, /Заказы в работе: 46 — крой 16, швейка 22, упаковка 8/);
+  assert.match(text, /Заказы в производстве: 46 — крой 16, швейка 22, упаковка 8/);
   assert.match(text, /За сроком: 35, из них 7 ещё не начаты/);
   assert.match(text, /Просрочки по клиентским заказам: 0/);
   assert.match(text, /Склад готовой продукции: 12900 шт/);

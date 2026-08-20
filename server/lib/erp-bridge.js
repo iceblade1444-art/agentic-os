@@ -28,11 +28,25 @@ export function createErpBridge(options = {}) {
     try { return JSON.parse(text); } catch { return { ok: true, text }; }
   }
 
+  // The bridge answers a failed name lookup or a refused connection the same
+  // way it answers the ERP itself: as an ok:false result. But "I could not
+  // reach the ERP" is not an answer about the business, and one such blip made
+  // MILA tell the owner the sewing report was unavailable while the ERP was
+  // serving it. These come back rarely and independently, so a second ask
+  // settles them; a 403 or a bad tool name repeats identically and is reported.
+  function transientFailure(result) {
+    if (!result || result.ok !== false) return false;
+    const status = Number(result.error?.status_code);
+    if (![502, 503, 504].includes(status)) return false;
+    return /request failed|connection|timeout|temporarily|unreachable/i.test(String(result.error?.message || ""));
+  }
+
   async function call(tool, args = {}) {
     const server = findServer(store);
     if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
     try {
-      return await attempt(server, tool, args);
+      const result = await attempt(server, tool, args);
+      return transientFailure(result) ? await attempt(server, tool, args) : result;
     } catch (error) {
       // A held connection dies with the child process — every deploy restarts
       // the container mid-conversation somewhere. That is a stale pipe, not an
