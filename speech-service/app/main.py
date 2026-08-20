@@ -4,6 +4,7 @@ Same trust model as llm-router: internal service, callers present
 x-internal-secret; the NestJS api authenticates humans.
 """
 import logging
+import time
 import os
 import tempfile
 
@@ -21,6 +22,30 @@ def _check_secret(x_internal_secret: str | None):
     if config.INTERNAL_SECRET and x_internal_secret != config.INTERNAL_SECRET:
         raise HTTPException(status_code=401, detail="bad internal secret")
 
+
+
+@app.on_event("startup")
+def _preload_voices():
+    """Warm the fast voices in the background.
+
+    The first synthesis after a restart pays ~1.3 s to load the piper model,
+    while later ones take 0.28 s. Doing it here means the cost lands on nobody
+    instead of on whoever calls first. Threaded so startup and /healthz are not
+    held up, and failures are logged rather than fatal — a service that answers
+    slowly beats one that refuses to start.
+    """
+    import threading
+
+    def load():
+        for language in ("Uzbek", "Russian"):
+            try:
+                started = time.time()
+                tts.synthesize("Salom", language=language, engine="fast")
+                log.info("preloaded %s voice in %.2fs", language, time.time() - started)
+            except Exception as exc:
+                log.warning("preload of %s failed: %s", language, exc)
+
+    threading.Thread(target=load, daemon=True).start()
 
 @app.get("/healthz")
 def healthz():
