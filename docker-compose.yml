@@ -2,6 +2,14 @@
 #   docker compose up -d --build
 services:
   agentic-os:
+    # Docker's embedded resolver answers SERVFAIL to the AAAA half of a
+    # dual-stack lookup on this host, and glibc turns that into an intermittent
+    # EAI_AGAIN for the whole name: measured 8 failures in 30 lookups of
+    # erp.milanapremium.uz, which is why ERP answers came and went. Asking for
+    # A and AAAA on separate sockets makes one bad half stop poisoning the
+    # other — 30 of 30 with it.
+    dns_opt:
+      - single-request-reopen
     build: .
     image: agentic-os:latest
     container_name: agentic-os
@@ -79,6 +87,8 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   speech:
+    dns_opt:
+      - single-request-reopen
     build:
       context: ./speech-service
     image: agentos-speech:latest
@@ -96,6 +106,8 @@ services:
       - speech-hf-cache:/root/.cache/huggingface
 
   speech-bot:
+    dns_opt:
+      - single-request-reopen
     build:
       context: ./speech-bot
     image: agentos-speech-bot:latest
@@ -118,6 +130,8 @@ services:
       - speech-bot-data:/data
 
   agentos-runtime:
+    dns_opt:
+      - single-request-reopen
     build:
       context: ./agentos-runtime
     image: agentos-runtime:latest
