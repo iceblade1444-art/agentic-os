@@ -39,6 +39,91 @@ function toSrt(segments) {
   return segments.map((s, i) => `${i + 1}\n${fmtTime(s.start)} --> ${fmtTime(s.end)}\n${s.text}\n`).join("\n");
 }
 
+
+// Slow engines scale with text length, and the proxy in front of us gives up at
+// 60 s. Splitting keeps every request short and lets playback start early.
+const SLOW_ENGINES = new Set(["quality", "emotion", "premium", "clone"]);
+const PART_CHARS = 160;
+
+function splitForSpeech(text, limit = PART_CHARS) {
+  const parts = [];
+  let current = "";
+  for (const piece of text.trim().split(/(?<=[.!?\u2026])\s+/)) {
+    if ((current + " " + piece).trim().length <= limit) {
+      current = (current + " " + piece).trim();
+      continue;
+    }
+    if (current) parts.push(current);
+    let rest = piece;
+    while (rest.length > limit) {
+      let cut = rest.lastIndexOf(",", limit);
+      if (cut < limit / 2) cut = rest.lastIndexOf(" ", limit);
+      if (cut < limit / 2) cut = limit;
+      parts.push(rest.slice(0, cut).trim());
+      rest = rest.slice(cut).replace(/^[\s,]+/, "");
+    }
+    current = rest;
+  }
+  if (current) parts.push(current);
+  return parts.filter(Boolean);
+}
+
+// One file out of many, so download and history keep working.
+async function joinWavs(buffers) {
+  if (buffers.length === 1) return new Blob([buffers[0]], { type: "audio/wav" });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const decoded = [];
+  for (const buf of buffers) decoded.push(await ctx.decodeAudioData(buf.slice(0)));
+  const rate = decoded[0].sampleRate;
+  const total = decoded.reduce((n, d) => n + d.length, 0);
+  const pcm = new Float32Array(total);
+  let at = 0;
+  for (const d of decoded) { pcm.set(d.getChannelData(0), at); at += d.length; }
+  ctx.close();
+
+  const view = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const ascii = (off, str) => [...str].forEach((c, i) => view.setUint8(off + i, c.charCodeAt(0)));
+  ascii(0, "RIFF"); view.setUint32(4, 36 + pcm.length * 2, true); ascii(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  ascii(36, "data"); view.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.max(-1, Math.min(1, pcm[i]));
+    view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Blob([view.buffer], { type: "audio/wav" });
+}
+
+// Speaks each part as it arrives; the queue keeps them in order.
+async function synthesizeInParts(parts, request, onProgress) {
+  const audio = q("#ttsAudio");
+  const buffers = [];
+  const queue = [];
+  let playing = false;
+
+  const playNext = () => {
+    if (playing || !queue.length) return;
+    playing = true;
+    audio.src = queue.shift();
+    audio.style.display = "block";
+    audio.onended = () => { playing = false; playNext(); };
+    audio.play().catch(() => { playing = false; });
+  };
+
+  for (let i = 0; i < parts.length; i++) {
+    onProgress(i + 1, parts.length);
+    const res = await request(parts[i]);
+    if (!res.ok) throw new Error((await res.json()).error || res.status);
+    const bytes = await res.arrayBuffer();
+    if (bytes.byteLength < 100) throw new Error("пустой аудио-ответ");
+    buffers.push(bytes);
+    queue.push(URL.createObjectURL(new Blob([bytes], { type: "audio/wav" })));
+    playNext();
+  }
+  return joinWavs(buffers);
+}
+
 function download(name, content, type) {
   const a = document.createElement("a");
   // a blob:/http:/data: string is already a link to the bytes — wrapping it in a
@@ -453,17 +538,34 @@ export default {
             body: cloneSample.blob,
           });
         } else {
-          res = await fetch("/api/speech/tts", {
+          const say = (part) => fetch("/api/speech/tts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              text, engine,
+              text: part, engine,
               language: q("#ttsLang").value,
               speaker: q("#ttsSpeaker").value,
               speed: engine === "fast" ? Number(q("#ttsSpeed").value) : undefined,
               instruct: engine === "emotion" ? q("#ttsInstruct").value.trim() : "",
             }),
           });
+
+          const parts = SLOW_ENGINES.has(engine) ? splitForSpeech(text) : [text];
+          if (parts.length > 1) {
+            clearInterval(ttsTicker);
+            const blob = await synthesizeInParts(parts, say, (done, total) => {
+              q("#ttsState").textContent =
+                `озвучиваю часть ${done} из ${total}… (${Math.round((Date.now() - started) / 1000)} с)`;
+            });
+            const joined = URL.createObjectURL(blob);
+            const dl = q("#ttsDl");
+            dl.href = joined; dl.download = "speech.wav"; dl.style.display = "";
+            q("#ttsState").textContent =
+              `готово, ${parts.length} частей (${Math.round(blob.size / 1024)} КБ)`;
+            pushTtsHistory(text, engine, joined);
+            return;
+          }
+          res = await say(text);
         }
         if (!res.ok) throw new Error((await res.json()).error || res.status);
         const bytes = await res.arrayBuffer();
@@ -477,6 +579,7 @@ export default {
         audio.play().catch(() => {});
         q("#ttsState").textContent = `готово (${Math.round(bytes.byteLength / 1024)} КБ)`;
         pushTtsHistory(text, engine, url);
+        return;
       } catch (err) {
         q("#ttsState").textContent = `ошибка: ${err.message}`;
         toast(`TTS: ${esc(err.message)}`);
