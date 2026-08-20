@@ -4,6 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { hardenRuntimeFile } from "./lib/runtime-files.js";
+import { open as openSecret, seal as sealSecret } from "./lib/secret-box.js";
+
+// Integration credentials live in this file. They are sealed on disk and held
+// open in memory, so every reader of db.integrations keeps seeing a plain object.
+const SECRET_NS = "store:integration-config";
 
 const dir = path.resolve(config.dataDir);
 const file = path.join(dir, "db.json");
@@ -42,17 +47,57 @@ function readOrSeed() {
       }
       if (Array.isArray(loaded.integrations)) {
         for (const def of s.integrations) if (!loaded.integrations.some((x) => x.id === def.id)) loaded.integrations.push(def);
+        // Stores written before the credentials were sealed hold plain objects;
+        // open() passes those through untouched and the next write seals them.
+        for (const integration of loaded.integrations) {
+          integration.config = openSecret(integration.config, SECRET_NS, {
+            onError: () => {
+              console.error(`[store] integration ${integration.provider}: stored credentials could not be decrypted (SESSION_SECRET changed?) — reconnect it`);
+              integration.connected = false;
+              integration.lastResult = { ok: false, error: "credentials_unreadable" };
+            },
+          });
+        }
       }
       return loaded;
     }
-  } catch (e) { console.error("[store] load failed:", e.message); }
+  } catch (e) {
+    // A truncated or corrupt db.json used to be replaced by the seed without
+    // anyone noticing: the MCP servers and every connected integration silently
+    // reverted to factory defaults. Keep the bytes so the connections can be
+    // recovered, and say plainly that it happened.
+    console.error("[store] db.json could not be read:", e.message);
+    if (fs.existsSync(file)) {
+      const quarantine = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+      try {
+        fs.renameSync(file, quarantine);
+        console.error(`[store] kept the unreadable file at ${quarantine} — starting from defaults; reconnect integrations after restoring it`);
+      } catch (renameError) {
+        console.error("[store] could not preserve the unreadable file:", renameError.message);
+      }
+    }
+  }
   const s = seed();
   write(s);
   return s;
 }
+// Temp + rename, like every other store here: a crash mid-write left a
+// half-written db.json, which the loader above then had to quarantine.
 function write(d) {
-  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, JSON.stringify(d, null, 2), { mode: 0o600 }); hardenRuntimeFile(file, 0o600); }
-  catch (e) { console.error("[store] save failed:", e.message); }
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const onDisk = {
+      ...d,
+      integrations: (d.integrations || []).map((integration) => ({
+        ...integration,
+        config: sealSecret(integration.config, SECRET_NS),
+      })),
+    };
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(onDisk, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+    hardenRuntimeFile(file, 0o600);
+  } catch (e) { console.error("[store] save failed:", e.message); }
 }
 
 let data = readOrSeed();

@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
+import { runtimeInternalHeaders } from "./runtime-auth.js";
 
 const SAMPLE_EVERY_MS = 30 * 60 * 1000;
 const MAX_SAMPLES = 672; // 14 days at one sample per 30 minutes
@@ -42,7 +43,7 @@ export function hostMetrics(dataDir = config.dataDir) {
 async function runtimeJson(pathname, options = {}) {
   const response = await fetch(config.agentosRuntimeUrl + pathname, {
     method: options.method || "GET",
-    headers: { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}) },
+    headers: runtimeInternalHeaders({ Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}) }),
     body: options.body ? JSON.stringify(options.body) : undefined,
     signal: AbortSignal.timeout(options.timeoutMs || 3500),
   });

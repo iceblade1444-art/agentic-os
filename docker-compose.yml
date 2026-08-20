@@ -21,6 +21,7 @@ services:
       - POSTGRES_AUTH_READ_MODE=${POSTGRES_AUTH_READ_MODE:-postgres}
       - OBSIDIAN_VAULT=/app/vault
       - AGENTOS_RUNTIME_URL=http://agentos-runtime:8765
+      - AGENTOS_RUNTIME_TOKEN=${AGENTOS_RUNTIME_TOKEN:-}
       - SPEECH_URL=http://speech:4400
       - SPEECH_INTERNAL_SECRET=${SPEECH_INTERNAL_SECRET:-}
       - HERMES_DASHBOARD_SOCKET=/run/agentic-os/hermes-dashboard.sock
@@ -129,6 +130,8 @@ services:
       - HOME=/home/admilana
       - OBSIDIAN_VAULT_PATH=/app/obsidian-vault
       - PATH=/home/admilana/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+      # Shared with the Node API only; the runtime refuses unknown callers once set.
+      - AGENTOS_RUNTIME_TOKEN=${AGENTOS_RUNTIME_TOKEN:-}
     ports:
       - "${RUNTIME_BIND_ADDRESS:-127.0.0.1}:${RUNTIME_HOST_PORT:-8765}:8765"
     volumes:

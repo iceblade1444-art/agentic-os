@@ -161,9 +161,9 @@ function requestLabel(req, kind) {
   return `${kind === "mobile" ? "MILA mobile" : "Web browser"}${agent ? ` · ${agent}` : ""}`;
 }
 
-function createTrackedSession(req, user, kind) {
+function createTrackedSession(req, user, kind, store = sessions) {
   const days = kind === "mobile" ? 30 : 7;
-  return sessions.create(user.id, {
+  return store.create(user.id, {
     kind,
     label: requestLabel(req, kind),
     expiresAt: Date.now() + days * 864e5,
@@ -265,7 +265,12 @@ export async function mobilePairExchangeHandler(req, res, deps = {}) {
   });
 }
 
-export async function loginHandler(req, res) {
+// deps mirrors mobilePairExchangeHandler: every handler that creates a real
+// tracked session must let a test hand in a throwaway store, or the deploy
+// gate writes sessions into the owner's device list on every run.
+export async function loginHandler(req, res, deps = {}) {
+  const sessionStore = deps.sessions || sessions;
+  const commit = deps.commitAuthGroups || commitAuthGroups;
   if (!authEnabled()) return res.json({ ok: true, required: false, user: creatorUser() });
   const { email = "", password = "" } = req.body || {};
   const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
@@ -275,12 +280,12 @@ export async function loginHandler(req, res) {
   }
   if (approvalPending(user, res)) return;
   if (requireMfa(user, "web", res)) return;
-  const session = createTrackedSession(req, user, "web");
+  const session = createTrackedSession(req, user, "web", sessionStore);
   try {
-    await commitAuthGroups("sessions");
+    await commit("sessions");
   } catch (error) {
-    sessions.revoke(user.id, session.id);
-    await commitAuthGroups("sessions").catch(() => {});
+    sessionStore.revoke(user.id, session.id);
+    await commit("sessions").catch(() => {});
     return res.status(error.status || 503).json({ error: error.message, code: error.code });
   }
   res.setHeader("Set-Cookie", sessionCookie(req, user, session.id));
@@ -329,7 +334,9 @@ export async function registerHandler(req, res) {
   }
 }
 
-export async function mobileLoginHandler(req, res) {
+export async function mobileLoginHandler(req, res, deps = {}) {
+  const sessionStore = deps.sessions || sessions;
+  const commit = deps.commitAuthGroups || commitAuthGroups;
   if (!authEnabled()) return res.status(503).json({ error: "Authentication is not configured" });
   const { email = "", password = "" } = req.body || {};
   const user = email ? authenticateAccount(email, password) : (constEq(password, config.authToken) ? creatorUser() : null);
@@ -356,7 +363,8 @@ export async function mobileLoginHandler(req, res) {
   });
 }
 
-export async function mobileRegisterHandler(req, res) {
+export async function mobileRegisterHandler(req, res, deps = {}) {
+  const sessionStore = deps.sessions || sessions;
   if (!config.allowRegistration) return res.status(403).json({ error: "Registration is disabled" });
   if (config.emailVerificationRequired && !accountMailer.ready) return res.status(503).json({ error: "Email delivery is not configured" });
   let createdUser = null;
@@ -403,9 +411,11 @@ export async function mobileRegisterHandler(req, res) {
     res.status(error.status || (error.code === "email_exists" ? 409 : 400)).json({ error: error.message, code: error.code });
   }
 }
-export async function logoutHandler(req, res) {
+export async function logoutHandler(req, res, deps = {}) {
+  const sessionStore = deps.sessions || sessions;
+  const commit = deps.commitAuthGroups || commitAuthGroups;
   const payload = signedPayload(req);
-  if (payload?.sid && payload.user?.id) sessions.revoke(String(payload.user.id), payload.sid);
+  if (payload?.sid && payload.user?.id) sessionStore.revoke(String(payload.user.id), payload.sid);
   await commit("sessions").catch(() => {});
   res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   res.json({ ok: true });

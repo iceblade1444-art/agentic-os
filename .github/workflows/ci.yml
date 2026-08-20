@@ -32,6 +32,53 @@ jobs:
           test -f "$root/state/operations.json"
           test -n "$(find "$root/backups" -name manifest.json -print -quit)"
 
+      - name: Exercise encrypted off-site backup
+        run: |
+          root="$(mktemp -d)"
+          mkdir -p "$root/app/data" "$root/app/vault" "$root/remote"
+          printf 'CANARY_SECRET=must-not-appear-in-ciphertext\n' > "$root/app/.env"
+          printf '{}\n' > "$root/app/data/db.json"
+          printf '# test\n' > "$root/app/vault/test.md"
+          printf 'correct horse battery staple\n' > "$root/pass"
+          chmod 600 "$root/pass"
+
+          HOME="$root" OPS_STATE_DIR="$root/state" OPS_BACKUP_DIR="$root/backups" \
+            OPS_BACKUP_PASSPHRASE_FILE="$root/pass" OPS_BACKUP_REMOTE="$root/remote" \
+            python3 scripts/agentic-os-operations.py backup --root "$root/app"
+
+          python3 - "$root" <<'PY'
+          import json, sys
+          state = json.load(open(f"{sys.argv[1]}/state/operations.json"))
+          assert state["backup"]["status"] == "success", state["backup"]
+          assert state["offsite"]["status"] == "success", state["offsite"]
+          PY
+
+          sealed="$(find "$root/remote" -name '*.tar.gz.gpg' -print -quit)"
+          test -n "$sealed"
+          # The credential in .env must not be readable in the shipped archive.
+          ! grep -q "must-not-appear-in-ciphertext" "$sealed"
+          # And the archive must actually restore.
+          gpg --batch --quiet --decrypt --passphrase-file "$root/pass" "$sealed" > "$root/out.tar.gz"
+          tar -xzf "$root/out.tar.gz" -C "$root"
+          grep -rq "must-not-appear-in-ciphertext" "$root"/2*/.env
+
+      - name: An off-site remote without a passphrase is refused
+        run: |
+          root="$(mktemp -d)"
+          mkdir -p "$root/app/data" "$root/remote"
+          printf '{}\n' > "$root/app/data/db.json"
+          HOME="$root" OPS_STATE_DIR="$root/state" OPS_BACKUP_DIR="$root/backups" \
+            OPS_BACKUP_REMOTE="$root/remote" \
+            python3 scripts/agentic-os-operations.py backup --root "$root/app"
+          # The local backup still succeeds; only the off-site step refuses.
+          python3 - "$root" <<'PY'
+          import json, sys
+          state = json.load(open(f"{sys.argv[1]}/state/operations.json"))
+          assert state["backup"]["status"] == "success", state["backup"]
+          assert state["offsite"]["status"] == "error", state["offsite"]
+          PY
+          test -z "$(find "$root/remote" -type f -print -quit)"
+
   runtime:
     runs-on: ubuntu-latest
     timeout-minutes: 20

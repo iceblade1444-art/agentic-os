@@ -71,6 +71,15 @@ class Operations:
         self.backup_root = Path(os.environ.get("OPS_BACKUP_DIR", Path.home() / "backups/agentic-os")).resolve()
         self.retention_days = max(1, int(os.environ.get("OPS_BACKUP_RETENTION_DAYS", "14")))
         self.max_backups = max(2, int(os.environ.get("OPS_BACKUP_MAX_COUNT", "14")))
+        # Off-site copy. Until this existed every backup lived on the same disk
+        # as production — including the .env with every provider credential in
+        # it — so one disk failure took the data and its only copies together.
+        # Both settings are optional and independent: encryption without a
+        # remote still protects the archive on disk, and a remote without a
+        # passphrase is refused rather than shipping secrets in the clear.
+        self.backup_passphrase_file = os.environ.get("OPS_BACKUP_PASSPHRASE_FILE", "").strip()
+        self.backup_remote = os.environ.get("OPS_BACKUP_REMOTE", "").strip()
+        self.offsite_max_age_hours = max(1, int(os.environ.get("OPS_OFFSITE_MAX_AGE_HOURS", "36")))
         bind = os.environ.get("BIND_ADDRESS", "127.0.0.1")
         if bind in {"0.0.0.0", "::"}:
             bind = "127.0.0.1"
@@ -169,6 +178,14 @@ class Operations:
                 }
                 (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
                 os.chmod(destination / "manifest.json", 0o600)
+
+                # After the manifest, so the off-site archive always contains a
+                # complete, self-describing backup.
+                previous_offsite = self.load().get("offsite", {})
+                offsite = self.offsite_backup(destination)
+                if offsite.get("status") != "success" and previous_offsite.get("lastSuccessAt"):
+                    offsite["lastSuccessAt"] = previous_offsite["lastSuccessAt"]
+
                 removed = self.prune(destination)
                 state = self.load()
                 state["backup"] = {
@@ -176,6 +193,7 @@ class Operations:
                     "sizeBytes": size, "count": self.backup_count(), "retentionDays": self.retention_days,
                     "maxCount": self.max_backups, "removed": removed, "error": None,
                 }
+                state["offsite"] = offsite
                 self.save(state)
                 return state["backup"]
             except Exception as error:
@@ -184,6 +202,123 @@ class Operations:
                 self.save(state)
                 self.notify("critical", f"Agentic OS backup failed: {error}")
                 raise
+
+    def backup_passphrase(self) -> str:
+        """The symmetric key for off-site archives, read from a file only.
+
+        A file keeps the passphrase out of the process table and out of the
+        state JSON. It is never written into a backup — an archive that carries
+        the key to itself is not encrypted, it is obfuscated.
+        """
+        if not self.backup_passphrase_file:
+            return ""
+        try:
+            return Path(self.backup_passphrase_file).read_text(encoding="utf-8").strip()
+        except OSError as error:
+            raise RuntimeError(f"backup passphrase file unreadable: {error}") from error
+
+    def encrypt_backup(self, destination: Path) -> Path | None:
+        """Seal one backup directory into a single encrypted archive.
+
+        Returns None when no passphrase is configured, which keeps this whole
+        feature opt-in. gpg symmetric AES-256 is used because it ships with the
+        distribution and authenticates what it encrypts; composing our own
+        cipher and MAC here would be the wrong kind of clever.
+        """
+        passphrase = self.backup_passphrase()
+        if not passphrase:
+            return None
+        if self.run("gpg", "--version").returncode != 0:
+            raise RuntimeError("gpg is not installed, so the backup cannot be encrypted for off-site storage")
+
+        archive = self.backup_root / f"{destination.name}.tar.gz"
+        sealed = self.backup_root / f"{destination.name}.tar.gz.gpg"
+        try:
+            with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:
+                bundle.add(destination, arcname=destination.name, recursive=True)
+            os.chmod(archive, 0o600)
+            result = subprocess.run(
+                [
+                    "gpg", "--batch", "--yes", "--quiet",
+                    "--symmetric", "--cipher-algo", "AES256",
+                    "--passphrase-fd", "0",
+                    "--output", str(sealed), str(archive),
+                ],
+                input=passphrase,
+                text=True,
+                capture_output=True,
+                timeout=1800,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"gpg failed: {(result.stderr or '').strip()[:200]}")
+            os.chmod(sealed, 0o600)
+            return sealed
+        finally:
+            # The plaintext tarball is scratch space; only the sealed file is kept.
+            with contextlib.suppress(FileNotFoundError):
+                archive.unlink()
+
+    def offsite_copy(self, sealed: Path) -> str | None:
+        """Send the sealed archive somewhere this server cannot destroy.
+
+        A remote starting with a scheme (s3:, b2:, any rclone remote written as
+        name:path) goes through rclone; anything else is treated as a directory,
+        which covers a mounted second disk or an NFS share without extra tools.
+        """
+        if not self.backup_remote:
+            return None
+
+        if ":" in self.backup_remote and not Path(self.backup_remote).is_absolute():
+            if self.run("rclone", "version").returncode != 0:
+                raise RuntimeError("rclone is not installed, so the encrypted backup cannot be uploaded")
+            target = f"{self.backup_remote.rstrip('/')}/{sealed.name}"
+            result = self.run("rclone", "copyto", str(sealed), target, timeout=3600)
+            if result.returncode != 0:
+                raise RuntimeError(f"rclone failed: {(result.stderr or '').strip()[:200]}")
+            return target
+
+        target_dir = Path(self.backup_remote).expanduser()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / sealed.name
+        # Write beside the target and rename, so a half-copied file is never
+        # mistaken for a usable backup.
+        staging = target_dir / f".{sealed.name}.partial"
+        shutil.copy2(sealed, staging)
+        os.replace(staging, target)
+        return str(target)
+
+    def offsite_backup(self, destination: Path) -> dict:
+        """Encrypt and ship. Never raises: a local backup that succeeded must
+        still be recorded as a success, with the off-site failure reported
+        separately and loudly."""
+        if not self.backup_passphrase_file and not self.backup_remote:
+            return {"status": "disabled"}
+        if self.backup_remote and not self.backup_passphrase_file:
+            message = "OPS_BACKUP_REMOTE is set without OPS_BACKUP_PASSPHRASE_FILE — refusing to send an unencrypted backup containing .env"
+            self.notify("critical", f"Agentic OS off-site backup refused: {message}")
+            return {"status": "error", "error": message, "failedAt": iso()}
+
+        try:
+            sealed = self.encrypt_backup(destination)
+            if sealed is None:
+                return {"status": "disabled"}
+            record = {
+                "status": "success",
+                "encryptedAt": iso(),
+                "archive": sealed.name,
+                "sizeBytes": sealed.stat().st_size,
+                "remote": None,
+                "lastSuccessAt": iso(),
+            }
+            target = self.offsite_copy(sealed)
+            if target:
+                record["remote"] = target
+                record["uploadedAt"] = iso()
+            return record
+        except Exception as error:  # noqa: BLE001 - reported, never fatal
+            self.notify("critical", f"Agentic OS off-site backup failed: {error}")
+            return {"status": "error", "error": str(error)[:500], "failedAt": iso()}
 
     def postgres_dump(self, destination: Path) -> Path | None:
         inspect = self.run("docker", "inspect", "--format", "{{.State.Running}}", "agentic-os-postgres")
@@ -391,6 +526,12 @@ class Operations:
             if index >= self.max_backups or modified < cutoff:
                 shutil.rmtree(item)
                 removed.append(item.name)
+                # The sealed copy is part of the same backup and must age out
+                # with it, or the local disk fills with encrypted archives whose
+                # directories are long gone.
+                sealed = self.backup_root / f"{item.name}.tar.gz.gpg"
+                with contextlib.suppress(FileNotFoundError):
+                    sealed.unlink()
         return removed
 
     def fetch_json(self, url: str, authenticated: bool = False) -> tuple[int, dict]:
@@ -471,6 +612,23 @@ class Operations:
         status = "healthy" if age < dt.timedelta(hours=36) else "degraded"
         return self.check("backup", "Automated backup", status, f"last success {round(age.total_seconds() / 3600, 1)}h ago")
 
+    def check_offsite(self, state: dict) -> dict:
+        offsite = state.get("offsite", {})
+        name = "Off-site backup copy"
+        # Not configured is a real state, but not a healthy one: it means the
+        # only copies of the data sit on the same disk as production.
+        if not self.backup_passphrase_file and not self.backup_remote:
+            return self.check("offsite", name, "degraded", "not configured — backups exist only on this server")
+        if offsite.get("status") == "error":
+            return self.check("offsite", name, "critical", offsite.get("error") or "last off-site copy failed")
+        last = parse_time(offsite.get("lastSuccessAt"))
+        if not last:
+            return self.check("offsite", name, "degraded", "no successful off-site copy recorded")
+        age = now() - last
+        status = "healthy" if age < dt.timedelta(hours=self.offsite_max_age_hours) else "degraded"
+        target = "encrypted on disk" if not self.backup_remote else offsite.get("remote") or self.backup_remote
+        return self.check("offsite", name, status, f"last copy {round(age.total_seconds() / 3600, 1)}h ago → {target}")
+
     def check_restore_drill(self, state: dict) -> dict:
         drill = state.get("restoreDrill", {})
         last = parse_time(drill.get("lastSuccessAt"))
@@ -520,6 +678,7 @@ class Operations:
                 ),
                 self.check_disk(),
                 self.check_backup(previous),
+                self.check_offsite(previous),
                 self.check_restore_drill(previous),
             ]
             if self.public_health_url:

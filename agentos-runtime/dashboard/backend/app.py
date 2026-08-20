@@ -11,10 +11,12 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import hmac
 import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import socket
 import struct
@@ -41,6 +43,39 @@ MILA_OUTPUT_SAMPLE_RATE = 24000
 MILA_INPUT_AUDIO_MIME = f"audio/pcm;rate={MILA_INPUT_SAMPLE_RATE}"
 MILA_DEFAULT_VOICE = "Leda"
 WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+# Shared secret for the Node API → runtime hop, set by deploy.sh and handed to
+# both containers by Compose. Until this existed the runtime answered anything
+# that could reach port 8765, and some of its routes approve queued actions and
+# drive the Hermes CLI — so "only reachable on the private network" was the
+# entire access control. Reading the variable per request keeps tests able to
+# set it without reimporting the module.
+RUNTIME_TOKEN_ENV = "AGENTOS_RUNTIME_TOKEN"
+
+
+def runtime_token() -> str:
+    return (os.getenv(RUNTIME_TOKEN_ENV) or "").strip()
+
+
+def _constant_time_equals(left: str, right: str) -> bool:
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
+def request_is_authorised(headers) -> bool:
+    """True when the caller proved it knows the shared secret.
+
+    When no secret is configured the runtime stays open, because an install that
+    has not been redeployed yet would otherwise lose its orchestrator entirely.
+    That state is reported by /api/health and warned about at startup rather than
+    being silent.
+    """
+    expected = runtime_token()
+    if not expected:
+        return True
+    supplied = str(headers.get("Authorization") or "")
+    if supplied.startswith("Bearer "):
+        return _constant_time_equals(supplied[7:].strip(), expected)
+    return _constant_time_equals(str(headers.get("X-Internal-Secret") or "").strip(), expected)
 
 
 def read_json(path: Path, default):
@@ -6338,12 +6373,20 @@ def save_profile_mapping(workspace: Path, mapping_update: dict):
     return {"status": "saved", "mapping": current, "path": str(profile_mapping_path(workspace))}
 
 
-def kanban_commands_for_project(workspace: Path, slug: str, mapping: dict):
+def kanban_argv_for_project(workspace: Path, slug: str, mapping: dict):
+    """Argument vectors for `hermes kanban create`, one per task.
+
+    These are executed with shell=False. The previous version built a single
+    shell string and escaped only double quotes, so a task objective containing
+    $(...), backticks or ';' ran as a command on the host — and task text
+    arrives over the API. Passing an argv list removes the shell from the path
+    entirely, which is a property of the call rather than of the escaping.
+    """
     tasks = project_tasks(workspace, slug)
-    commands = []
+    argvs = []
     for task in tasks:
         assignee = mapping.get(task.get("owner"), "default")
-        title = f"{task.get('id')}: {task.get('objective')}".replace('"', "'")
+        title = f"{task.get('id')}: {task.get('objective')}"
         body = "\n".join([
             f"AgentOS project: {slug}",
             f"Source task: {task.get('id')}",
@@ -6351,14 +6394,25 @@ def kanban_commands_for_project(workspace: Path, slug: str, mapping: dict):
             f"Depends on: {', '.join(task.get('depends_on') or []) or 'none'}",
             "Acceptance criteria:",
             *[f"- {c}" for c in task.get("acceptance_criteria", [])],
-        ]).replace('"', "'")
-        commands.append(f"hermes kanban create --title \"{title}\" --assignee \"{assignee}\" --body \"{body}\"")
-    return commands
+        ])
+        argvs.append([
+            "hermes", "kanban", "create",
+            "--title", str(title),
+            "--assignee", str(assignee),
+            "--body", str(body),
+        ])
+    return argvs
+
+
+def kanban_commands_for_project(workspace: Path, slug: str, mapping: dict):
+    """Human-readable rendering of the same commands, for dry-run output."""
+    return [shlex.join(argv) for argv in kanban_argv_for_project(workspace, slug, mapping)]
 
 
 def kanban_create_request(workspace: Path, slug: str, mode: str = "dry-run", approval_id: str | None = None, simulate: bool = False):
     mapping = get_profile_mapping(workspace)["mapping"]
-    commands = kanban_commands_for_project(workspace, slug, mapping)
+    argvs = kanban_argv_for_project(workspace, slug, mapping)
+    commands = [shlex.join(argv) for argv in argvs]
     tasks = project_tasks(workspace, slug)
     if not commands:
         return {"error": "no_tasks_to_create", "project": slug}
@@ -6374,13 +6428,14 @@ def kanban_create_request(workspace: Path, slug: str, mode: str = "dry-run", app
 
     links = []
     raw_results = []
-    for idx, command in enumerate(commands):
+    for idx, argv in enumerate(argvs):
+        command = commands[idx]
         agentos_task_id = tasks[idx].get("id") if idx < len(tasks) else f"T{idx+1:03d}"
         if simulate:
             hermes_task_id = f"sim_{slug}_{agentos_task_id}".replace("-", "_")
             raw = "simulated"
         else:
-            completed = subprocess.run(command, text=True, capture_output=True, shell=True, timeout=60)
+            completed = subprocess.run(argv, text=True, capture_output=True, timeout=60)
             raw = (completed.stdout or "") + (completed.stderr or "")
             if completed.returncode != 0:
                 return {"error": "kanban_create_failed", "project": slug, "command": command, "returncode": completed.returncode, "output": raw, "links": links}
@@ -7749,6 +7804,9 @@ class AgentOSHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self):
+        if not request_is_authorised(self.headers):
+            self.send_json({"error": "unauthorized"}, 401)
+            return
         if self.path.startswith("/ws/mila/voice"):
             handle_mila_voice_websocket(self, self.workspace)
             return
@@ -7760,6 +7818,9 @@ class AgentOSHandler(BaseHTTPRequestHandler):
         self.send_json(data, status_code)
 
     def do_POST(self):
+        if not request_is_authorised(self.headers):
+            self.send_json({"error": "unauthorized"}, 401)
+            return
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length).decode("utf-8") if length else "{}"
         try:

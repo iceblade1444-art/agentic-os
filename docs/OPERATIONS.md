@@ -77,6 +77,81 @@ and `HOST_PORT`. Direct host commands also read missing values from the project
 recommended: it detects nginx, DNS and TLS failures that an internal container
 probe cannot see.
 
+## Off-site copies
+
+A backup on the same disk as production is not a backup: one disk failure takes
+the data and every copy of it at once. Configure both values in `.env`:
+
+```dotenv
+OPS_BACKUP_PASSPHRASE_FILE=/home/admilana/.config/agentic-os/backup.pass
+OPS_BACKUP_REMOTE=s3:my-bucket/agentic-os     # or a directory on another disk
+OPS_OFFSITE_MAX_AGE_HOURS=36
+```
+
+Create the passphrase file so only its owner can read it, and **store a second
+copy of that passphrase somewhere other than this server** — the archives cannot
+be recovered without it:
+
+```bash
+mkdir -p ~/.config/agentic-os
+openssl rand -hex 32 > ~/.config/agentic-os/backup.pass
+chmod 600 ~/.config/agentic-os/backup.pass
+```
+
+After each successful backup the whole timestamped directory is sealed with
+`gpg` (symmetric AES-256) into `<stamp>.tar.gz.gpg` and copied to the remote. A
+remote written as `name:path` goes through `rclone`; anything else is treated as
+a directory, which covers a second disk or an NFS mount without extra tools.
+
+Two properties are deliberate. Setting `OPS_BACKUP_REMOTE` without a passphrase
+is **refused**, because the archive contains the server `.env` with every
+provider credential. And a failure here never fails the local backup: the local
+copy stays a success, `offsite` records the error, and an alert is sent.
+
+The monitor reports `offsite` as degraded when nothing is configured, so an
+install with no second copy says so rather than looking healthy.
+
+## Restoring from a backup
+
+The drill below proves an archive is readable; this is the procedure for an
+actual restore. Do it on a fresh host or after stopping the stack.
+
+```bash
+# 1. Fetch the sealed archive (skip if restoring from the local directory)
+rclone copy s3:my-bucket/agentic-os/20260817T031500Z.tar.gz.gpg .
+
+# 2. Decrypt and unpack
+gpg --batch --decrypt --passphrase-file ~/.config/agentic-os/backup.pass \
+  20260817T031500Z.tar.gz.gpg > backup.tar.gz
+tar -xzf backup.tar.gz
+
+# 3. Stop the stack before replacing state
+cd ~/agentic-os && docker compose down
+
+# 4. Restore the application state and the vault
+tar -xzf 20260817T031500Z/data.tgz -C ~/agentic-os
+tar -xzf 20260817T031500Z/vault.tgz -C ~/agentic-os
+tar -xzf 20260817T031500Z/agentos-runtime.tgz -C ~/agentic-os
+cp 20260817T031500Z/.env ~/agentic-os/.env && chmod 600 ~/agentic-os/.env
+
+# 5. Check out the commit the backup was taken from
+git -C ~/agentic-os checkout "$(cat 20260817T031500Z/git-head)"
+
+# 6. Bring PostgreSQL up alone, then load its dump
+docker compose up -d postgres
+docker exec -i agentic-os-postgres pg_restore -U agentic_os -d agentic_os \
+  --clean --if-exists < 20260817T031500Z/postgres.dump
+
+# 7. Start everything and verify
+bash deploy.sh
+curl -fsS "$(sed -n 's/^OPS_HEALTH_URL=//p' .env)" | head -40
+```
+
+`SESSION_SECRET` in the restored `.env` must be the one the backup was taken
+with. It derives the encryption keys for MFA secrets, governance secrets and
+Google tokens — restoring data under a different value leaves all of it
+unreadable and logs everyone out.
+
 ## Restore drills
 
 The Observability page includes **Verify restore**. It does not overwrite the

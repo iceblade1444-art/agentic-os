@@ -8,6 +8,7 @@ import { slackSend } from "./connectors.js";
 import { milaConnectionCode, milaStatus } from "./mila.js";
 import { knowledge } from "./knowledge.js";
 import { sharedAgentContext } from "./onboarding.js";
+import { runtimeInternalHeaders } from "./runtime-auth.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const safeParse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -85,7 +86,7 @@ async function openaiChat(key, messages) {
 async function runtimeJson(path, options = {}) {
   const response = await fetch(config.agentosRuntimeUrl + path, {
     method: options.method || "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: runtimeInternalHeaders({ "Content-Type": "application/json" }),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await response.json().catch(() => ({}));

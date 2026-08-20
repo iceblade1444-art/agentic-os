@@ -23,6 +23,20 @@ if ! grep -q '^AUTH_TOKEN=..*' .env; then
   TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | xxd -p | tr -d '\n')"
   sed -i "s|^AUTH_TOKEN=.*|AUTH_TOKEN=${TOKEN}|" .env
   echo "· generated AUTH_TOKEN"
+
+  # Only a brand-new install gets its own SESSION_SECRET. When SESSION_SECRET is
+  # blank the app falls back to AUTH_TOKEN, and that fallback is what every
+  # existing install encrypted its MFA secrets, governance secrets and Google
+  # tokens under — writing a fresh value into such an install would make all of
+  # it undecryptable and log everyone out. So this runs only in the same branch
+  # that just created AUTH_TOKEN, i.e. when there is nothing yet to lose.
+  SESSION_TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | xxd -p | tr -d '\n')"
+  if grep -q '^SESSION_SECRET=' .env; then
+    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_TOKEN}|" .env
+  else
+    printf '\nSESSION_SECRET=%s\n' "$SESSION_TOKEN" >> .env
+  fi
+  echo "· generated SESSION_SECRET"
 fi
 
 # Speech traffic stays on the private Compose network, but still uses a
@@ -35,6 +49,21 @@ if ! grep -q '^SPEECH_INTERNAL_SECRET=..*' .env; then
     printf '\nSPEECH_INTERNAL_SECRET=%s\n' "$SPEECH_TOKEN" >> .env
   fi
   echo "· generated speech service internal secret"
+fi
+
+# The Python runtime holds approvals and drives the Hermes CLI, and Compose puts
+# it on a network every container can reach. Same treatment as speech: a shared
+# secret the runtime demands from its one legitimate caller, the Node API.
+# Safe to generate on an existing install — it is a request credential, not a
+# key anything was encrypted under.
+if ! grep -q '^AGENTOS_RUNTIME_TOKEN=..*' .env; then
+  RUNTIME_TOKEN="$(openssl rand -hex 32 2>/dev/null || head -c32 /dev/urandom | xxd -p | tr -d '\n')"
+  if grep -q '^AGENTOS_RUNTIME_TOKEN=' .env; then
+    sed -i "s|^AGENTOS_RUNTIME_TOKEN=.*|AGENTOS_RUNTIME_TOKEN=${RUNTIME_TOKEN}|" .env
+  else
+    printf '\nAGENTOS_RUNTIME_TOKEN=%s\n' "$RUNTIME_TOKEN" >> .env
+  fi
+  echo "· generated AgentOS runtime token"
 fi
 
 # 3) keep Claude Code login state outside the replaceable app container
