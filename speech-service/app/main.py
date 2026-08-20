@@ -108,19 +108,57 @@ DEFAULT_PHRASES_UZ = [
 ]
 
 
+DEFAULT_PHRASES_RU = [
+    "Здравствуйте! Меня зовут Милана, я ваш помощник.",
+    "Слушаю вас.",
+    "Да, конечно. Одну минуту, сейчас проверю.",
+    "Извините, подскажите номер вашего заказа?",
+    "Одну минуту, сейчас уточню.",
+    "Спасибо! Хорошего дня, до свидания!",
+    "У вас есть ещё вопросы?",
+    "Извините, я вас не расслышала. Повторите, пожалуйста.",
+]
+
+DEFAULT_PHRASES_EN = [
+    "Hello! My name is Milana, I am your assistant.",
+    "I am listening.",
+    "Yes, of course. One moment, let me check.",
+    "Sorry, could you tell me your order number?",
+    "One moment, I will find out right now.",
+    "Thank you! Have a good day, goodbye!",
+    "Do you have any other questions?",
+    "Sorry, I did not catch that. Could you repeat it, please?",
+]
+
+STOCK = {"Uzbek": DEFAULT_PHRASES_UZ, "Russian": DEFAULT_PHRASES_RU,
+         "English": DEFAULT_PHRASES_EN}
+
+
 @app.post("/cache/warm")
 def warm_endpoint(
     language: str = Form(default="Uzbek"),
     engine: str = Form(default="quality"),
     phrases: str | None = Form(default=None),
+    speaker: str | None = Form(default=None),
+    instruct: str | None = Form(default=None),
+    speed: float | None = Form(default=None),
     x_internal_secret: str | None = Header(default=None),
 ):
-    """Pre-generate phrases (newline-separated) or the built-in stock list."""
+    """Pre-generate phrases (newline-separated) or the built-in stock list.
+
+    The speaker and instruction are part of the cache key, so warming has to use
+    the same ones the caller will: warming under speaker="" while the dashboard
+    asks for "vivian" generates audio nobody ever reads back.
+    """
     _check_secret(x_internal_secret)
-    lines = [p.strip() for p in (phrases or "").splitlines() if p.strip()] or DEFAULT_PHRASES_UZ
-    params = {"engine": engine, "language": language, "speaker": "",
-              "instruct": "", "speed": 1.0}
+    lines = ([p.strip() for p in (phrases or "").splitlines() if p.strip()]
+             or STOCK.get(language, DEFAULT_PHRASES_UZ))
+    params = {"engine": engine, "language": language, "speaker": speaker or "",
+              "instruct": instruct or "", "speed": speed or 1.0}
     stats = cache.warm(
-        lambda text, **_: tts.synthesize(text, language, engine=engine),
+        lambda text, **_: tts.synthesize(text, language, speaker=speaker,
+                                         instruct=instruct, engine=engine,
+                                         speed=speed),
         lines, **params)
-    return {"phrases": len(lines), **stats}
+    return {"phrases": len(lines), "language": language, "engine": engine,
+            "speaker": speaker or "", **stats}
