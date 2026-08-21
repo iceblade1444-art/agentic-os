@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { MemberWorkspaceStore } from "../server/lib/member-workspace.js";
-import { PERSONAL_ACTIONS } from "../server/lib/mila-actions.js";
+import { PERSONAL_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../server/lib/mila-actions.js";
 
 function temporaryStore(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-members-"));
@@ -216,7 +216,14 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // actions and the caller's own personal desk pass for a non-operator, everything
   // else (Kanban, Hermes, Obsidian, Claude Code, MCP) 403s regardless of what the
   // client declared.
-  assert.match(milaActionsRoute, /READ_ONLY_ERP_ACTIONS = new Set\(\["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"\]\)/);
+  // The list itself lives in mila-actions.js and is imported here: four
+  // surfaces need the same answer, and the copies drifted. What matters to this
+  // test is the contents of the gate, not where the words are typed.
+  assert.match(milaActionsRoute, /import \{[^}]*READ_ONLY_ERP_ACTIONS[^}]*\} from "\.\.\/lib\/mila-actions\.js"/);
+  assert.deepEqual(
+    [...READ_ONLY_ERP_ACTIONS].sort(),
+    ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"],
+  );
   // Company knowledge joins the everyone list: it is read-only and scoped to one
   // vault folder, so an employee looking up a price reaches nothing that was not
   // meant for them.

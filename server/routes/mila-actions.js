@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { authenticatedUser } from "../lib/auth.js";
-import { milaActions, PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS } from "../lib/mila-actions.js";
+import { milaActions, PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../lib/mila-actions.js";
 import { voiceInstruction } from "../lib/voice-instruction.js";
 
 const r = Router();
@@ -13,7 +13,6 @@ const r = Router();
 // Personal actions are the exception, and not a widening: they run against the
 // caller's own tasks, notes, reminders and calendar, so a Member using them reaches
 // exactly the data that is already theirs on the Personal page.
-const READ_ONLY_ERP_ACTIONS = new Set(["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"]);
 const isOperator = (req) => ["Creator", "Admin", "CEO"].includes(authenticatedUser(req)?.role);
 // Company knowledge is read-only here and scoped to one vault folder, so every
 // employee may look up a price or who to ask. Writing to it stays operator-only.

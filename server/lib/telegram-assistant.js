@@ -19,31 +19,41 @@ import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { db } from "../store.js";
 import { creatorUser } from "./auth.js";
-import { KNOWLEDGE_ACTIONS, PERSONAL_ACTIONS, milaActions } from "./mila-actions.js";
+import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "../../assets/js/mila-tools.js";
+import {
+  KNOWLEDGE_ACTIONS,
+  OPERATOR_ERP_ACTIONS,
+  PERSONAL_ACTIONS,
+  READ_ONLY_ERP_ACTIONS,
+  milaActions,
+} from "./mila-actions.js";
 import { milaGeminiChat } from "./mila.js";
 import { sharedAgentContext } from "./onboarding.js";
 import { users } from "./users.js";
 
 const HISTORY_TURNS = 12;
 const MAX_TOOL_STEPS = 4;
-const READ_ONLY_ERP = new Set(["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"]);
-// The same set a Member's phone may call — a Telegram message must never reach
-// further than the app in that person's hand.
-const allowed = (name, user) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name) || READ_ONLY_ERP.has(name)
-  || (isOperator(user) && OPERATOR_TOOLS.includes(name));
-
-const TOOL_NAMES = [
-  "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",
-  "list_my_notes", "save_my_note", "remind_me", "list_my_reminders", "cancel_reminder",
-  "list_my_calendar", "remember_about_me", "read_about_me", "forget_about_me",
-  "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
-  "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
-];
-// Staff data — the turnstile and the employee directory — follows the person,
-// not the channel: an operator keeps it in their own linked chat, a Member
-// does not get it anywhere.
-const OPERATOR_TOOLS = ["get_attendance_today", "get_staff_summary", "get_order_stages"];
+// The same gates the web route applies, imported rather than restated: a
+// hand-written copy of the tool list here is how Telegram came to lack the
+// calendar writes the browser had all along.
 const isOperator = (user) => ["Creator", "Admin", "CEO"].includes(user?.role);
+const allowed = (name, user) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name)
+  || READ_ONLY_ERP_ACTIONS.has(name)
+  || (isOperator(user) && OPERATOR_ERP_ACTIONS.has(name));
+
+// One tool is deliberately dropped: send_telegram exists to reach this chat
+// from elsewhere, and offering it inside the chat is offering an echo.
+const CHANNEL_EXCLUDED = new Set(["send_telegram"]);
+
+// What the person is told they can do is exactly what the gate will run for
+// them — a declared-but-refused tool teaches the model to promise and fail.
+// Exported so the parity test can compare this door with the others rather
+// than guess at them through the prompt's prose.
+export function toolNamesFor(user) {
+  return (isOperator(user) ? MILA_TOOLS : MILA_MEMBER_TOOLS)
+    .map((tool) => tool.name)
+    .filter((name) => !CHANNEL_EXCLUDED.has(name) && allowed(name, user));
+}
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
 
@@ -101,7 +111,7 @@ export function createTelegramAssistant(options = {}) {
         // exactly as in a direct thread.
         agentContext: context(user),
         mode: "text",
-        tools: isOperator(user) ? [...TOOL_NAMES, ...OPERATOR_TOOLS] : TOOL_NAMES,
+        tools: toolNamesFor(user),
         knowledgeIndex: knowledgePromptIndex(),
       }),
       toolProtocol(),

@@ -13,7 +13,7 @@ import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { db } from "../store.js";
 import { MILA_MEMBER_ID } from "./messenger.js";
-import { KNOWLEDGE_ACTIONS, PERSONAL_ACTIONS, milaActions } from "./mila-actions.js";
+import { KNOWLEDGE_ACTIONS, PERSONAL_ACTIONS, READ_ONLY_ERP_ACTIONS, milaActions } from "./mila-actions.js";
 import { milaGeminiChat } from "./mila.js";
 import { sharedAgentContext } from "./onboarding.js";
 import { TOOL_PROTOCOL_LINES, runTextToolLoop } from "./text-tool-loop.js";
@@ -24,7 +24,7 @@ import { TOOL_PROTOCOL_LINES, runTextToolLoop } from "./text-tool-loop.js";
 // exists only in a direct thread, because "напомни мне" from a channel would
 // still be one person's desk, but the confirmation of it would be a message
 // the whole room reads.
-const ERP_READ = ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"];
+const ERP_READ = [...READ_ONLY_ERP_ACTIONS];
 const KNOWLEDGE = ["search_company_knowledge", "read_company_knowledge", "list_company_knowledge"];
 const PERSONAL = [
   "get_my_day_plan", "list_my_tasks", "create_my_task", "update_my_task",

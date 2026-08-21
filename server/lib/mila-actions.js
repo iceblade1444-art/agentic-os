@@ -51,6 +51,23 @@ export const PERSONAL_ACTIONS = new Set([
 export const KNOWLEDGE_ACTIONS = new Set([
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
 ]);
+// Live ERP figures every employee may read: the same numbers the ERP page
+// already shows them, so voice and chat are not a side door but the same door.
+//
+// This list, PERSONAL_ACTIONS and KNOWLEDGE_ACTIONS are the audience gates, and
+// they live here because four surfaces need the identical answer to "may this
+// person call this?" — the web route, the phone, Telegram and the team
+// messenger. Each used to keep its own copy, which is why tools added this week
+// reached some channels and not others.
+export const READ_ONLY_ERP_ACTIONS = new Set([
+  "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
+]);
+// Staff and order data: real names of people and customers, so it follows the
+// person's role rather than the channel they happen to be using.
+export const OPERATOR_ERP_ACTIONS = new Set([
+  "get_attendance_today", "get_staff_summary", "get_order_stages",
+]);
+
 // The personal actions that change something. Reads are deliberately absent: a
 // journal of every "what's on today" would bury the decisions it exists to keep.
 const JOURNALLED_PERSONAL_ACTIONS = new Set([
