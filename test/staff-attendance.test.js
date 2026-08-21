@@ -57,6 +57,25 @@ test("the attendance overview keeps recognizable totals and never hands over bro
   assert.match(huge.overview_note, /omitted/);
 });
 
+test("a date the ERP cannot serve is said out loud, not answered with today", () => {
+  // The endpoint ignores the date it is given: asked for the 16th it returns
+  // today's snapshot, stamped today. Reporting that under the asked-for date
+  // is the "1255 instead of 5284" mistake with a different number.
+  const facts = attendanceFacts({
+    date: "2026-08-16",
+    overview: { date: "2026-08-21", summary: { total_people: 1508, used_today: 384, not_used_today: 1124 } },
+  });
+  assert.equal(facts.requested_date, "2026-08-16");
+  assert.equal(facts.date, "2026-08-21", "the numbers are labelled with the day they describe");
+  assert.match(facts.note, /за 2026-08-16 данных нет/);
+  assert.match(facts.answer_summary, /За 2026-08-16 ERP данные не отдаёт/);
+
+  // Same day asked and served: no warning, no noise.
+  const today = attendanceFacts({ date: "2026-08-21", overview: { date: "2026-08-21", summary: { total_people: 1508, used_today: 384 } } });
+  assert.equal(today.note, undefined);
+  assert.match(today.answer_summary, /Прошли турникет за 2026-08-21: 384 из 1508/);
+});
+
 test("the missing attendance permission is reported, not papered over", async () => {
   const actions = createMilaActions({
     erpBridge: {

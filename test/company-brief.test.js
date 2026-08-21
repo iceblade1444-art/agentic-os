@@ -29,12 +29,16 @@ const BOARD = {
   ok: true,
   data: {
     orders: [
-      ...Array.from({ length: 16 }, (_, i) => ({ production_no: `PO-C${i}`, current_stage: "cutting", po_overdue: i < 7, actual_quantity: i < 7 ? 0 : 100 })),
+      ...Array.from({ length: 16 }, (_, i) => ({ production_no: `PO-C${i}`, current_stage: "cutting", po_overdue: i < 7, po_deadline: "2026-08-04T00:00:00+00:00", actual_quantity: i < 7 ? 0 : 100 })),
       ...Array.from({ length: 22 }, (_, i) => ({ production_no: `PO-S${i}`, current_stage: "sewing", po_overdue: i < 20, actual_quantity: 300 })),
       ...Array.from({ length: 8 }, (_, i) => ({ production_no: `PO-P${i}`, current_stage: "packaging", po_overdue: i < 8, actual_quantity: 500 })),
     ],
   },
 };
+
+// The turnstile serves only the current snapshot, whatever date it is asked
+// for, so the brief must date the line by the clock and never by "yesterday".
+const GATE = { ok: true, data: { date: "2026-08-18", overview: { date: "2026-08-18", summary: { total_people: 1508, used_today: 384, not_used_today: 1124 } } } };
 
 function fixture(overrides = {}) {
   return createCompanyBrief({
@@ -42,7 +46,9 @@ function fixture(overrides = {}) {
     erpBridge: {
       call: async (tool, args) => tool === "erp_process_tracking"
         ? BOARD
-        : (args.report_date === "2026-08-17" ? SEWING(5284, 6) : SEWING(4800, 6)),
+        : tool === "erp_attendance_overview"
+          ? GATE
+          : (args.report_date === "2026-08-17" ? SEWING(5284, 6) : SEWING(4800, 6)),
     },
     erpDigest: { read: async () => ({ available: true, lateOrders: 0, lateOrdersDetail: "", finishedGoodsPieces: 12900, financeFlag: "Касса в норме" }) },
     salesBot: { configured: () => true, leads: () => [
@@ -68,6 +74,8 @@ test("an operator gets the four blocks, with yesterday's sewing and its directio
   assert.match(text, /Швейка вчера: 5284 шт по 6 линиям \(▲ 484\)/);
   assert.match(text, /Заказы в производстве: 46 — крой 16, швейка 22, упаковка 8/);
   assert.match(text, /За сроком: 35, из них 7 ещё не начаты/);
+  assert.match(text, /Не начаты: PO-C0 \(срок 2026-08-04\)/, "the stalled orders are named, not just counted");
+  assert.match(text, /Явка на 08:10: 384 из 1508/, "attendance is stamped with the clock, never called yesterday's");
   assert.match(text, /Просрочки по клиентским заказам: 0/);
   assert.match(text, /Склад готовой продукции: 12900 шт/);
   assert.match(text, /Новых лидов за вчера: 2/);

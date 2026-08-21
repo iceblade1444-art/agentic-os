@@ -234,11 +234,24 @@ export function attendanceFacts(data = {}) {
     }
   }
   const raw = JSON.stringify(overview);
+  // The ERP endpoint ignores the date it is given and always answers with the
+  // current snapshot — asked for the 16th it still returns today, stamped with
+  // today. Reporting that number under the requested date is how "1255 instead
+  // of 5284" happened once already, so the two dates are kept apart and a
+  // mismatch is stated rather than smoothed over.
+  const asked = bounded(data.date, 10);
+  const served = bounded(overview.date, 10);
+  const stale = !!(asked && served && asked !== served);
+  const label = served || asked;
   return {
-    date: bounded(data.date, 10),
+    date: label,
+    ...(asked ? { requested_date: asked } : {}),
+    ...(stale ? { note: `ERP отдаёт только текущий срез турникета (${served}); за ${asked} данных нет.` } : {}),
     ...summary,
     ...(Number.isFinite(summary.present) && Number.isFinite(summary.total)
-      ? { answer_summary: `Прошли турникет за ${bounded(data.date, 10)}: ${summary.present} из ${summary.total}${Number.isFinite(summary.absent) ? `, не отмечены ${summary.absent}` : ""}.` }
+      ? { answer_summary: stale
+        ? `За ${asked} ERP данные не отдаёт. На ${served}: прошли турникет ${summary.present} из ${summary.total}.`
+        : `Прошли турникет за ${label}: ${summary.present} из ${summary.total}${Number.isFinite(summary.absent) ? `, не отмечены ${summary.absent}` : ""}.` }
       : {}),
     // The raw overview rides along only while it fits: cutting JSON mid-string
     // to force it in would hand the model a broken object.

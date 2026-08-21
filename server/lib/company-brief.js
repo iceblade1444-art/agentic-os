@@ -13,7 +13,7 @@
 
 import { journal } from "./journal.js";
 import { messenger } from "./messenger.js";
-import { processFacts, sewingFacts } from "./mila-actions.js";
+import { attendanceFacts, processFacts, sewingFacts } from "./mila-actions.js";
 import { erpBridge } from "./erp-bridge.js";
 import { erpDigest } from "./erp-digest.js";
 import { salesBot } from "./sales-bot.js";
@@ -75,10 +75,28 @@ export function createCompanyBrief(options = {}) {
           lines.push(`Заказы в производстве: ${facts.total_in_work}${stages ? ` — ${stages}` : ""}`);
           if (facts.overdue) {
             lines.push(`За сроком: ${facts.overdue}${facts.overdue_not_started ? `, из них ${facts.overdue_not_started} ещё не начаты` : ""}`);
+            // A count cannot be acted on; a name can. The untouched ones are
+            // named because those are the orders somebody has to move today.
+            const stalled = (facts.orders || [])
+              .filter((order) => order.overdue && !order.done)
+              .slice(0, 4)
+              .map((order) => `${order.order}${order.deadline ? ` (срок ${order.deadline})` : ""}`);
+            if (stalled.length) lines.push(`Не начаты: ${stalled.join(", ")}`);
           }
         }
       }
     } catch { /* the board is quiet — the block just loses these lines */ }
+
+    try {
+      const gate = await bridge.call("erp_attendance_overview", {});
+      if (gate?.ok !== false) {
+        const facts = attendanceFacts(gate?.data || {});
+        if (Number.isFinite(facts.present) && Number.isFinite(facts.total)) {
+          const at = now().toLocaleTimeString("ru-RU", { timeZone, hour: "2-digit", minute: "2-digit" });
+          lines.push(`Явка на ${at}: ${facts.present} из ${facts.total}`);
+        }
+      }
+    } catch { /* the turnstile is quiet — the block just loses this line */ }
 
     try {
       const value = await digest.read();
