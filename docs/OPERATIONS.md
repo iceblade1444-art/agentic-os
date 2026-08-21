@@ -111,6 +111,37 @@ copy stays a success, `offsite` records the error, and an alert is sent.
 The monitor reports `offsite` as degraded when nothing is configured, so an
 install with no second copy says so rather than looking healthy.
 
+### Pulling copies to a workstation
+
+`OPS_BACKUP_REMOTE` pushes: the server writes the sealed archive somewhere else.
+That covers a failed disk, and it is what to configure when the target is a
+bucket or a second machine's share.
+
+It does not cover the server itself turning hostile — ransomware, a wrong path,
+a bad script — because anything the server can write to, it can also erase. So
+the workstation copy runs the other way: `scripts/pull-backups.ps1` fetches from
+the server over SSH, and nothing on the server holds a credential for the
+workstation.
+
+```powershell
+# once, to check
+powershell -ExecutionPolicy Bypass -File C:\AgenticOS\scripts\pull-backups.ps1
+
+# then daily at 21:00
+schtasks /Create /TN "Agentic OS backup pull" /SC DAILY /ST 21:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\AgenticOS\scripts\pull-backups.ps1"
+```
+
+Only `*.tar.gz.gpg` is fetched, so a workstation copy is always the encrypted
+one. The script exits `2` when the newest archive is older than three days: a
+backup job that stops quietly is worse than none, because it is trusted.
+
+Two limits worth saying plainly. A workstation in the same building survives a
+disk failure, not a fire — it is a second machine, not a second site. And it
+only copies while it is switched on.
+
+`gpg` for the restore ships with Git for Windows (`C:\Program Files\Git\usr\bin`),
+so no extra install is needed to open an archive there.
+
 ## Restoring from a backup
 
 The drill below proves an archive is readable; this is the procedure for an
