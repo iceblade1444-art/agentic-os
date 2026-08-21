@@ -105,14 +105,6 @@ export class TelegramBridge {
     this.pending.set(code, { userId: user.id, expiresAt: Date.now() + CODE_TTL_MS });
     if (!this.botName) {
       const me = await this.#call("getMe");
-      // Published once at startup: Telegram shows these in the "/" menu, and
-      // an unlisted command is a command nobody knows exists.
-      this.#call("setMyCommands", {
-        commands: [
-          { command: "help", description: "Что я умею" },
-          { command: "stop", description: "Отвязать этот чат" },
-        ],
-      }).catch(() => {});
       this.botName = clean(me?.username, 64);
     }
     return { url: `https://t.me/${this.botName}?start=${code}`, expiresInSeconds: CODE_TTL_MS / 1000 };
@@ -147,8 +139,25 @@ export class TelegramBridge {
 
   // Long polling instead of a webhook: nothing inbound to expose, nothing to
   // misconfigure on the proxy, and one bot polling is well within limits.
+  // The "/" menu belongs to the token, not to this process: the bot that held
+  // this token before still had its own commands published — /models,
+  // /new_session — offering people a menu that does nothing here. Publishing
+  // ours at startup replaces that inheritance instead of waiting for someone
+  // to request a link.
+  async publishCommands() {
+    if (!this.configured()) return false;
+    await this.#call("setMyCommands", {
+      commands: [
+        { command: "help", description: "Что я умею" },
+        { command: "stop", description: "Отвязать этот чат" },
+      ],
+    });
+    return true;
+  }
+
   start() {
     if (this.timer) return;
+    this.publishCommands().catch((error) => console.warn(`[telegram] could not publish commands: ${error.message}`));
     const tick = async () => {
       try {
         if (this.configured()) await this.#poll();

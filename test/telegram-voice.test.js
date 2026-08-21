@@ -124,3 +124,11 @@ test("an empty transcript is a failure, not an empty question to MILA", async ()
   });
   await assert.rejects(transcriber.transcribe("tok", "f1"), /no text/);
 });
+
+test("starting the poller replaces the previous bot's command menu", async () => {
+  const { instance, calls, cleanup } = bridge({ voice: { transcribe: async () => "unused" } });
+  assert.equal(await instance.publishCommands(), true);
+  const published = calls.find((call) => call.method === "setMyCommands");
+  assert.deepEqual(published.body.commands.map((c) => c.command), ["help", "stop"]);
+  cleanup();
+});
