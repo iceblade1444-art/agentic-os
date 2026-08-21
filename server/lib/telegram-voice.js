@@ -95,7 +95,12 @@ export const voiceTranscriber = createVoiceTranscriber();
 
 // Telegram plays a voice message up to an hour, but nobody listens to an
 // assistant for four minutes; past this the text alone is the honest answer.
-const MAX_SPOKEN_CHARS = 1200;
+//
+// The number is also arithmetic. Measured on this server: about four seconds
+// of fixed cost plus a fifth of a second per character, so 800 characters is
+// roughly three minutes of synthesis — already at the edge of the timeout
+// below, and well past the edge of anyone's patience.
+const MAX_SPOKEN_CHARS = 800;
 // "quality" is Qwen3-TTS: natural prosody instead of the fast engine's flat
 // reading, and worth the wait here because nobody is holding a conversation
 // with a brief. Measured on this server with four threads: ~17s for a
