@@ -60,6 +60,7 @@ function fixture(overrides = {}) {
       { kind: "channel", name: "производство", unread: 7, mentioned: true },
       { kind: "direct", name: "Шавкат", unread: 2, mentioned: false },
     ] },
+    mfa: { status: () => ({ eligible: true, enabled: true }) },
     journal: { recentEntries: () => [
       { date: "2026-08-17", title: "Протокол: Планёрка по отгрузке" },
       { date: "2026-08-17", title: "Новый лид из Telegram" },
@@ -130,3 +131,20 @@ function fixtureWithEmptyDayBefore() {
     journal: { recentEntries: () => [] },
   });
 }
+
+test("an operator without a second factor is told once a morning, and only until they enable it", async () => {
+  const off = fixture({ mfa: { status: () => ({ eligible: true, enabled: false }) } });
+  assert.match(await off.blocks(OWNER, "Asia/Tashkent"), /Двухфакторная защита выключена/);
+
+  // The day it is switched on the line disappears: a nudge that ends by itself.
+  const on = fixture({ mfa: { status: () => ({ eligible: true, enabled: true }) } });
+  assert.equal((await on.blocks(OWNER, "Asia/Tashkent")).includes("Двухфакторная"), false);
+
+  // A role that cannot use MFA is not nagged about it.
+  const notEligible = fixture({ mfa: { status: () => ({ eligible: false, enabled: false }) } });
+  assert.equal((await notEligible.blocks(OWNER, "Asia/Tashkent")).includes("Двухфакторная"), false);
+
+  // A broken MFA store costs its line, never the brief.
+  const broken = fixture({ mfa: { status: () => { throw new Error("mfa.json unreadable"); } } });
+  assert.match(await broken.blocks(OWNER, "Asia/Tashkent"), /Швейка вчера/);
+});

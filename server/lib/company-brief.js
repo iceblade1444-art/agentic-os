@@ -12,6 +12,7 @@
 // the personal delivery, never in a channel copy of the brief.
 
 import { journal } from "./journal.js";
+import { mfa } from "./mfa.js";
 import { messenger } from "./messenger.js";
 import { attendanceFacts, processFacts, sewingFacts } from "./mila-actions.js";
 import { erpBridge } from "./erp-bridge.js";
@@ -39,6 +40,7 @@ export function createCompanyBrief(options = {}) {
   const sales = options.salesBot || salesBot;
   const chatStore = options.messenger || messenger;
   const journalStore = options.journal || journal;
+  const mfaStore = options.mfa || mfa;
   const now = options.now || (() => new Date());
 
   async function production(timeZone) {
@@ -153,6 +155,19 @@ export function createCompanyBrief(options = {}) {
 
   // The operator's company morning, as appendable text blocks. Members get an
   // empty string: their brief stays their own plan.
+  // An account with full rights and no second factor is one phished password
+  // away from the whole company. This says so once a morning and stops the day
+  // it is switched on — a nudge that ends by itself, not a permanent banner.
+  function security(user) {
+    try {
+      const status = mfaStore.status(user);
+      if (!status.eligible || status.enabled) return "";
+      return ["Безопасность:", "• Двухфакторная защита выключена — включите в Настройках, у вас полные права"].join("\n");
+    } catch {
+      return "";
+    }
+  }
+
   async function blocks(user, timeZone = "Asia/Tashkent") {
     if (!["Creator", "Admin", "CEO"].includes(user?.role)) return "";
     const parts = [
@@ -160,6 +175,7 @@ export function createCompanyBrief(options = {}) {
       customers(timeZone),
       team(user),
       yesterdayInSystem(timeZone),
+      security(user),
     ].filter(Boolean);
     return parts.length ? `\n\n${parts.join("\n\n")}` : "";
   }
