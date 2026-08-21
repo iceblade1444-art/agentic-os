@@ -28,3 +28,8 @@ TTS_MODEL = os.getenv("TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
 TTS_DEVICE = os.getenv("TTS_DEVICE", "cpu")
 TTS_DEFAULT_LANGUAGE = os.getenv("TTS_DEFAULT_LANGUAGE", "Russian")
 TTS_DEFAULT_SPEAKER = os.getenv("TTS_DEFAULT_SPEAKER", "Vivian")
+# The quality engine was started without a thread count and took whatever the
+# default is — one. Measured on the eight-core server with the same sentence:
+# 57s at one thread, 23s at two, 17s at four, 22s at eight, where it starts
+# fighting the other containers for cores. Four is the floor of that curve.
+QWEN_THREADS = int(os.getenv("QWEN_TTS_THREADS", "4"))

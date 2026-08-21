@@ -237,7 +237,7 @@ export class TelegramBridge {
 
     // Telegram spins the button until it is answered, so the acknowledgement
     // goes first and the synthesis — which takes seconds — follows.
-    await answer("Озвучиваю…");
+    await answer("Озвучиваю — это займёт несколько секунд.");
     try {
       const audio = await this.speaker.speak(text);
       if (!audio) {

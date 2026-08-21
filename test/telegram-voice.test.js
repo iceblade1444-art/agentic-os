@@ -317,3 +317,17 @@ test("a message too long to listen to says so instead of going quiet", async () 
   assert.match(texts.join(" "), /слишком длинное/);
   cleanup();
 });
+
+test("the voice asked for is the natural one, not the fast one", async () => {
+  const seen = {};
+  const speech = createSpeaker({
+    fetch: async (url, options = {}) => {
+      seen.body = options.body?.toString();
+      return { ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer };
+    },
+  });
+  await speech.speak("Швейка вчера: 6489 штук.");
+  // "fast" is Piper, for live dialogue; a brief people actually listen to gets
+  // the engine with prosody.
+  assert.match(seen.body, /engine=quality/);
+});

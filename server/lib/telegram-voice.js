@@ -96,6 +96,13 @@ export const voiceTranscriber = createVoiceTranscriber();
 // Telegram plays a voice message up to an hour, but nobody listens to an
 // assistant for four minutes; past this the text alone is the honest answer.
 const MAX_SPOKEN_CHARS = 1200;
+// "quality" is Qwen3-TTS: natural prosody instead of the fast engine's flat
+// reading, and worth the wait here because nobody is holding a conversation
+// with a brief. Measured on this server with four threads: ~17s for a
+// sentence, so a long message is a minute or two — which is why the text is
+// already in the chat before any of this starts.
+const SPEAK_ENGINE = process.env.TELEGRAM_TTS_ENGINE || "quality";
+const SPEAK_TIMEOUT_MS = 240000;
 
 // What is worth speaking. Markdown read aloud is noise, and an answer that is
 // mostly numbers in a table is easier to look at than to hear.
@@ -122,13 +129,13 @@ export function createSpeaker(options = {}) {
     const spoken = spokenForm(text);
     if (!spoken || spoken.length > MAX_SPOKEN_CHARS) return null;
     try {
-      const body = new URLSearchParams({ text: spoken, audio_format: "opus" });
+      const body = new URLSearchParams({ text: spoken, audio_format: "opus", engine: SPEAK_ENGINE });
       if (language) body.set("language", language);
       const response = await fetchImpl(`${speechUrl}/tts`, {
         method: "POST",
         headers: speechInternalHeaders({ "Content-Type": "application/x-www-form-urlencoded" }, secret),
         body,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(SPEAK_TIMEOUT_MS),
       });
       if (!response.ok) return null;
       const bytes = Buffer.from(await response.arrayBuffer());

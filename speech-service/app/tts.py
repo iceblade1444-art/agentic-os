@@ -162,6 +162,9 @@ def _qwen_cli(text: str, language: str, speaker: str) -> bytes:
         subprocess.run(
             [QWEN_BIN, "-d", QWEN_DIR, "--int8",
              "-s", (speaker or "vivian").lower(), "-l", language,
+             # Without this the CLI runs on one core and takes three times
+             # longer than it needs to on this machine.
+             "-j", str(config.QWEN_THREADS),
              "--text", text, "-o", out],
             check=True, timeout=600,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
