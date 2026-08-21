@@ -41,3 +41,7 @@ vault/Agentic OS/
 # Brand source files (Illustrator/PDF/PNG exports). The vectors the app ships
 # live in assets/brand/*.svg; the heavy sources stay out of Git.
 Logo/
+
+# Which commit the local speech image was built from. Per-machine state, like
+# the image itself — deploy.sh compares it to decide whether a rebuild is due.
+.speech-image-rev

@@ -102,13 +102,28 @@ if [ -n "$SPEECH_PROJECT" ] && [ "$SPEECH_PROJECT" != "$COMPOSE_PROJECT" ]; then
   echo "· reusing speech container managed by the ${SPEECH_PROJECT} Compose project"
 fi
 
-if [ "${REBUILD_SPEECH:-false}" = "true" ] || ! docker image inspect agentos-speech:latest >/dev/null 2>&1; then
+# The speech image carries ML models and takes minutes to build, so it is not
+# rebuilt on every deploy — but "not every deploy" quietly became "never", and a
+# change to speech-service/ sat in the repository while the running container
+# kept the old code. The last commit that touched those sources is stamped after
+# a successful build; a different one means the image is behind.
+SPEECH_REV="$(git log -1 --format=%H -- speech-service 2>/dev/null || echo unknown)"
+SPEECH_STAMP=".speech-image-rev"
+SPEECH_BUILT_REV="$(cat "$SPEECH_STAMP" 2>/dev/null || echo none)"
+if [ "$SPEECH_REV" != "$SPEECH_BUILT_REV" ] && [ "$SPEECH_BUILT_REV" != "none" ]; then
+  echo "· speech sources changed since the image was built — rebuilding"
+fi
+if [ "${REBUILD_SPEECH:-false}" = "true" ]   || [ "$SPEECH_REV" != "$SPEECH_BUILT_REV" ]   || ! docker image inspect agentos-speech:latest >/dev/null 2>&1; then
   if [ "$EXTERNAL_SPEECH" = "true" ]; then
     echo "Speech is managed by another Compose project; rebuild it from that project." >&2
     exit 1
   fi
   echo "· building speech service image…"
   docker compose build speech
+  # Stamped only after the build succeeded, so a failed build is retried rather
+  # than remembered as done.
+  printf '%s
+' "$SPEECH_REV" > "$SPEECH_STAMP"
 else
   echo "· reusing existing speech service image"
 fi
