@@ -81,3 +81,66 @@ export function createVoiceTranscriber(options = {}) {
 }
 
 export const voiceTranscriber = createVoiceTranscriber();
+
+// Speaking back.
+//
+// Answering a voice note with a wall of text is answering in a different
+// language than the question was asked in: someone who spoke because their
+// hands are busy cannot read the reply either. The speech service already has
+// the voice — the same one the browser and the phone use — and ffmpeg to pack
+// it as OGG/Opus, which is the only thing Telegram plays as a voice message
+// rather than a file to download.
+//
+// The text always goes too. A voice message cannot be searched, forwarded as a
+// quote, or read in a meeting, so it is an addition to the answer, never a
+// replacement for it.
+
+// Telegram plays a voice message up to an hour, but nobody listens to an
+// assistant for four minutes; past this the text alone is the honest answer.
+const MAX_SPOKEN_CHARS = 1200;
+
+// What is worth speaking. Markdown read aloud is noise, and an answer that is
+// mostly numbers in a table is easier to look at than to hear.
+export function spokenForm(text = "") {
+  return String(text)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[*_`#]+/g, "")
+    .replace(/^\s*[•\-–]\s*/gm, "")
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\s*\n\s*/g, ". ")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function createSpeaker(options = {}) {
+  const fetchImpl = options.fetch || globalThis.fetch;
+  const speechUrl = options.speechUrl || SPEECH_URL;
+  const secret = options.speechInternalSecret ?? SPEECH_INTERNAL_SECRET;
+
+  // Never throws: a reply that could not be spoken is still a reply, and the
+  // caller has already sent the text.
+  async function speak(text, { language = "ru" } = {}) {
+    const spoken = spokenForm(text);
+    if (!spoken || spoken.length > MAX_SPOKEN_CHARS) return null;
+    try {
+      const body = new URLSearchParams({ text: spoken, audio_format: "opus" });
+      if (language) body.set("language", language);
+      const response = await fetchImpl(`${speechUrl}/tts`, {
+        method: "POST",
+        headers: speechInternalHeaders({ "Content-Type": "application/x-www-form-urlencoded" }, secret),
+        body,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!response.ok) return null;
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return bytes.length ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return { speak, spokenForm };
+}
+
+export const speaker = createSpeaker();

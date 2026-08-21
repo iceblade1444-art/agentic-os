@@ -17,7 +17,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { db } from "../store.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
-import { audioFileId, voiceTranscriber } from "./telegram-voice.js";
+import { audioFileId, speaker, voiceTranscriber } from "./telegram-voice.js";
 
 const API = "https://api.telegram.org";
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -41,6 +41,7 @@ export class TelegramBridge {
     // would technically survive but nobody should have to reason about.
     this.assistant = options.assistant || null;
     this.voice = options.voice || voiceTranscriber;
+    this.speaker = options.speaker || speaker;
     this.timer = null;
     this.offset = 0;
     this.botName = "";
@@ -133,6 +134,26 @@ export class TelegramBridge {
       });
     }
     return true;
+  }
+
+  /// The morning brief, read out. Text first and always — a voice message
+  /// cannot be searched, forwarded as a quote, or read during a meeting — and
+  /// the audio is an addition for the people who asked for it, never a
+  /// replacement. A speech service that is down costs the voice, not the brief.
+  async sendSpoken(userId, text) {
+    const sent = await this.sendText(userId, text);
+    if (!sent) return false;
+    const entry = this.#read()[userId];
+    try {
+      const audio = await this.speaker.speak(text);
+      if (audio) {
+        await this.#sendVoice(entry.chatId, audio);
+        return true;
+      }
+    } catch (error) {
+      console.warn(`[telegram] could not speak for ${userId}: ${error.message}`);
+    }
+    return false;
   }
 
   // ---------- receiving ----------
@@ -295,6 +316,18 @@ export class TelegramBridge {
         for (let start = 0; start < reply.length; start += CHUNK) {
           await this.#call("sendMessage", { chat_id: chatId, text: reply.slice(start, start + CHUNK) });
         }
+        // Asked out loud, answered out loud. Somebody who spoke because their
+        // hands are busy cannot read the reply either — but the text goes
+        // first and stays, because a voice message cannot be searched, quoted
+        // or read during a meeting.
+        if (audio) {
+          try {
+            const spoken = await this.speaker.speak(reply);
+            if (spoken) await this.#sendVoice(chatId, spoken);
+          } catch (error) {
+            console.warn(`[telegram] could not speak the reply: ${error.message}`);
+          }
+        }
         return;
       }
       // The account behind the link is gone or disabled: drop the orphan link
@@ -305,6 +338,26 @@ export class TelegramBridge {
       chat_id: chatId,
       text: "Я отвечаю только привязанным сотрудникам. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать». Команды: /stop — отвязать.",
     });
+  }
+
+  // Audio goes as multipart, so it cannot ride #call's JSON body. Kept next to
+  // it rather than folded in: one shape per transport is easier to read than a
+  // branch inside the shared one.
+  async #sendVoice(chatId, bytes, caption = "") {
+    const token = this.token();
+    if (!token) throw new Error("no bot token");
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("voice", new Blob([bytes], { type: "audio/ogg" }), "mila.ogg");
+    if (caption) form.append("caption", clean(caption, 900));
+    const response = await this.fetch(`${API}/bot${token}/sendVoice`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(30000),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!json.ok) throw new Error(clean(json.description, 200) || `telegram sendVoice HTTP ${response.status}`);
+    return json.result;
   }
 
   async #call(method, body = undefined, timeoutMs = 9000) {

@@ -101,6 +101,12 @@ export class OnboardingStore {
       briefEnabled: profileInput.briefEnabled === undefined
         ? current.profile.briefEnabled !== false
         : !!profileInput.briefEnabled,
+      // Off unless asked for: an assistant that starts speaking on its own one
+      // morning is an assistant people mute, and a muted channel delivers
+      // nothing at all.
+      briefVoice: profileInput.briefVoice === undefined
+        ? current.profile.briefVoice === true
+        : !!profileInput.briefVoice,
       completedAt: current.profile.completedAt || now,
       updatedAt: now,
     };

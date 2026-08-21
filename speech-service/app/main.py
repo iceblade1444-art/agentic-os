@@ -11,7 +11,7 @@ import tempfile
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from . import cache, config, correct, stt, tts
+from . import cache, config, correct, opus, stt, tts
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s %(message)s")
 
@@ -83,6 +83,10 @@ def tts_endpoint(
     instruct: str | None = Form(default=None),
     engine: str | None = Form(default=None),
     speed: float | None = Form(default=None),
+    # "opus" returns OGG/Opus, which is the only thing Telegram plays as a
+    # voice message; anything else arrives as a file to download. The default
+    # stays WAV so every existing caller is untouched.
+    audio_format: str | None = Form(default=None),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
@@ -92,6 +96,13 @@ def tts_endpoint(
         wav = tts.synthesize(text, language, speaker, instruct, engine, speed)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    if (audio_format or "").strip().lower() in {"opus", "ogg", "voice"}:
+        try:
+            return Response(content=opus.wav_to_opus(wav), media_type="audio/ogg")
+        except RuntimeError as exc:
+            # The caller asked for a voice message and cannot have one. Say so
+            # rather than returning a WAV it would post as an unplayable file.
+            raise HTTPException(status_code=503, detail=str(exc))
     return Response(content=wav, media_type="audio/wav")
 
 

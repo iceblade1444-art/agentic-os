@@ -10,9 +10,9 @@ import path from "node:path";
 import test from "node:test";
 
 import { TelegramBridge } from "../server/lib/telegram.js";
-import { audioFileId, createVoiceTranscriber } from "../server/lib/telegram-voice.js";
+import { audioFileId, createSpeaker, createVoiceTranscriber, spokenForm } from "../server/lib/telegram-voice.js";
 
-function bridge({ voice, assistant } = {}) {
+function bridge({ voice, assistant, speaker } = {}) {
   const calls = [];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aos-tgv-"));
   const file = path.join(dir, "links.json");
@@ -21,11 +21,17 @@ function bridge({ voice, assistant } = {}) {
     file,
     integrations: () => ({ botToken: "test-token" }),
     fetch: async (url, options) => {
-      calls.push({ method: url.split("/").pop(), body: JSON.parse(options?.body || "{}") });
+      // Text goes as JSON, audio as multipart: the stub has to survive both.
+      const raw = options?.body;
+      const body = raw instanceof FormData
+        ? Object.fromEntries([...raw.keys()].map((key) => [key, raw.get(key)]))
+        : JSON.parse(raw || "{}");
+      calls.push({ method: url.split("/").pop(), body });
       return { ok: true, json: async () => ({ ok: true, result: {} }) };
     },
     assistant: assistant || { respond: async (userId, text) => `эхо:${text}` },
     voice,
+    speaker: speaker || { speak: async () => null },
   });
   return { instance, calls, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
@@ -130,5 +136,116 @@ test("starting the poller replaces the previous bot's command menu", async () =>
   assert.equal(await instance.publishCommands(), true);
   const published = calls.find((call) => call.method === "setMyCommands");
   assert.deepEqual(published.body.commands.map((c) => c.command), ["help", "stop"]);
+  cleanup();
+});
+
+test("a spoken question is answered out loud as well as in writing", async () => {
+  const spoken = [];
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "сколько сшили вчера" },
+    assistant: { respond: async () => "Вчера 6489 штук." },
+    speaker: { speak: async (text) => { spoken.push(text); return Buffer.from([1, 2, 3]); } },
+  });
+
+  await instance.handleUpdateForTest({ message: voiceMessage });
+
+  assert.deepEqual(spoken, ["Вчера 6489 штук."], "the answer is spoken, not the transcript");
+  const methods = calls.map((call) => call.method);
+  assert.ok(methods.includes("sendVoice"), "a voice message follows the text");
+  // The text goes first and always: a voice message cannot be searched or quoted.
+  assert.ok(methods.indexOf("sendMessage") < methods.indexOf("sendVoice"));
+  cleanup();
+});
+
+test("a typed question is answered in writing only", async () => {
+  const spoken = [];
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    assistant: { respond: async () => "Вчера 6489 штук." },
+    speaker: { speak: async (text) => { spoken.push(text); return Buffer.from([1]); } },
+  });
+
+  await instance.handleUpdateForTest({ message: { chat: { id: 42 }, text: "сколько сшили вчера" } });
+
+  assert.deepEqual(spoken, [], "nobody asked to be spoken to");
+  assert.equal(calls.some((call) => call.method === "sendVoice"), false);
+  cleanup();
+});
+
+test("speech that cannot be synthesised costs the voice, never the answer", async () => {
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "вопрос" },
+    assistant: { respond: async () => "Ответ." },
+    speaker: { speak: async () => { throw new Error("speech service down"); } },
+  });
+
+  await instance.handleUpdateForTest({ message: voiceMessage });
+
+  const texts = calls.filter((call) => call.method === "sendMessage").map((call) => call.body.text);
+  assert.ok(texts.includes("Ответ."), "the written answer survives a dead speech service");
+  cleanup();
+});
+
+test("what gets spoken is prose, not markup", () => {
+  const brief = "**План на 2026-08-21**\n\nПроизводство:\n• Швейка вчера: 6489 шт\n• За сроком: 35";
+  const said = spokenForm(brief);
+  assert.equal(/[*•#`]/.test(said), false, "asterisks and bullets read aloud are noise");
+  assert.match(said, /План на 2026-08-21\. Производство:\. Швейка вчера: 6489 шт\. За сроком: 35/);
+});
+
+test("the speaker asks for the format Telegram can actually play", async () => {
+  const seen = {};
+  const speech = createSpeaker({
+    speechUrl: "http://speech.test:4400",
+    speechInternalSecret: "s3cret",
+    fetch: async (url, options = {}) => {
+      seen.url = url;
+      seen.body = options.body?.toString();
+      seen.secret = options.headers?.["X-Speech-Secret"];
+      return { ok: true, arrayBuffer: async () => new Uint8Array([9, 9]).buffer };
+    },
+  });
+
+  const bytes = await speech.speak("Вчера 6489 штук.");
+  assert.equal(bytes.length, 2);
+  assert.equal(seen.url, "http://speech.test:4400/tts");
+  assert.match(seen.body, /audio_format=opus/, "a WAV would arrive as a file, not as a voice message");
+  assert.equal(seen.secret, "s3cret");
+});
+
+test("an answer too long to listen to stays written", async () => {
+  const speech = createSpeaker({ fetch: async () => { throw new Error("must not be called"); } });
+  assert.equal(await speech.speak("да ".repeat(900)), null);
+  assert.equal(await speech.speak("   "), null);
+});
+
+test("the brief is read out only for the person who asked to hear it", async () => {
+  const spoken = [];
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    speaker: { speak: async (text) => { spoken.push(text); return Buffer.from([7]); } },
+  });
+
+  assert.equal(await instance.sendSpoken("creator", "План на завтра"), true);
+  assert.deepEqual(spoken, ["План на завтра"]);
+  const methods = calls.map((call) => call.method);
+  // Text first and always: audio cannot be searched or quoted.
+  assert.ok(methods.indexOf("sendMessage") < methods.indexOf("sendVoice"));
+
+  // Nobody linked: nothing is sent and nothing is synthesised.
+  assert.equal(await instance.sendSpoken("usr_unlinked", "План"), false);
+  assert.equal(spoken.length, 1);
+  cleanup();
+});
+
+test("a silent speech service still delivers the brief", async () => {
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    speaker: { speak: async () => { throw new Error("speech down"); } },
+  });
+
+  assert.equal(await instance.sendSpoken("creator", "План на завтра"), false, "the voice failed");
+  const texts = calls.filter((call) => call.method === "sendMessage").map((call) => call.body.text);
+  assert.deepEqual(texts, ["План на завтра"], "the brief itself arrived");
   cleanup();
 });

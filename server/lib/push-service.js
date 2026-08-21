@@ -123,8 +123,14 @@ class PushService {
     // so a user who linked their chat gets each of them there too. Best-effort
     // and first, because having no FCM devices used to end delivery entirely,
     // and a phone without the app is exactly who Telegram is for.
-    telegram
-      .sendText(userId, [item?.title, item?.body].filter(Boolean).join("\n"))
+    const message = [item?.title, item?.body].filter(Boolean).join("\n");
+    // Only what asked to be spoken. Every notification read aloud would be
+    // noise; the morning brief is the one worth listening to on the way to the
+    // factory. Whether this person wants that is decided by whoever composed
+    // the item — they are holding the profile already, and a lookup here would
+    // mean importing half the server into the delivery path.
+    const speak = item?.speak === true;
+    (speak ? telegram.sendSpoken(userId, message) : telegram.sendText(userId, message))
       .catch((error) => console.warn(`[telegram] delivery failed for ${userId}: ${error.message}`));
 
     const devices = pushDevices.list(userId);

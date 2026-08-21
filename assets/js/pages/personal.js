@@ -250,6 +250,7 @@ function soulView() {
           <div class="field"><label class="label">${t("personal.briefTime")}</label><input class="input" type="time" data-profile-brief-time value="${esc(profile.briefTime || "08:00")}"/></div>
           <div class="field"><label class="label">${t("personal.briefEnabled")}</label>
             <label class="mila-toggle-row"><input type="checkbox" data-profile-brief-enabled ${profile.briefEnabled === false ? "" : "checked"}/><span>${t("personal.briefEnabledHint")}</span></label>
+            <label class="mila-toggle-row"><input type="checkbox" data-profile-brief-voice ${profile.briefVoice === true ? "checked" : ""}/><span>${t("personal.briefVoiceHint")}</span></label>
           </div>
         </div>
         <div class="personal-mila-actions"><button class="btn btn-secondary sm" type="button" data-brief-now>${icon("send")}${t("personal.briefNow")}</button></div>
@@ -553,6 +554,7 @@ function wire(root) {
           lunchEnd: root.querySelector("[data-profile-lunch-end]").value,
           briefTime: root.querySelector("[data-profile-brief-time]").value,
           briefEnabled: root.querySelector("[data-profile-brief-enabled]").checked,
+          briefVoice: root.querySelector("[data-profile-brief-voice]").checked,
         },
         ...(current.canEditWorkspace ? { workspace: current.workspace } : {}),
       });

@@ -116,7 +116,12 @@ export class MorningBrief {
       source: "system",
       route: "#/personal",
     });
-    await push.sendInbox(user.id, item);
+    // Read out in Telegram for whoever asked for that. The flag rides on the
+    // delivery rather than on the stored item: what a person wants to hear is
+    // a preference of theirs, not a property of the morning.
+    const settings = deps.onboarding || onboarding;
+    const wantsVoice = settings.get(user).profile?.briefVoice === true;
+    await push.sendInbox(user.id, { ...item, speak: wantsVoice });
 
     // The brief is also team news when the owner has pointed it at a channel:
     // the people who can act on a late order are already talking there.
