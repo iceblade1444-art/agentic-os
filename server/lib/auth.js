@@ -89,6 +89,16 @@ export function authenticatedUser(req) {
     const token = auth.slice(7);
     if (constEq(token, config.authToken)) return creatorUser();
     const payload = verify(token);
+    // An agent token carries no session id — it is not a device someone can
+    // revoke from their list, it is a credential that expires with the call —
+    // but it is still that person, and a disabled account must stop working
+    // mid-call like everywhere else.
+    if (payload?.kind === "agent" && payload.user?.id) {
+      if (payload.user.id === "creator") return creatorUser();
+      const agentUser = readSessionUser(String(payload.user.id));
+      if (!agentUser || Number(payload.sessionVersion) !== agentUser.sessionVersion) return null;
+      return userFromSession({ user: agentUser });
+    }
     if (payload?.kind !== "mobile" || !payload.user?.id) return null;
     if (payload.sid && !touchSession(payload.sid, String(payload.user.id))) return null;
     if (payload.user.id === "creator") return creatorUser();
@@ -144,6 +154,46 @@ export function sessionCookie(req, user = creatorUser(), sid = "") {
   const token = sign({ exp: Date.now() + 7 * 864e5, user: userFromSession({ user }), sessionVersion: Number(user.sessionVersion) || 1, ...(sid ? { sid } : {}) });
   const secure = config.secureCookie || req.secure ? "; Secure" : "";
   return `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 86400}${secure}`;
+}
+
+// A voice call is answered by a process, not by a person, and that process
+// used to present the master AUTH_TOKEN — which resolves to the owner. So the
+// agent was the owner on everybody's call, and the personal desk could not be
+// given to it at all: whose tasks would it open?
+//
+// This is the narrow credential that fixes it: it names one user, expires with
+// the call, and carries the channel it was minted for. The channel is not
+// decoration — every action taken with this token is checked against what that
+// channel may carry, so a stolen agent token still reaches nothing but the
+// personal desk, company knowledge and the ERP reads its owner may already see.
+export const AGENT_TOKEN_TTL_MS = 20 * 60 * 1000;
+
+export function agentSessionToken(user, channel, ttlMs = AGENT_TOKEN_TTL_MS) {
+  return sign({
+    exp: Date.now() + Math.min(Math.max(Number(ttlMs) || 0, 60_000), AGENT_TOKEN_TTL_MS),
+    kind: "agent",
+    channel: String(channel || "").slice(0, 20),
+    user: userFromSession({ user }),
+    sessionVersion: Number(user.sessionVersion) || 1,
+  });
+}
+
+// The installation's own service credential, as used by the voice agent and
+// the MILA backend between themselves. It is deliberately not a person: it may
+// ask for a token on someone's behalf, and that token is what carries a name.
+export function serviceCaller(req) {
+  const auth = req.headers?.authorization || "";
+  return auth.startsWith("Bearer ") && !!config.authToken && constEq(auth.slice(7), config.authToken);
+}
+
+// The channel a request arrives on. Cookies and mobile sessions are the person
+// themselves at their own surface; an agent token says which door it speaks
+// through, and the action layer narrows accordingly.
+export function requestChannel(req) {
+  const auth = req.headers?.authorization || "";
+  if (!auth.startsWith("Bearer ")) return "app";
+  const payload = verify(auth.slice(7));
+  return payload?.kind === "agent" ? String(payload.channel || "mobile") : "app";
 }
 
 export function mobileSessionToken(user, sid = "") {

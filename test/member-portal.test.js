@@ -6,6 +6,9 @@ import { test } from "node:test";
 
 import { MemberWorkspaceStore } from "../server/lib/member-workspace.js";
 import { PERSONAL_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../server/lib/mila-actions.js";
+import { channelAllows } from "../server/lib/mila-audience.js";
+
+const MEMBER_USER = { id: "usr_member", name: "Сотрудник", role: "Member" };
 
 function temporaryStore(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-os-members-"));
@@ -227,8 +230,19 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // Company knowledge joins the everyone list: it is read-only and scoped to one
   // vault folder, so an employee looking up a price reaches nothing that was not
   // meant for them.
-  assert.match(milaActionsRoute, /allowedForEveryone = \(name\) => READ_ONLY_ERP_ACTIONS\.has\(name\)\s*\n\s*\|\| PERSONAL_ACTIONS\.has\(name\)\s*\n\s*\|\| KNOWLEDGE_ACTIONS\.has\(name\)/);
-  assert.match(milaActionsRoute, /!allowedForEveryone\(name\) && !isOperator\(req\)/);
+  // The route asks mila-audience.js rather than judging for itself, and the
+  // channel comes from the credential — a voice agent cannot request a wider
+  // door than the one its token was minted for.
+  assert.match(milaActionsRoute, /channelAllows\(name, authenticatedUser\(req\), requestChannel\(req\)\)/);
+  assert.match(milaActionsRoute, /if \(!permitted\(req, name\)\)/);
+  // And behaviourally: a Member reaches their own desk and the ERP reads, and
+  // nothing that belongs to an operator.
+  for (const name of [...PERSONAL_ACTIONS, ...READ_ONLY_ERP_ACTIONS]) {
+    assert.ok(channelAllows(name, MEMBER_USER, "app"), `${name} must stay open to a Member`);
+  }
+  for (const name of ["create_kanban_task", "ask_claude_code", "call_mcp_tool", "get_attendance_today"]) {
+    assert.equal(channelAllows(name, MEMBER_USER, "app"), false, `${name} must stay operator-only`);
+  }
   for (const operatorOnly of ["create_kanban_task", "delegate_to_hermes", "write_obsidian_note", "ask_claude_code", "call_mcp_tool"]) {
     assert.equal(PERSONAL_ACTIONS.has(operatorOnly), false, `${operatorOnly} must stay operator-only`);
   }

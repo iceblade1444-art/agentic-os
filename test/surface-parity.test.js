@@ -121,7 +121,7 @@ test("CEO is an operator on every surface, not only where it was remembered", ()
   // The role was added late; each surface had its own list of who counts, and
   // one forgotten list is a silent demotion. Where a surface delegates, the
   // module it delegates to answers instead.
-  for (const file of ["../server/routes/mila-actions.js", "../server/lib/mila-audience.js", "../server/lib/hermes-proxy.js", "../server/lib/company-brief.js"]) {
+  for (const file of ["../server/lib/mila-audience.js", "../server/lib/hermes-proxy.js", "../server/lib/company-brief.js"]) {
     assert.match(source(file), /"CEO"/, `${file} must recognise the CEO role`);
   }
   // And behaviourally, not only in the source: a CEO is offered what an owner is.

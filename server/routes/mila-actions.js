@@ -1,40 +1,68 @@
 import { Router } from "express";
 
-import { authenticatedUser } from "../lib/auth.js";
-import { milaActions, PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../lib/mila-actions.js";
+import { agentSessionToken, AGENT_TOKEN_TTL_MS, authenticatedUser, requestChannel, serviceCaller } from "../lib/auth.js";
+import { milaActions, READ_ONLY_ERP_ACTIONS } from "../lib/mila-actions.js";
+import { channelAllows } from "../lib/mila-audience.js";
+import { users } from "../lib/users.js";
+import { creatorUser } from "../lib/auth.js";
 import { voiceInstruction } from "../lib/voice-instruction.js";
 
 const r = Router();
 
-// A Member's Mila Live call may only read the same ERP data the ERP panel already
-// shows it. Kanban, Hermes, Obsidian, Claude Code and MCP tool calls stay operator-only
-// — those are the same privileges an Admin has, and voice must not be a side door to them.
-//
-// Personal actions are the exception, and not a widening: they run against the
-// caller's own tasks, notes, reminders and calendar, so a Member using them reaches
-// exactly the data that is already theirs on the Personal page.
-const isOperator = (req) => ["Creator", "Admin", "CEO"].includes(authenticatedUser(req)?.role);
-// Company knowledge is read-only here and scoped to one vault folder, so every
-// employee may look up a price or who to ask. Writing to it stays operator-only.
-const allowedForEveryone = (name) => READ_ONLY_ERP_ACTIONS.has(name)
-  || PERSONAL_ACTIONS.has(name)
-  || KNOWLEDGE_ACTIONS.has(name);
+// Two questions, and the answer to both lives in mila-audience.js: may this
+// person call this at all, and does the door they came through carry it. At
+// their own desk an operator has everything; a voice call or a chat message
+// carries the personal desk, company knowledge and the ERP reads — never
+// Kanban, Hermes, Obsidian, Claude Code or MCP, because voice must not be a
+// side door to the host.
+const permitted = (req, name) => channelAllows(name, authenticatedUser(req), requestChannel(req));
+// A Member reads exactly what the ERP panel already shows them, so the gate is
+// not a widening of their access — it is the same access through another door.
+void READ_ONLY_ERP_ACTIONS;
 
 // The voice agent asks for the prompt instead of keeping its own copy, so a
 // phone call and a browser call speak with the same assistant.
 r.post("/voice-instruction", (req, res) => {
   try {
-    res.json(voiceInstruction(authenticatedUser(req), req.body || {}));
+    // An agent token already says which door it speaks through; taking the
+    // channel from the credential rather than the body means a caller cannot
+    // ask for a wider set than it was issued.
+    const channel = requestChannel(req);
+    const body = { ...(req.body || {}), ...(channel === "app" ? {} : { channel }) };
+    res.json(voiceInstruction(authenticatedUser(req), body));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// Mints the credential a voice agent answers a call with. Only the service
+// token may ask — a session cookie must never be able to mint a token for
+// somebody else — and what comes back is bound to one person, one channel and
+// the length of a call. It grants nothing on its own: every action it is used
+// for is checked against that channel, so this is a narrowing of the master
+// token the agent uses today, not a new privilege.
+r.post("/agent-token", (req, res) => {
+  if (!serviceCaller(req)) {
+    return res.status(403).json({ error: "forbidden", code: "service_token_required" });
+  }
+  const channel = String(req.body?.channel || "mobile").slice(0, 20);
+  const userId = String(req.body?.userId || "").slice(0, 64);
+  if (!userId) return res.status(400).json({ error: "userId is required" });
+  const user = userId === "creator" ? creatorUser() : users.sessionUser(userId);
+  if (!user || user.disabled) return res.status(404).json({ error: "unknown or disabled account" });
+  res.json({
+    token: agentSessionToken(user, channel),
+    expiresInSeconds: Math.floor(AGENT_TOKEN_TTL_MS / 1000),
+    channel,
+    user: { id: user.id, name: user.name, role: user.role },
+  });
+});
+
 r.post("/actions", async (req, res) => {
   try {
     const name = String(req.body?.name || "");
-    if (!allowedForEveryone(name) && !isOperator(req)) {
-      return res.status(403).json({ error: "forbidden", code: "mila_action_restricted", requiredRoles: ["Creator", "Admin", "CEO"] });
+    if (!permitted(req, name)) {
+      return res.status(403).json({ error: "forbidden", code: "mila_action_restricted", channel: requestChannel(req) });
     }
     const user = authenticatedUser(req);
     res.json(await milaActions.call(name, req.body?.args || {}, { actor: user?.name || "Creator", user }));
