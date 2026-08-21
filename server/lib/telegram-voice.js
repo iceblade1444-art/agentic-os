@@ -17,14 +17,12 @@ const API = "https://api.telegram.org";
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const TIMEOUT_MS = 30000;
 
-// The speech route reads these straight from the environment rather than
-// through config.js; matching it keeps one definition of the hop, not two.
-const SPEECH_URL = process.env.SPEECH_URL || "http://speech:4400";
-const SPEECH_INTERNAL_SECRET = process.env.SPEECH_INTERNAL_SECRET || "";
+// Imported, not restated: this module once carried its own copy of the header
+// name, spelled wrong, and the speech container answered 401 to every voice
+// note the bot received.
+import { SPEECH_URL, speechInternalHeaders } from "./speech-internal.js";
 
-export function speechInternalHeaders(extra = {}, secret = SPEECH_INTERNAL_SECRET) {
-  return secret ? { ...extra, "X-Speech-Secret": secret } : extra;
-}
+export { speechInternalHeaders };
 
 // The audio Telegram may attach to a message, in the order we prefer it.
 export function audioFileId(message = {}) {
@@ -36,7 +34,7 @@ export function audioFileId(message = {}) {
 export function createVoiceTranscriber(options = {}) {
   const fetchImpl = options.fetch || globalThis.fetch;
   const speechUrl = options.speechUrl || SPEECH_URL;
-  const secret = options.speechInternalSecret ?? SPEECH_INTERNAL_SECRET;
+  const secret = options.speechInternalSecret;
 
   // Two hops on Telegram's side: getFile resolves the path, then the file API
   // serves the bytes. Both need the bot token, which is why this takes it
@@ -116,7 +114,7 @@ export function spokenForm(text = "") {
 export function createSpeaker(options = {}) {
   const fetchImpl = options.fetch || globalThis.fetch;
   const speechUrl = options.speechUrl || SPEECH_URL;
-  const secret = options.speechInternalSecret ?? SPEECH_INTERNAL_SECRET;
+  const secret = options.speechInternalSecret;
 
   // Never throws: a reply that could not be spoken is still a reply, and the
   // caller has already sent the text.

@@ -11,6 +11,12 @@ import test from "node:test";
 
 import { TelegramBridge } from "../server/lib/telegram.js";
 import { audioFileId, createSpeaker, createVoiceTranscriber, spokenForm } from "../server/lib/telegram-voice.js";
+import { speechInternalHeaders } from "../server/lib/speech-internal.js";
+
+// What the speech container actually checks, read from the one definition
+// rather than typed here: a test that repeats a guess only proves the guess
+// is consistent with itself, which is how every voice note got a 401.
+const SECRET_HEADER = Object.keys(speechInternalHeaders({}, "probe"))[0];
 
 function bridge({ voice, assistant, speaker } = {}) {
   const calls = [];
@@ -116,7 +122,7 @@ test("the transcriber sends the audio to the speech service with the shared secr
   assert.match(seen[0].url, /bottok\/getFile$/);
   assert.match(seen[1].url, /\/file\/bottok\/voice\/file_1\.oga$/);
   assert.equal(seen[2].url, "http://speech.test:4400/stt");
-  assert.equal(seen[2].headers["X-Speech-Secret"], "s3cret");
+  assert.equal(seen[2].headers[SECRET_HEADER], "s3cret");
   assert.equal(seen[2].isForm, true);
 });
 
@@ -201,7 +207,7 @@ test("the speaker asks for the format Telegram can actually play", async () => {
     fetch: async (url, options = {}) => {
       seen.url = url;
       seen.body = options.body?.toString();
-      seen.secret = options.headers?.["X-Speech-Secret"];
+      seen.headers = options.headers || {};
       return { ok: true, arrayBuffer: async () => new Uint8Array([9, 9]).buffer };
     },
   });
@@ -210,7 +216,7 @@ test("the speaker asks for the format Telegram can actually play", async () => {
   assert.equal(bytes.length, 2);
   assert.equal(seen.url, "http://speech.test:4400/tts");
   assert.match(seen.body, /audio_format=opus/, "a WAV would arrive as a file, not as a voice message");
-  assert.equal(seen.secret, "s3cret");
+  assert.equal(seen.headers[SECRET_HEADER], "s3cret");
 });
 
 test("an answer too long to listen to stays written", async () => {

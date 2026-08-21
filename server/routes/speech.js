@@ -1,10 +1,9 @@
 import crypto from "node:crypto";
 import { Router, raw } from "express";
 import { rateLimit } from "../lib/auth.js";
+import { SPEECH_URL, speechInternalHeaders } from "../lib/speech-internal.js";
 
 const r = Router();
-const SPEECH_URL = process.env.SPEECH_URL || "http://speech:4400";
-const SPEECH_INTERNAL_SECRET = process.env.SPEECH_INTERNAL_SECRET || "";
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGS = new Set(["uz", "kk", "ky", "ru", "en"]);
 
@@ -21,9 +20,7 @@ export function safeSpeechFilename(value = "") {
 // The secret is a parameter so this is testable without depending on whether a
 // .env happens to sit next to the test run — that made the suite pass on a
 // developer machine and fail on the server.
-export function speechInternalHeaders(extra = {}, secret = SPEECH_INTERNAL_SECRET) {
-  return secret ? { ...extra, "X-Internal-Secret": secret } : extra;
-}
+export { speechInternalHeaders };
 
 r.get("/health", async (req, res) => {
   try {
