@@ -255,3 +255,65 @@ test("a silent speech service still delivers the brief", async () => {
   assert.deepEqual(texts, ["План на завтра"], "the brief itself arrived");
   cleanup();
 });
+
+test("every text message offers to be read out", async () => {
+  const { instance, calls, cleanup } = bridge({ voice: { transcribe: async () => "unused" } });
+  await instance.sendText("creator", "План на завтра");
+  const sent = calls.find((call) => call.method === "sendMessage");
+  assert.deepEqual(
+    sent.body.reply_markup.inline_keyboard[0][0],
+    { text: "🔊 Озвучить", callback_data: "speak" },
+  );
+  cleanup();
+});
+
+test("tapping the button speaks the message it sits under", async () => {
+  const spoken = [];
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    speaker: { speak: async (text) => { spoken.push(text); return Buffer.from([4, 2]); } },
+  });
+
+  await instance.handleUpdateForTest({
+    callback_query: { id: "cb1", data: "speak", message: { chat: { id: 42 }, text: "Швейка вчера: 6489 шт" } },
+  });
+
+  // Telegram spins the button until it is answered, so that comes first.
+  const methods = calls.map((call) => call.method);
+  assert.ok(methods.indexOf("answerCallbackQuery") < methods.indexOf("sendVoice"));
+  assert.deepEqual(spoken, ["Швейка вчера: 6489 шт"], "the text comes back with the press; nothing is stored");
+  cleanup();
+});
+
+test("a stranger's button press reaches no service of ours", async () => {
+  const spoken = [];
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    speaker: { speak: async (text) => { spoken.push(text); return Buffer.from([1]); } },
+  });
+
+  await instance.handleUpdateForTest({
+    callback_query: { id: "cb2", data: "speak", message: { chat: { id: 999 }, text: "чужой чат" } },
+  });
+
+  assert.deepEqual(spoken, [], "an unlinked chat is a stranger here too");
+  assert.equal(calls.some((call) => call.method === "sendVoice"), false);
+  const answered = calls.find((call) => call.method === "answerCallbackQuery");
+  assert.match(answered.body.text, /не привязан/);
+  cleanup();
+});
+
+test("a message too long to listen to says so instead of going quiet", async () => {
+  const { instance, calls, cleanup } = bridge({
+    voice: { transcribe: async () => "unused" },
+    speaker: { speak: async () => null },
+  });
+
+  await instance.handleUpdateForTest({
+    callback_query: { id: "cb3", data: "speak", message: { chat: { id: 42 }, text: "очень длинный бриф" } },
+  });
+
+  const texts = calls.filter((call) => call.method === "sendMessage").map((call) => call.body.text);
+  assert.match(texts.join(" "), /слишком длинное/);
+  cleanup();
+});

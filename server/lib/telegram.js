@@ -28,6 +28,19 @@ const CHUNK = 4000;
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
 
+// Every text message carries an offer to hear it. Reading is the default —
+// text can be searched, quoted and skimmed — but a person walking the floor
+// with a phone in their pocket can tap once instead of stopping to read.
+//
+// The callback carries no payload: Telegram limits callback_data to 64 bytes,
+// which cannot hold a brief, and it hands the original message back with the
+// button press anyway. So the text to speak is read from the message the
+// button sits under, and nothing has to be stored between the two events.
+const SPEAK_CALLBACK = "speak";
+const speakButton = () => ({
+  inline_keyboard: [[{ text: "🔊 Озвучить", callback_data: SPEAK_CALLBACK }]],
+});
+
 export class TelegramBridge {
   constructor(options = {}) {
     this.file = options.file || path.join(path.resolve(config.dataDir), "telegram-links.json");
@@ -131,6 +144,7 @@ export class TelegramBridge {
       await this.#call("sendMessage", {
         chat_id: entry.chatId,
         text: body.slice(start, start + CHUNK),
+        reply_markup: speakButton(),
       });
     }
     return true;
@@ -204,9 +218,45 @@ export class TelegramBridge {
     }
   }
 
+  // Somebody tapped "Озвучить" under a message. The text comes back with the
+  // press, so there is nothing to remember between sending and tapping.
+  //
+  // The same rule as every other inbound event: a chat that is not linked is a
+  // stranger, and a stranger's button press reaches no service of ours.
+  async #handleSpeakTap(callback) {
+    const chatId = callback?.message?.chat?.id;
+    const text = clean(callback?.message?.text, 4000);
+    const answer = (message = "") => this.#call("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      ...(message ? { text: message } : {}),
+    }).catch(() => {});
+
+    if (!chatId || !text) return answer();
+    const linked = Object.values(this.#read()).some((value) => value.chatId === chatId);
+    if (!linked) return answer("Этот чат не привязан.");
+
+    // Telegram spins the button until it is answered, so the acknowledgement
+    // goes first and the synthesis — which takes seconds — follows.
+    await answer("Озвучиваю…");
+    try {
+      const audio = await this.speaker.speak(text);
+      if (!audio) {
+        await this.#call("sendMessage", { chat_id: chatId, text: "Это сообщение слишком длинное, чтобы его слушать." });
+        return;
+      }
+      await this.#sendVoice(chatId, audio);
+    } catch (error) {
+      console.warn(`[telegram] speak-on-tap failed: ${error.message}`);
+      await this.#call("sendMessage", { chat_id: chatId, text: "Не получилось озвучить — попробуйте ещё раз." }).catch(() => {});
+    }
+  }
+
   // Public: the poller calls it per update, and tests drive it directly —
   // simulating the person tapping Start is the only honest way to test linking.
   async handleUpdateForTest(update) {
+    if (update?.callback_query?.data === SPEAK_CALLBACK) {
+      return this.#handleSpeakTap(update.callback_query);
+    }
     const message = update.message;
     const chatId = message?.chat?.id;
     // Commands are short; a real question to MILA is not. 4000 matches one
@@ -314,7 +364,11 @@ export class TelegramBridge {
       const reply = await this.assistant.respond(link[0], text);
       if (reply) {
         for (let start = 0; start < reply.length; start += CHUNK) {
-          await this.#call("sendMessage", { chat_id: chatId, text: reply.slice(start, start + CHUNK) });
+          await this.#call("sendMessage", {
+            chat_id: chatId,
+            text: reply.slice(start, start + CHUNK),
+            reply_markup: speakButton(),
+          });
         }
         // Asked out loud, answered out loud. Somebody who spoke because their
         // hands are busy cannot read the reply either — but the text goes
