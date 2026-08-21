@@ -52,7 +52,19 @@ function requestedTools(value, user, channel) {
   return names.length ? [...new Set(names)] : LIVEKIT_BASELINE_TOOLS;
 }
 
+// A service credential is not a person, but the master token resolves to the
+// owner — so the voice agent, which presents it, was handed the owner's private
+// profile and the company day journal and then carried them into *every* call,
+// including a Member's. The model is asked not to repeat such things, but the
+// audience rule this codebase keeps returning to says the quiet part plainly:
+// the only reliable way not to say something in a room is not to know it there.
+//
+// So a caller that has not proved whose call this is gets the shared audience —
+// the company's own context, which colleagues share anyway, and none of the
+// private half. Naming the person (an agent token) restores it, because then
+// the context belongs to whoever is actually on the line.
 export function voiceInstruction(user, requested = {}) {
+  const audience = requested.identified === false ? "shared" : "owner";
   const language = LANGUAGES.has(requested.language) ? requested.language : "auto";
   // Unknown or hostile values fall back to defaults inside normalizeMilaPreferences,
   // so a caller cannot inject prompt text through a preference field.
@@ -62,10 +74,10 @@ export function voiceInstruction(user, requested = {}) {
   const instruction = buildMilaSystemInstruction({
     language,
     preferences,
-    agentContext: sharedAgentContext(user),
+    agentContext: sharedAgentContext(user, undefined, { audience }),
     mode: requested.mode === "text" ? "text" : "voice",
     tools,
     knowledgeIndex: knowledgePromptIndex(),
   });
-  return { instruction, language, preferences, tools, channel: channel || "" };
+  return { instruction, language, preferences, tools, channel: channel || "", audience };
 }

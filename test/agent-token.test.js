@@ -12,6 +12,7 @@ import test from "node:test";
 import { config } from "../server/config.js";
 import { AGENT_TOKEN_TTL_MS, agentSessionToken, authenticatedUser, requestChannel, serviceCaller } from "../server/lib/auth.js";
 import { channelAllows } from "../server/lib/mila-audience.js";
+import { voiceInstruction } from "../server/lib/voice-instruction.js";
 
 const MEMBER = { id: "usr_member", name: "Сотрудник", role: "Member", sessionVersion: 1 };
 const OWNER = { id: "creator", name: "Владелец", role: "Creator", sessionVersion: 1 };
@@ -75,6 +76,30 @@ test("an expired or tampered token authenticates nobody", () => {
     assert.equal(authenticatedUser(bearer(`${forgedBody}.${expired.split(".")[1]}`)), null, "a rewritten expiry breaks the signature");
     assert.equal(authenticatedUser(bearer("garbage.garbage")), null);
   });
+});
+
+test("an unidentified caller is not handed the owner's private context", () => {
+  // The voice agent presents the master token, which resolves to the owner, so
+  // the prompt it received carried the owner's private profile and the company
+  // day journal — into every call, including a Member's.
+  const owner = { id: "creator", name: "Владелец", role: "Creator" };
+  const named = voiceInstruction(owner, { channel: "mobile" });
+  const anonymous = voiceInstruction(owner, { identified: false });
+
+  assert.equal(named.audience, "owner");
+  assert.equal(anonymous.audience, "shared");
+  assert.ok(
+    anonymous.instruction.length < named.instruction.length,
+    "the private half must be absent, not merely asked to stay quiet",
+  );
+  assert.equal(
+    anonymous.instruction.includes("day journal"),
+    false,
+    "the day journal is what everyone else did; it belongs to nobody's call but the owner's",
+  );
+  // The company's own context stays: colleagues share it anyway, and a call
+  // without it is a call that cannot answer anything about the business.
+  assert.ok(anonymous.instruction.length > 1000);
 });
 
 test("the owner's own token still resolves to the owner, and only to them", () => {

@@ -28,7 +28,13 @@ r.post("/voice-instruction", (req, res) => {
     // channel from the credential rather than the body means a caller cannot
     // ask for a wider set than it was issued.
     const channel = requestChannel(req);
-    const body = { ...(req.body || {}), ...(channel === "app" ? {} : { channel }) };
+    // The master token is the installation, not a person. It resolves to the
+    // owner, so a voice agent presenting it used to receive the owner's private
+    // context and carry it into everybody's call. Saying "this caller is not
+    // identified" drops the private half; an agent token naming the person
+    // restores it, because then the context belongs to whoever is on the line.
+    const identified = !(serviceCaller(req) && channel === "app");
+    const body = { ...(req.body || {}), identified, ...(channel === "app" ? {} : { channel }) };
     res.json(voiceInstruction(authenticatedUser(req), body));
   } catch (error) {
     res.status(500).json({ error: error.message });
