@@ -4,15 +4,21 @@
 // Python — and the copies drifted until a phone call and a browser call were
 // noticeably different assistants. Both now compose from assets/js/mila-prompt.js.
 //
-// The prompt is shared; the tools are not. The browser declares the full tool
-// list, while the phone's live client declares its own much shorter one, so a
-// caller states what it can actually run and the prompt describes only that.
-// A client that says nothing gets the conservative baseline rather than a prompt
-// promising thirteen tools it has no way to call.
+// The prompt is shared, and for the channels named in SERVER_OWNED_CHANNELS so
+// is the tool list: they ask "what may this person do here" and are told,
+// instead of announcing a list of their own. That is the fix for the phone,
+// which kept its list in Dart and therefore never saw a tool added on the
+// server — the turnstile, the staff directory and the order board all existed
+// for weeks without reaching it.
+//
+// The LiveKit agent still announces its own set, because its tools are Python
+// functions it registers itself; a list it did not choose would be a promise it
+// cannot keep. A caller that says nothing gets the conservative baseline.
 import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../../assets/js/mila-prompt.js";
 import { MILA_TOOLS } from "../../assets/js/mila-tools.js";
 import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
+import { channelToolNames } from "./mila-audience.js";
 import { sharedAgentContext } from "./onboarding.js";
 
 const LANGUAGES = new Set(["ru-RU", "uz-UZ", "en-US", "auto"]);
@@ -30,7 +36,13 @@ export const LIVEKIT_BASELINE_TOOLS = [
   "search_obsidian_notes", "read_obsidian_note", "write_obsidian_note", "ask_claude_code",
 ];
 
-function requestedTools(value) {
+// Channels whose tool list the server owns. The phone used to keep its own
+// copy in Dart, which is why tools added on the server never reached it: naming
+// a channel here asks for that person's list instead of announcing one.
+const SERVER_OWNED_CHANNELS = new Set(["mobile", "telegram", "messenger"]);
+
+function requestedTools(value, user, channel) {
+  if (SERVER_OWNED_CHANNELS.has(channel)) return channelToolNames(user, channel);
   if (!Array.isArray(value)) return LIVEKIT_BASELINE_TOOLS;
   const names = value
     .map((item) => (typeof item === "string" ? item : item?.name))
@@ -45,7 +57,8 @@ export function voiceInstruction(user, requested = {}) {
   // Unknown or hostile values fall back to defaults inside normalizeMilaPreferences,
   // so a caller cannot inject prompt text through a preference field.
   const preferences = normalizeMilaPreferences(requested.preferences || {});
-  const tools = requestedTools(requested.tools);
+  const channel = String(requested.channel || "").slice(0, 20);
+  const tools = requestedTools(requested.tools, user, channel);
   const instruction = buildMilaSystemInstruction({
     language,
     preferences,
@@ -54,5 +67,5 @@ export function voiceInstruction(user, requested = {}) {
     tools,
     knowledgeIndex: knowledgePromptIndex(),
   });
-  return { instruction, language, preferences, tools };
+  return { instruction, language, preferences, tools, channel: channel || "" };
 }

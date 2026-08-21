@@ -19,41 +19,20 @@ import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
 import { db } from "../store.js";
 import { creatorUser } from "./auth.js";
-import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "../../assets/js/mila-tools.js";
-import {
-  KNOWLEDGE_ACTIONS,
-  OPERATOR_ERP_ACTIONS,
-  PERSONAL_ACTIONS,
-  READ_ONLY_ERP_ACTIONS,
-  milaActions,
-} from "./mila-actions.js";
+import { channelAllows, channelToolNames } from "./mila-audience.js";
+import { milaActions } from "./mila-actions.js";
 import { milaGeminiChat } from "./mila.js";
 import { sharedAgentContext } from "./onboarding.js";
 import { users } from "./users.js";
 
+const CHANNEL = "telegram";
 const HISTORY_TURNS = 12;
 const MAX_TOOL_STEPS = 4;
-// The same gates the web route applies, imported rather than restated: a
-// hand-written copy of the tool list here is how Telegram came to lack the
-// calendar writes the browser had all along.
-const isOperator = (user) => ["Creator", "Admin", "CEO"].includes(user?.role);
-const allowed = (name, user) => PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name)
-  || READ_ONLY_ERP_ACTIONS.has(name)
-  || (isOperator(user) && OPERATOR_ERP_ACTIONS.has(name));
-
-// One tool is deliberately dropped: send_telegram exists to reach this chat
-// from elsewhere, and offering it inside the chat is offering an echo.
-const CHANNEL_EXCLUDED = new Set(["send_telegram"]);
-
-// What the person is told they can do is exactly what the gate will run for
-// them — a declared-but-refused tool teaches the model to promise and fail.
-// Exported so the parity test can compare this door with the others rather
-// than guess at them through the prompt's prose.
-export function toolNamesFor(user) {
-  return (isOperator(user) ? MILA_TOOLS : MILA_MEMBER_TOOLS)
-    .map((tool) => tool.name)
-    .filter((name) => !CHANNEL_EXCLUDED.has(name) && allowed(name, user));
-}
+// Who may call what here is decided once, in mila-audience.js, and the same
+// answer serves the phone and the team messenger. A hand-written copy of the
+// list lived here until it fell behind the browser by four calendar tools.
+const allowed = (name, user) => channelAllows(name, user, CHANNEL);
+export const toolNamesFor = (user) => channelToolNames(user, CHANNEL);
 
 const clean = (value, max) => String(value ?? "").trim().slice(0, max);
 
