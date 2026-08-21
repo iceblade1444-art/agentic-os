@@ -17,6 +17,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { db } from "../store.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
+import { audioFileId, voiceTranscriber } from "./telegram-voice.js";
 
 const API = "https://api.telegram.org";
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -39,6 +40,7 @@ export class TelegramBridge {
     // mila-actions, which imports this module for send_telegram — a cycle ESM
     // would technically survive but nobody should have to reason about.
     this.assistant = options.assistant || null;
+    this.voice = options.voice || voiceTranscriber;
     this.timer = null;
     this.offset = 0;
     this.botName = "";
@@ -103,6 +105,14 @@ export class TelegramBridge {
     this.pending.set(code, { userId: user.id, expiresAt: Date.now() + CODE_TTL_MS });
     if (!this.botName) {
       const me = await this.#call("getMe");
+      // Published once at startup: Telegram shows these in the "/" menu, and
+      // an unlisted command is a command nobody knows exists.
+      this.#call("setMyCommands", {
+        commands: [
+          { command: "help", description: "Что я умею" },
+          { command: "stop", description: "Отвязать этот чат" },
+        ],
+      }).catch(() => {});
       this.botName = clean(me?.username, 64);
     }
     return { url: `https://t.me/${this.botName}?start=${code}`, expiresInSeconds: CODE_TTL_MS / 1000 };
@@ -171,7 +181,36 @@ export class TelegramBridge {
     const chatId = message?.chat?.id;
     // Commands are short; a real question to MILA is not. 4000 matches one
     // Telegram message, so nothing a person can type in one go is cut.
-    const text = clean(message?.text, 4000);
+    let text = clean(message?.text || message?.caption, 4000);
+
+    // A voice note is a question like any other: transcribe it and carry on.
+    // Silence here was the worst answer available — the person cannot tell a
+    // bot that ignores audio from a bot that has died.
+    const audio = !text && chatId ? audioFileId(message) : null;
+    if (audio) {
+      await this.#call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+      try {
+        text = clean(await this.voice.transcribe(this.token(), audio.fileId), 4000);
+        await this.#call("sendMessage", { chat_id: chatId, text: `🎤 «${text}»` });
+      } catch (error) {
+        console.warn(`[telegram] transcription failed: ${error.message}`);
+        await this.#call("sendMessage", {
+          chat_id: chatId,
+          text: "Не смогла разобрать голосовое — напишите текстом, пожалуйста.",
+        });
+        return;
+      }
+    }
+
+    // Everything else Telegram can carry — photos, documents, stickers — says
+    // so rather than vanishing.
+    if (!text && chatId && (message?.photo || message?.document || message?.video)) {
+      await this.#call("sendMessage", {
+        chat_id: chatId,
+        text: "Пока я читаю только текст и голосовые. Опишите словами, что на файле, — и я помогу.",
+      });
+      return;
+    }
     if (!chatId || !text) return;
 
     if (text.startsWith("/start")) {
@@ -199,6 +238,27 @@ export class TelegramBridge {
       await this.#call("sendMessage", {
         chat_id: chatId,
         text: "Готово — Telegram привязан. MILA сможет присылать сюда напоминания, утренний бриф и всё, что вы попросите переслать. Отвязать: /stop",
+      });
+      return;
+    }
+
+    if (text.startsWith("/help")) {
+      await this.#call("sendMessage", {
+        chat_id: chatId,
+        text: [
+          "Я MILA — ваш ассистент из Agentic OS. Пишите обычными словами или наговаривайте голосовое.",
+          "",
+          "Что спросить:",
+          "• «что у меня на сегодня» — план дня, задачи, календарь",
+          "• «напомни завтра в 9 позвонить на склад» — напоминание",
+          "• «запиши: обсудили отгрузку в Ташкент» — заметка",
+          "• «сколько сшили вчера» — швейная выработка из ERP",
+          "• «сколько готовой продукции на складе» — остатки",
+          "",
+          "Руководителям дополнительно: «кто сегодня на месте», «какой заказ на каком этапе», «сколько человек в отделе».",
+          "",
+          "Отвязать чат: /stop",
+        ].join("\n"),
       });
       return;
     }
