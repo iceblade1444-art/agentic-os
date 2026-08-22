@@ -241,10 +241,41 @@ function topbarHTML() {
   </header>`;
 }
 
+/* ---------------- Bottom tabs ----------------
+   Below the tablet breakpoint the drawer was the only navigation there was, and
+   a drawer is a thing you have to know is there. Four sections and the orb sit
+   where a thumb already rests; the rest stays in the drawer, which the
+   hamburger still opens.
+
+   Same four, same order, same words as the Flutter app's bar — a floor manager
+   who learns one knows the other. */
+function tabbarHTML() {
+  const cur = currentRoute();
+  const bottom = sections().filter((section) => section.bottom).slice(0, 4);
+  if (bottom.length < 2) return "";
+  const active = sectionForRoute(cur);
+  const tab = (section) => `
+    <a class="tab-item ${section === active ? "active" : ""}" href="#/${section.children[0].route}"
+       data-section="${section.id}" ${section === active ? 'aria-current="page"' : ""}>
+      ${icon(section.icon)}<span>${sectionLabel(section)}</span>
+      ${section.bottom && section.id === "today" ? `<span class="tab-count" id="tabNeeds" hidden></span>` : ""}
+    </a>`;
+  const orb = pages().mila
+    ? `<a class="tab-orb" href="#/mila" aria-label="MILA"></a>`
+    : `<span class="tab-orb-spacer"></span>`;
+  // The orb takes the middle slot, so the four sections split two and two
+  // around it rather than being pushed to one side.
+  return `<nav class="tabbar" id="tabbar" aria-label="${tr("shell.sections")}">
+    ${bottom.slice(0, 2).map(tab).join("")}
+    ${orb}
+    ${bottom.slice(2).map(tab).join("")}
+  </nav>`;
+}
+
 export function renderShell() {
   const app = qs("#app");
   app.removeAttribute("aria-busy");
-  app.innerHTML = `<div class="layout">${sidebarHTML()}<div class="main">${topbarHTML()}<div id="view"></div></div></div>`;
+  app.innerHTML = `<div class="layout">${sidebarHTML()}<div class="main">${topbarHTML()}<div id="view"></div>${tabbarHTML()}</div></div>`;
   wireShell();
 }
 
@@ -608,9 +639,18 @@ function route() {
   view.innerHTML = `<div class="view">${page.render(ctx)}</div>`;
   page.mount && page.mount(qs(".view", view), ctx);
   mountedPage = page;
-  // update active nav without full re-render
-  qsa(".nav-item").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#/" + r));
-  const item = navigation().flatMap((group) => group.items).find((entry) => entry.route === r);
+  // Moving between sections changes which column is on screen, so the sidebar
+  // is rebuilt; moving within one only changes which row is lit.
+  const wanted = sectionForRoute(r);
+  if (wanted && qs(".rail-item.active")?.dataset.section !== wanted.id) {
+    qs("#sidebar")?.replaceWith(el(sidebarHTML()));
+    const tabs = tabbarHTML();
+    if (tabs) qs("#tabbar")?.replaceWith(el(tabs));
+    wireShell();
+  } else {
+    qsa(".nav-item").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#/" + r));
+  }
+  const item = navItems().find((entry) => entry.route === r);
   const title = item ? navLabel(item) : page.title;
   document.title = (title ? title + " · " : "") + "Agentic OS";
   qs("#view").scrollTop = 0;

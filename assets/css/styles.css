@@ -952,15 +952,59 @@ body.nav-open { overflow: hidden; }
 /* ============================================================
    Bottom tabs — the phone and tablet shell
    ============================================================ */
+.tabbar { display: none; }
 @media (max-width: 900px) {
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    align-items: center;
+    height: calc(var(--tabbar-h) + var(--safe-b));
     padding: 0 calc(var(--safe-l)) var(--safe-b) calc(var(--safe-r));
     background: color-mix(in srgb, var(--bg-1) 92%, transparent);
     backdrop-filter: blur(14px);
     border-top: 1px solid var(--border);
   }
   /* Content has to be able to scroll clear of a bar that floats over it. */
+  .view { padding-bottom: calc(24px + var(--tabbar-h) + var(--safe-b)); }
+  /* The tab bar owns the bottom of the screen now, so the live-call dock sits
+     above it rather than under it. */
+  .mila-dock { bottom: calc(12px + var(--tabbar-h) + var(--safe-b)); }
+}
+.tab-item {
+  position: relative; min-height: 52px;
+  display: grid; justify-items: center; align-content: center; gap: 3px;
+  color: var(--text-3); text-align: center;
+}
+.tab-item svg { width: 21px; height: 21px; }
+.tab-item span { font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
 .tab-item.active { color: var(--primary-ink); }
+.tab-count {
+  position: absolute; top: 2px; left: 50%; margin-left: 6px;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; line-height: 18px;
+  text-align: center; color: #fff; background: var(--primary);
+}
 .tab-count.error { background: var(--danger-fill); }
+.tab-count.warning { background: var(--warning); color: #2b1a02; }
+.tab-count[hidden] { display: none; }
+/* The orb rises out of the bar: the one control that is not a destination. */
+.tab-orb {
+  justify-self: center; width: 54px; height: 54px; border-radius: 50%;
+  margin-top: -18px;
+  background: conic-gradient(from 210deg, var(--teal), var(--primary), var(--violet-400), var(--teal));
+  display: grid; place-content: center;
+  box-shadow: 0 0 0 4px var(--bg-1), 0 8px 22px -6px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+.tab-orb::after {
+  content: ""; width: 19px; height: 16px; background-color: #fff;
+  -webkit-mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+  mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+}
+.tab-orb-spacer { display: block; }
+
+/* ============================================================
+   Needs you — the queue of things blocked on a person
+   ============================================================ */
 .needs-host { margin-bottom: 18px; }
 .needs {
   border: 1px solid var(--border); border-radius: var(--radius-lg);
