@@ -86,7 +86,8 @@ test("Studio pages are operator- or Design-only and generation jobs route throug
   assert.match(route, /attachOutput/);
   assert.match(route, /generations\/:id\/run/);
   assert.match(route, /generations\/:id\/poll/);
-  assert.match(app, /\{\s*group:\s*"Studio"/);
+  // Design's own rail section. Operators reach the same pages under Business.
+  assert.match(app, /id: "studio"/);
   assert.match(app, /design,\s*media,\s*analytics/);
   assert.match(page, /studio\.design\.imageGeneration/);
 });

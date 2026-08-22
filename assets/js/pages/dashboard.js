@@ -3,6 +3,7 @@ import { icon } from "../icons.js";
 import { t } from "../i18n.js";
 import { store, timeAgo } from "../store.js";
 import { esc, toast } from "../ui.js";
+import { mountNeedsYou } from "../needs-you-card.js";
 
 const META = {
   default: { label: "Hermes", role: "Orchestrator", icon: "brain", color: "violet" },
@@ -18,6 +19,7 @@ let dashboardLoading = false;
 let dashboardPoll = null;
 let liveStream = null;
 let liveEvents = [];
+let stopNeedsYou = null;
 
 const rerender = () => window.dispatchEvent(new HashChangeEvent("hashchange"));
 const value = (result, fallback) => result.status === "fulfilled" ? result.value : fallback;
@@ -469,6 +471,9 @@ export default {
     return dashboardState ? dashboardHTML(dashboardState) : `<div class="page-head"><div><div class="page-title">${t("dash.title")}</div><div class="page-sub">${t("dash.reading")}</div></div></div>${loadingHTML()}`;
   },
   mount(root) {
+    // Above everything, because it is the only part of this page describing
+    // something that has stopped rather than something that is running.
+    stopNeedsYou = mountNeedsYou(root);
     root.querySelector("#dashboardRefresh")?.addEventListener("click", async (event) => {
       event.currentTarget.classList.add("loading");
       await loadDashboard(true);
@@ -501,6 +506,8 @@ export default {
     }
   },
   unmount() {
+    stopNeedsYou?.();
+    stopNeedsYou = null;
     clearInterval(dashboardPoll);
     dashboardPoll = null;
     liveStream?.close();

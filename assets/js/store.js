@@ -138,7 +138,11 @@ export const store = {
 // utilities
 export function timeAgo(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  const formatter = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto", style: "narrow" });
+  // "short", not "narrow". Narrow renders Russian as "-2 ч" — a minus sign
+  // where the word "ago" belongs, which reads as a negative quantity rather
+  // than a time in the past. Short gives "2 ч назад" and costs three
+  // characters. English and Uzbek are barely affected either way.
+  const formatter = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto", style: "short" });
   if (s < 60) return formatter.format(-s, "second");
   const m = Math.floor(s / 60); if (m < 60) return formatter.format(-m, "minute");
   const h = Math.floor(m / 60); if (h < 24) return formatter.format(-h, "hour");

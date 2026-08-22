@@ -129,7 +129,7 @@ test("Skill Studio manages the real Hermes catalog instead of browser mock data"
   assert.match(api, /\/api\/skills\/hub\/search/);
   assert.match(routes, /hermesSkillsRequest/);
   assert.match(routes, /requireAdmin/);
-  assert.match(app, /label: "Skill Studio"/);
+  assert.match(app, /route: "tools"/);
 });
 
 test("Routines UI manages native Hermes Cron jobs and exposes run history", () => {

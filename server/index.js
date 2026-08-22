@@ -71,6 +71,7 @@ import { eveningSummary } from "./lib/evening-summary.js";
 import { erpAnomalies } from "./lib/erp-anomalies.js";
 import { eventAlerts } from "./lib/event-alerts.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
+import needsYouRoute from "./routes/needs-you.js";
 import { salesBot } from "./lib/sales-bot.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -250,6 +251,9 @@ app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), delet
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);
+// Not operator-gated: everyone has a queue. Which sources fill it is decided by
+// role inside needs-you.js.
+app.use("/api/needs-you", needsYouRoute);
 app.use("/api/messenger", messenger);
 app.use("/api/personal", personal);
 app.use("/api/telemetry", telemetry);

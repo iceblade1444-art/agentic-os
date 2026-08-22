@@ -99,7 +99,7 @@ test("frontend and server expose distinct member and operator surfaces", () => {
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   const proxy = fs.readFileSync(new URL("../server/lib/hermes-proxy.js", import.meta.url), "utf8");
 
-  assert.match(app, /const MEMBER_NAV/);
+  assert.match(app, /const MEMBER_SECTIONS/);
   assert.match(app, /const MEMBER_PAGES/);
   // The dock follows the Mila Live page, not the operator flag — Member has both.
   assert.match(app, /if \(pages\(\)\.mila\) mountMilaDock\(\)/);
@@ -121,13 +121,13 @@ test("Design gets the studio surface without operator controls", () => {
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   const studioRoutes = fs.readFileSync(new URL("../server/routes/studio.js", import.meta.url), "utf8");
 
-  assert.match(app, /const DESIGN_NAV/);
+  assert.match(app, /const DESIGN_SECTIONS/);
   assert.match(app, /const DESIGN_PAGES/);
-  assert.match(app, /api\.auth\.canStudio \? DESIGN_NAV : MEMBER_NAV/);
+  assert.match(app, /api\.auth\.canStudio \? DESIGN_SECTIONS : MEMBER_SECTIONS/);
   // Design must not reach the operator-only surfaces through the router.
-  const designNav = app.slice(app.indexOf("const DESIGN_NAV"), app.indexOf("const OPERATOR_PAGES"));
+  const designNav = app.slice(app.indexOf("const DESIGN_SECTIONS"), app.indexOf("const OPERATOR_PAGES"));
   for (const route of ["hermes", "kanban", "secrets", "integrations", "mcp", "analytics", "agents"]) {
-    assert.equal(designNav.includes(`route: "${route}"`), false, `DESIGN_NAV must not expose ${route}`);
+    assert.equal(designNav.includes(`route: "${route}"`), false, `DESIGN_SECTIONS must not expose ${route}`);
   }
 
   assert.match(server, /const requireStudio = requireRoles\("Creator", "Admin", "CEO", "Design"\)/);
@@ -169,12 +169,12 @@ test("ERP is readable by every role but its write tools stay with operators", ()
 
   // Mounted without requireOperator — every signed-in role reaches the snapshot.
   assert.match(server, /app\.use\("\/api\/erp", erp\)/);
-  const memberNav = app.slice(app.indexOf("const MEMBER_NAV"), app.indexOf("const DESIGN_NAV"));
+  const memberNav = app.slice(app.indexOf("const MEMBER_SECTIONS"), app.indexOf("const DESIGN_SECTIONS"));
   // ERP is Member's landing page: route "" renders it instead of a separate nav entry.
   assert.match(memberNav, /route: "", navKey: "erp"/);
   assert.match(app, /const MEMBER_PAGES = \{[^}]*erp[^}]*\}/);
   // Design is unaffected: it keeps its own dashboard at "" plus a distinct ERP entry.
-  const designNav = app.slice(app.indexOf("const DESIGN_NAV"), app.indexOf("const OPERATOR_PAGES"));
+  const designNav = app.slice(app.indexOf("const DESIGN_SECTIONS"), app.indexOf("const OPERATOR_PAGES"));
   assert.match(designNav, /route: "erp"/);
   assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome/);
 
@@ -193,10 +193,11 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   const milaTools = fs.readFileSync(new URL("../assets/js/mila-tools.js", import.meta.url), "utf8");
   const milaSession = fs.readFileSync(new URL("../assets/js/mila-session.js", import.meta.url), "utf8");
 
-  // Member has the nav entry and the page; Design explicitly does not inherit it.
-  const memberNav = app.slice(app.indexOf("const MEMBER_NAV"), app.indexOf("const DESIGN_NAV"));
-  assert.match(memberNav, /route: "mila", icon: "mic"/);
+  // Member has Mila Live and Design explicitly does not inherit it. She is no
+  // longer a rail section — an assistant is not a destination — so the gate is
+  // the page map, and the orb in the rail renders only where that map has her.
   assert.match(app, /const MEMBER_PAGES = \{[^}]*mila[^}]*\}/);
+  assert.match(app, /\$\{pages\(\)\.mila \? `<a class="rail-orb" href="#\/mila"/);
   assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome, mila: undefined/);
 
   // Neither /api/integrations nor /api/mila carry the blanket operator gate anymore —

@@ -1,4 +1,4 @@
-import { store } from "./store.js";
+import { store, timeAgo } from "./store.js";
 import { brandMark } from "./brand.js";
 import { icon } from "./icons.js";
 import { api } from "./api.js";
@@ -37,81 +37,90 @@ import * as misc from "./pages/misc.js";
   if (route && !location.hash.startsWith(`#/${route}`)) location.hash = `#/${route}`;
 })();
 
-/* ---------------- Navigation config ---------------- */
-const OPERATOR_NAV = [
-  { group: null, items: [
-    { route: "", icon: "home", label: "Home" },
-    { route: "personal", icon: "user", label: "Personal" },
-    { route: "missions", icon: "rocket", label: "Missions" },
-    { route: "hermes", icon: "brain", label: "Hermes Control" },
-    { route: "claude", icon: "code", label: "Claude Workspace" },
-    { route: "mila", icon: "mic", label: "Mila Live" },
-    { route: "speech", icon: "mic", label: "Speech Studio" },
-    { route: "agents", icon: "agents", label: "Agents" },
-    { route: "chat", icon: "chat", label: "Chat" },
-    { route: "kanban", icon: "workflow", label: "Kanban" },
-    { route: "routines", icon: "calendar", label: "Routines" },
-    { route: "tools", icon: "tools", label: "Skill Studio" },
-    { route: "test-apps", icon: "layers", label: "Test Apps" },
+/* ---------------- Navigation config ----------------
+
+   Twenty-six destinations in one flat list, identical for every operator, with
+   nothing marking which of them needed attention. The first act of a session
+   was scanning it.
+
+   Six now, in a rail that never changes, each opening a column of its own
+   children. Nothing was removed — every route below had a home in the old list
+   and has one here, and the command palette still reaches all of them by name.
+   Settings moved to the avatar menu, where every other product keeps it.
+
+   MILA is not one of the six. She is the orb at the foot of the rail: an
+   assistant is not a destination you navigate to and leave. */
+const OPERATOR_SECTIONS = [
+  { id: "today", icon: "home", bottom: true, children: [
+    { route: "", navKey: "sec.overview" },
+    { route: "personal" },
   ]},
-  { group: "Context", items: [
-    { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },
-    { route: "memory", icon: "memory", label: "Memory" },
-    { route: "mcp", icon: "mcp", label: "MCP Servers" },
-    { route: "integrations", icon: "integrations", label: "Integrations" },
+  { id: "work", icon: "workflow", bottom: true, children: [
+    { route: "kanban" },
+    { route: "missions" },
+    { route: "my-tasks" },
+    { route: "my-notes" },
+    { route: "routines" },
   ]},
-  { group: "Studio", items: [
-    { route: "design", icon: "image", label: "Design" },
-    { route: "media", icon: "video", label: "Media" },
-    { route: "analytics", icon: "activity", label: "Analytics" },
-    { route: "erp", icon: "mcp", label: "ERP" },
+  { id: "agents", icon: "agents", children: [
+    { route: "agents" },
+    { route: "hermes" },
+    { route: "claude" },
+    { route: "tools" },
+    { route: "mcp" },
+    { route: "evaluations" },
+    { route: "guardrails" },
+    { route: "observability" },
+    { route: "test-apps" },
   ]},
-  { group: "Operate", items: [
-    { route: "evaluations", icon: "evaluations", label: "Evaluations" },
-    { route: "observability", icon: "observability", label: "Observability" },
-    { route: "guardrails", icon: "guardrails", label: "Guardrails" },
-    { route: "secrets", icon: "secrets", label: "Secrets" },
-    { route: "settings", icon: "settings", label: "Settings" },
+  { id: "business", icon: "activity", bottom: true, children: [
+    { route: "erp" },
+    { route: "analytics" },
+    { route: "design" },
+    { route: "media" },
+    { route: "speech" },
   ]},
+  { id: "library", icon: "knowledge", children: [
+    { route: "knowledge" },
+    { route: "memory" },
+    { route: "integrations" },
+    { route: "secrets" },
+  ]},
+  { id: "chat", icon: "chat", bottom: true, children: [{ route: "chat" }] },
 ];
 
 // ERP is the landing page for Member: it opens straight to the live business
 // snapshot instead of a personal dashboard that only duplicates Personal's brief.
-const MEMBER_NAV = [
-  { group: null, items: [
-    { route: "", navKey: "erp", icon: "mcp", label: "ERP" },
-    { route: "personal", icon: "user", label: "Personal" },
-    { route: "chat", icon: "chat", label: "Chat" },
-    { route: "mila", icon: "mic", label: "Mila Live" },
-    { route: "inbox", icon: "inbox", label: "Inbox" },
-    { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
-    { route: "my-notes", icon: "knowledge", label: "My Notes" },
+const MEMBER_SECTIONS = [
+  { id: "business", icon: "activity", bottom: true, children: [{ route: "", navKey: "erp" }] },
+  { id: "today", icon: "home", bottom: true, children: [{ route: "personal" }] },
+  { id: "work", icon: "workflow", children: [
+    { route: "my-tasks" },
+    { route: "my-notes" },
   ]},
-  { group: "Account", items: [
-    { route: "settings", icon: "settings", label: "Settings" },
-  ]},
+  { id: "inbox", icon: "inbox", navKey: "inbox", bottom: true, children: [{ route: "inbox" }] },
+  { id: "chat", icon: "chat", bottom: true, children: [{ route: "chat" }] },
 ];
 
-// Design = the member surface plus the creative studio. No Operate group,
-// no Analytics, no agent controls.
-const DESIGN_NAV = [
-  { group: null, items: [
-    { route: "", icon: "home", label: "Home" },
-    { route: "personal", icon: "user", label: "Personal" },
-    { route: "chat", icon: "chat", label: "Chat" },
-    { route: "inbox", icon: "inbox", label: "Inbox" },
-    { route: "my-tasks", icon: "evaluations", label: "My Tasks" },
-    { route: "my-notes", icon: "knowledge", label: "My Notes" },
-    { route: "erp", icon: "mcp", label: "ERP" },
+// Design = the member surface plus the creative studio. No agent controls, no
+// analytics, no operate group.
+const DESIGN_SECTIONS = [
+  { id: "today", icon: "home", bottom: true, children: [
+    { route: "", navKey: "sec.overview" },
+    { route: "personal" },
   ]},
-  { group: "Studio", items: [
-    { route: "design", icon: "image", label: "Design" },
-    { route: "media", icon: "video", label: "Media" },
-    { route: "knowledge", icon: "knowledge", label: "Obsidian Library" },
+  { id: "work", icon: "workflow", bottom: true, children: [
+    { route: "my-tasks" },
+    { route: "my-notes" },
   ]},
-  { group: "Account", items: [
-    { route: "settings", icon: "settings", label: "Settings" },
+  { id: "studio", icon: "image", bottom: true, children: [
+    { route: "design" },
+    { route: "media" },
+    { route: "knowledge" },
   ]},
+  { id: "business", icon: "activity", children: [{ route: "erp" }] },
+  { id: "inbox", icon: "inbox", navKey: "inbox", children: [{ route: "inbox" }] },
+  { id: "chat", icon: "chat", bottom: true, children: [{ route: "chat" }] },
 ];
 
 const OPERATOR_PAGES = {
@@ -127,7 +136,7 @@ const MEMBER_PAGES = { "": erp, personal, chat, mila, inbox: memberInbox, "my-ta
 // Design keeps the original personal dashboard as its landing page and has no Mila
 // Live nav entry — both stay scoped to Member only, undoing what the spread inherits.
 const DESIGN_PAGES = { ...MEMBER_PAGES, "": memberHome, mila: undefined, design, media, knowledge: misc.knowledge };
-const navigation = () => api.auth.canAdmin ? OPERATOR_NAV : api.auth.canStudio ? DESIGN_NAV : MEMBER_NAV;
+const sections = () => api.auth.canAdmin ? OPERATOR_SECTIONS : api.auth.canStudio ? DESIGN_SECTIONS : MEMBER_SECTIONS;
 const pages = () => api.auth.canAdmin ? OPERATOR_PAGES : api.auth.canStudio ? DESIGN_PAGES : MEMBER_PAGES;
 const NAV_KEYS = {
   "": "home", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
@@ -139,8 +148,12 @@ const NAV_KEYS = {
   inbox: "inbox", "test-apps": "testApps",
   design: "design", media: "media", analytics: "analytics", erp: "erp",
 };
-const navLabel = (item) => tr(`nav.${item.navKey || NAV_KEYS[item.route] || item.route}`) || item.label;
-const navGroup = (group) => tr(`nav.${String(group || "").toLowerCase()}`);
+const navLabel = (item) => tr(`nav.${item.navKey || NAV_KEYS[item.route] || item.route}`);
+const sectionLabel = (section) => tr(`nav.sec.${section.id}`);
+// Flat list of every reachable item, which is what the command palette and the
+// active-item bookkeeping still want.
+const navItems = () => sections().flatMap((section) => section.children.map((child) => ({ ...child, section })));
+const sectionForRoute = (route) => sections().find((section) => section.children.some((child) => child.route === route));
 
 /* ---------------- Theme ---------------- */
 export function applyTheme(t) {
@@ -157,26 +170,49 @@ function toggleTheme() {
 function sidebarHTML() {
   const cur = currentRoute();
   const p = store.state.profile;
-  const groups = navigation().map((g) => `
-    ${g.group ? `<div class="nav-label">${navGroup(g.group)}</div>` : ""}
-    <div class="nav-group">
-      ${g.items.map((it) => `
-        <a class="nav-item ${it.route === cur ? "active" : ""}" href="#/${it.route}">
-          ${icon(it.icon)}<span>${navLabel(it)}</span>
-          ${it.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
-        </a>`).join("")}
-    </div>`).join("");
+  const all = sections();
+  const active = sectionForRoute(cur) || all[0];
+
+  const rail = all.map((section) => `
+    <a class="rail-item ${section === active ? "active" : ""}" href="#/${section.children[0].route}"
+       data-section="${section.id}" aria-label="${sectionLabel(section)}"
+       ${section === active ? 'aria-current="true"' : ""}>
+      ${icon(section.icon)}<span>${sectionLabel(section)}</span>
+      ${section.id === "today" ? `<span class="rail-count" id="railNeeds" hidden></span>` : ""}
+    </a>`).join("");
+
+  // Only the active section's children. The other five columns exist, they are
+  // one click away, and none of them are on screen competing for the eye.
+  const children = active.children.map((child) => `
+    <a class="nav-item ${child.route === cur ? "active" : ""}" href="#/${child.route}">
+      <span>${navLabel(child)}</span>
+      ${child.route === "agents" ? `<span class="nav-tag">5</span>` : ""}
+    </a>`).join("");
+
   return `<aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <a class="brand-lockup" href="#/" aria-label="Mila · Agentic OS"></a>
-      <span class="brand-badge">v1.0</span>
-    </div>
-    ${groups}
-    <div class="sidebar-foot">
-      <div class="user-chip">
-        <div class="avatar" style="width:34px;height:34px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</div>
-        <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email || (p.role === "Creator" ? tr("shell.projectOwner") : p.role || "User"))}</span></div>
-        <button class="icon-btn" id="user-menu">${icon("more")}</button>
+    <nav class="rail" aria-label="${tr("shell.sections")}">
+      <a class="rail-brand" href="#/" aria-label="Mila · Agentic OS"></a>
+      ${rail}
+      <div class="rail-foot">
+        ${pages().mila ? `<a class="rail-orb" href="#/mila" aria-label="MILA"></a>` : ""}
+        <button class="icon-btn" id="user-menu" aria-label="${esc(p.name)}">
+          <span class="avatar" style="width:30px;height:30px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</span>
+        </button>
+      </div>
+    </nav>
+    <div class="sectionnav" id="sectionNav">
+      <div class="sectionnav-head">
+        <a class="brand-lockup" href="#/" aria-label="Mila · Agentic OS"></a>
+        <span class="brand-badge">v1.0</span>
+      </div>
+      <div class="sectionnav-title">${sectionLabel(active)}</div>
+      <div class="nav-group">${children}</div>
+      <div class="sidebar-foot">
+        <div class="user-chip">
+          <div class="avatar" style="width:34px;height:34px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</div>
+          <div class="stack"><span class="u-name">${esc(p.name)}</span><span class="u-mail">${esc(p.email || (p.role === "Creator" ? tr("shell.projectOwner") : p.role || "User"))}</span></div>
+          <button class="icon-btn" id="user-menu-wide">${icon("more")}</button>
+        </div>
       </div>
     </div>
   </aside>`;
@@ -238,17 +274,51 @@ function wireShell() {
   if (gsc) gsc.onclick = openCommandPalette;
   const bell = qs("#bellBtn");
   if (bell) bell.onclick = () => openNotifications(bell);
-  const um = qs("#user-menu");
-  if (um) um.onclick = () => import("./ui.js").then((m) => m.openMenu(um, [
-    { label: store.state.profile.name },
-    { text: tr("nav.personal"), icon: "user", onClick: () => (location.hash = "#/personal") },
-    { text: tr("shell.settings"), icon: "settings", onClick: () => (location.hash = "#/settings") },
-    ...(api.auth.canAdmin ? [{ text: tr("shell.componentLibrary"), icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
-    { sep: true },
-    { text: tr("shell.signOut"), icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", tr("shell.signOut")); } },
-  ], { align: "right", placement: "top" }));
+  // The rail carries the avatar; the section column carries the full chip. Both
+  // open the same menu, which is now also where Settings lives.
+  for (const id of ["#user-menu", "#user-menu-wide"]) {
+    const um = qs(id);
+    if (!um) continue;
+    um.onclick = () => import("./ui.js").then((m) => m.openMenu(um, [
+      { label: store.state.profile.name },
+      { text: tr("nav.personal"), icon: "user", onClick: () => (location.hash = "#/personal") },
+      { text: tr("shell.settings"), icon: "settings", onClick: () => (location.hash = "#/settings") },
+      { text: `${tr("shell.density")}: ${tr(isCompact() ? "shell.densityCompact" : "shell.densityComfortable")}`,
+        icon: "layers", onClick: toggleDensity },
+      ...(api.auth.canAdmin ? [{ text: tr("shell.componentLibrary"), icon: "layers", onClick: () => (location.hash = "#/components") }] : []),
+      { sep: true },
+      { text: tr("shell.signOut"), icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", tr("shell.signOut")); } },
+    ], { align: "right", placement: "top" }));
+  }
+  refreshNeedsBadge();
 }
 
+/* ---------------- Density ----------------
+   The 9px type came from trying to fit a dense table into a comfortable
+   layout. Splitting the two lets each be itself: Comfortable is the default,
+   Compact tightens rows and gutters, and neither goes below the 12px floor.
+   body.compact already existed and was never reachable from anywhere. */
+// settings.compact has been in the store since the beginning and body.compact
+// has been in the stylesheet since the beginning. Nothing ever set the one or
+// read the other, so the preference existed and could not be expressed.
+const isCompact = () => store.state.settings.compact === true;
+function applyDensity() {
+  document.body.classList.toggle("compact", isCompact());
+}
+function toggleDensity() {
+  store.set((state) => { state.settings.compact = !isCompact(); });
+  applyDensity();
+}
+
+/* ---------------- Navigation drawer ----------------
+   Below 900px the sidebar leaves the flow and slides over the page. It used to
+   do only that: no scrim, so nothing said the page behind had gone inert and
+   there was nothing to tap to dismiss; no Escape; no focus containment, so a
+   keyboard or screen-reader user tabbed straight out of the open drawer into
+   a page they could not see; and the document kept scrolling underneath.
+
+   The drawer is only ever modal at that width. Above it the sidebar is an
+   ordinary column, and every behaviour here has to stay out of the way. */
 const DRAWER_MEDIA = "(max-width: 900px)";
 const isDrawer = () => window.matchMedia(DRAWER_MEDIA).matches;
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -387,7 +457,12 @@ function wireNavDrawer() {
 function buildCommands() {
   const theme = store.state.settings.theme;
   const cmds = [];
-  navigation().forEach((g) => g.items.forEach((it) => cmds.push({ group: tr("shell.pages"), icon: it.icon, text: navLabel(it), hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route) })));
+  // Still every destination by name, grouped by the section it now lives in —
+  // the palette is what keeps a six-item rail from hiding anything.
+  navItems().forEach((it) => cmds.push({
+    group: sectionLabel(it.section), icon: it.section.icon, text: navLabel(it),
+    hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route),
+  }));
   if (api.auth.canAdmin) {
     cmds.push({ group: tr("shell.pages"), icon: "layers", text: tr("shell.componentLibrary"), hint: "#/components", run: () => (location.hash = "#/components") });
     [
@@ -449,28 +524,73 @@ function openCommandPalette() {
 }
 
 /* ---------------- Notifications ---------------- */
-function openNotifications(anchor) {
+// The bell used to render four hardcoded English strings — "Agent task
+// completed", "Rate limit approaching" — under a dot that was always lit. It
+// had shipped, and it was wired to nothing. The inbox behind it is the same one
+// that already feeds push and Telegram; the data was there the whole time.
+const NEEDS_TONE = { blocked: "error", waiting: "warning", overdue: "warning", attention: "info" };
+
+async function openNotifications(anchor) {
   if (qs(".notif")) { qs(".notif").remove(); return; }
-  const items = [
-    { dot: "var(--success)", title: "Agent task completed", desc: "Research Agent · Market Research Report", at: "2m ago" },
-    { dot: "var(--error)", title: "Agent failed", desc: "Content Writer · seo_check timed out", at: "18m ago" },
-    { dot: "var(--info)", title: "New agent deployed", desc: "Content Agent is now active", at: "1h ago" },
-    { dot: "var(--warning)", title: "Rate limit approaching", desc: "85% of quota used", at: "2h ago" },
-  ];
   const panel = el(`<div class="notif">
-    <div class="notif-head"><span class="fw-700">Notifications</span><div class="spacer"></div><button class="btn btn-ghost sm" id="notifClear">Mark all read</button></div>
-    ${items.map((i) => `<div class="notif-item"><span class="notif-dot" style="background:${i.dot}"></span><div class="stack" style="min-width:0"><span class="fw-600 text-sm">${i.title}</span><span class="cell-sub">${i.desc}</span></div><div class="spacer"></div><span class="dim nowrap" style="font-size:12px">${i.at}</span></div>`).join("")}
-    <div class="menu-sep"></div>
-    <a class="menu-item" href="#/observability">${icon("activity")}<span>View all activity</span></a>
+    <div class="notif-head"><span class="fw-700">${tr("shell.notifications")}</span><div class="spacer"></div></div>
+    <div class="notif-body"><div class="notif-item"><span class="cell-sub">${tr("needs.loading")}</span></div></div>
   </div>`);
   document.body.appendChild(panel);
-  const r = anchor.getBoundingClientRect();
-  panel.style.top = r.bottom + 8 + "px";
-  panel.style.right = window.innerWidth - r.right + "px";
-  panel.querySelector("#notifClear").onclick = () => { panel.remove(); qs("#bellBtn .dot")?.remove(); toast("success", "All caught up", "No new notifications."); };
-  panel.querySelector("a").onclick = () => panel.remove();
-  const off = (e) => { if (!panel.contains(e.target) && !anchor.contains(e.target)) { panel.remove(); document.removeEventListener("mousedown", off); } };
+  const box = anchor.getBoundingClientRect();
+  panel.style.top = `${box.bottom + 8}px`;
+  panel.style.right = `${window.innerWidth - box.right}px`;
+  const off = (event) => {
+    if (!panel.contains(event.target) && !anchor.contains(event.target)) {
+      panel.remove();
+      document.removeEventListener("mousedown", off);
+    }
+  };
   setTimeout(() => document.addEventListener("mousedown", off), 0);
+
+  let queue = null;
+  try { queue = await api.needsYou(); } catch { /* shown as unavailable below */ }
+  const body = panel.querySelector(".notif-body");
+  if (!body) return;
+  if (!queue) {
+    body.innerHTML = `<div class="notif-item"><span class="cell-sub">${tr("needs.error")}</span></div>`;
+    return;
+  }
+  if (!queue.items.length) {
+    body.innerHTML = `<div class="notif-item"><span class="cell-sub">${tr("needs.empty")}</span></div>`;
+    qs("#bellBtn .dot")?.remove();
+    return;
+  }
+  body.innerHTML = queue.items.slice(0, 8).map((item) => `
+    <a class="notif-item" href="#/${esc(item.route || "")}">
+      <span class="notif-dot ${NEEDS_TONE[item.severity] || "info"}"></span>
+      <div class="stack" style="min-width:0">
+        <span class="fw-600 text-sm">${esc(item.title)}</span>
+        <span class="cell-sub">${esc(tr(`needs.kind.${item.kind}`))}${item.detail ? ` · ${esc(item.detail)}` : ""}</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="dim nowrap" style="font-size:12px">${item.since ? esc(timeAgo(new Date(item.since).getTime())) : ""}</span>
+    </a>`).join("");
+  panel.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => panel.remove()));
+}
+
+// The rail badge, and the bell's dot. One request, both readers.
+export async function refreshNeedsBadge() {
+  const badges = [["#railNeeds", "rail-count"], ["#tabNeeds", "tab-count"]]
+    .map(([id, cls]) => [qs(id), cls]).filter(([node]) => node);
+  const dot = qs("#bellBtn .dot");
+  if (!badges.length && !dot) return;
+  let queue = null;
+  try { queue = await api.needsYou(); } catch { return; }
+  const total = queue?.total || 0;
+  const tone = NEEDS_TONE[queue?.severity] || "info";
+  for (const [badge, cls] of badges) {
+    badge.textContent = total > 99 ? "99+" : String(total);
+    badge.hidden = total === 0;
+    badge.className = `${cls} ${tone}`;
+  }
+  // No dot when there is nothing. The old one was painted on.
+  if (dot) dot.hidden = total === 0;
 }
 
 /* ---------------- Router ---------------- */
@@ -503,10 +623,17 @@ const forbidden = { title: "", render: () => `<div class="empty"><div class="emp
 /* ---------------- Bootstrap ---------------- */
 async function boot() {
   applyThemeSilent(store.state.settings.theme || "dark");
+  applyDensity();
+  // Inside Telegram, sign in with what the container already proved before the
+  // app has a chance to decide it needs a login form. Outside it this returns
+  // null and nothing changes.
   await api.detect();
   if (!api.needsAuth) {
+    // setScope swaps in this account's own settings, so both preferences have
+    // to be read again — the pre-scope values belonged to whoever was here last.
     store.setScope(api.auth.user?.id || "local");
     applyThemeSilent(store.state.settings.theme || "dark");
+    applyDensity();
   }
   window.addEventListener("hashchange", route);
   window.addEventListener("aos:locale-change", () => {

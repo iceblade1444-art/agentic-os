@@ -208,7 +208,10 @@ test("Claude desktop UI is wired into the authenticated Agentic OS shell", () =>
   const server = fs.readFileSync(path.join(root, "server/index.js"), "utf8");
   const compose = fs.readFileSync(path.join(root, "docker-compose.yml"), "utf8");
   const dockerfile = fs.readFileSync(path.join(root, "Dockerfile"), "utf8");
-  assert.match(app, /Claude Workspace/);
+  // The label comes from the dictionary now; what the shell has to keep is a
+  // route to the page inside a section a person can reach.
+  assert.match(app, /route: "claude"/);
+  assert.match(fs.readFileSync(path.join(root, "assets/js/i18n.js"), "utf8"), /"nav.claude": "Claude Workspace"/);
   assert.match(page, /claude-conversation/);
   assert.match(page, /data-side="agents"/);
   assert.match(page, /api\.claude\.delegate/);

@@ -89,21 +89,83 @@ button { font-family: inherit; cursor: pointer; }
   overscroll-behavior: contain;
 }
 
+.rail {
+  display: flex; flex-direction: column; align-items: center;
   gap: 2px; overflow-y: auto; overscroll-behavior: contain;
   padding: calc(12px + var(--safe-t)) 0 calc(12px + var(--safe-b)) var(--safe-l);
   border-right: 1px solid var(--border);
   background: var(--bg);
 }
+.rail-brand {
+  width: 34px; height: 34px; flex: none; margin-bottom: 10px; border-radius: 10px;
+  background: var(--accent-grad); display: grid; place-content: center;
+}
+.rail-brand::after {
+  content: ""; width: 19px; height: 16px; background-color: #fff;
+  -webkit-mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+  mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+}
+.rail-item {
+  position: relative; flex: none;
+  width: 52px; min-height: 52px; border-radius: 11px;
+  display: grid; place-content: center; justify-items: center; gap: 3px;
+  color: var(--text-3); text-align: center;
+  transition: background var(--dur), color var(--dur);
+}
+.rail-item svg { width: 20px; height: 20px; }
+.rail-item span { font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
+.rail-item:hover { background: var(--surface); color: var(--text-2); }
 .rail-item.active { background: var(--primary-soft); color: var(--primary-ink); }
+.rail-item.active::before {
+  content: ""; position: absolute; left: -1px; top: 12px; bottom: 12px;
   width: 3px; border-radius: 0 3px 3px 0; background: var(--primary-ink);
 }
 /* The count of things waiting on a person. Absent, not zero, when there are
    none — a badge showing 0 is a badge asking to be ignored. */
+.rail-count {
+  position: absolute; top: 3px; right: 5px;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; line-height: 18px;
+  /* The fills here carry white text, so they are the deeper members of each
+     family rather than the bright dot colours: white on --info is 3.68:1 and on
+     --error 3.76:1, both under AA. Amber cannot go deep enough for white at all,
+     so that one takes dark ink instead. */
+  text-align: center; color: #fff; background: var(--primary);
+}
 .rail-count.error { background: var(--danger-fill); }
+.rail-count.warning { background: var(--warning); color: #2b1a02; }
+.rail-count[hidden] { display: none; }
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; }
+.rail-orb {
+  width: 40px; height: 40px; border-radius: 50%; flex: none;
+  background: conic-gradient(from 210deg, var(--teal), var(--primary), var(--violet-400), var(--teal));
+  display: grid; place-content: center;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+  transition: transform var(--dur) var(--ease);
+}
+.rail-orb::after {
+  content: ""; width: 15px; height: 13px; background-color: #fff;
+  -webkit-mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+  mask: url("../brand/mila-mark.svg") no-repeat center / contain;
+}
+.rail-orb:hover { transform: scale(1.06); }
+
+.sectionnav {
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
   overflow-y: auto; overscroll-behavior: contain;
   padding: calc(18px + var(--safe-t)) 12px calc(18px + var(--safe-b));
 }
+.sectionnav-head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 12px; }
+.sectionnav-head .brand-lockup { height: 32px; }
+.sectionnav-title {
+  font-size: var(--text-lg); font-weight: 800; letter-spacing: -.02em;
+  padding: 0 8px 10px;
+}
+/* The mark in the rail and the wordmark in the column are the same brand said
+   twice. Whichever column is on screen says it once: the rail carries the mark
+   only in the range where the section column is a flyout. */
+@media (min-width: 1281px) { .rail-brand { display: none; } }
+@media (max-width: 900px) { .rail-brand { display: none; } }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 16px; }
 /* The lockup ships as one SVG file and is tinted through a mask, so it stays
    crisp, cacheable, and follows the theme's ink like the brand sheet specifies. */
@@ -822,6 +884,19 @@ body.nav-open { overflow: hidden; }
 @media (max-width: 1280px) {
   .cols-4 { grid-template-columns: repeat(2, 1fr); }
   .cols-3 { grid-template-columns: repeat(2, 1fr); }
+  /* Not enough width for two nav columns and a workspace. The rail stays —
+     it is the part that tells you where you are — and the section column
+     becomes a flyout the rail opens. */
+  .layout { grid-template-columns: var(--rail-w) 1fr; }
+  .sidebar { grid-template-columns: var(--rail-w); width: var(--rail-w); }
+  .sectionnav {
+    position: absolute; left: var(--rail-w); top: 0; bottom: 0; width: 200px;
+    background: var(--bg-1); border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg); z-index: 91;
+    transform: translateX(-102%); transition: transform var(--dur) var(--ease);
+  }
+  .sidebar.expanded { overflow: visible; }
+  .sidebar.expanded .sectionnav { transform: none; }
 }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -833,6 +908,10 @@ body.nav-open { overflow: hidden; }
     width: var(--sidebar-w); overflow: hidden;
   }
   .sidebar.open { transform: none; }
+  .sectionnav {
+    position: static; width: auto; transform: none; box-shadow: none;
+    border-right: 0; background: transparent;
+  }
   .menu-toggle { display: grid; }
   /* Once the menu button joins the row there is no longer room for everything.
      The live/demo badge and the help button are the two that carry least — the
@@ -882,9 +961,42 @@ body.nav-open { overflow: hidden; }
   /* Content has to be able to scroll clear of a bar that floats over it. */
 .tab-item.active { color: var(--primary-ink); }
 .tab-count.error { background: var(--danger-fill); }
+.needs-host { margin-bottom: 18px; }
+.needs {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); padding: 14px 16px;
+}
+/* The border carries the worst severity present, and every row carries its own
+   glyph and word — colour is never the only thing saying what this is. */
+.needs-blocked { border-color: color-mix(in srgb, var(--error) 42%, var(--border)); background: linear-gradient(180deg, var(--error-soft), transparent 62%), var(--surface); }
+.needs-waiting, .needs-overdue { border-color: color-mix(in srgb, var(--warning) 42%, var(--border)); background: linear-gradient(180deg, var(--warning-soft), transparent 62%), var(--surface); }
+.needs-attention { border-color: color-mix(in srgb, var(--info) 38%, var(--border)); }
+
+.needs-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.needs-head strong { font-size: var(--text-md); letter-spacing: -.01em; }
+.needs-pill {
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 10px;
+}
+
+.needs-row {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center; gap: 12px; min-height: 48px;
+  padding: 8px 0; border-top: 1px solid var(--border);
+}
+.needs-row:hover { background: var(--surface-2); border-radius: 8px; }
+.needs-mark {
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-content: center;
+  font-weight: 800; font-size: 13px;
+}
 .needs-mark.error { background: var(--error-soft); color: var(--error-ink); }
 .needs-mark.warning { background: var(--warning-soft); color: var(--warning-ink); }
 .needs-mark.info { background: var(--info-soft); color: var(--info-ink); }
+.needs-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.needs-text strong { font-size: var(--text-base); font-weight: 600; }
+.needs-text span { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.needs-go {
   font-size: 12px; font-weight: 600; color: var(--primary-ink);
   border: 1px solid var(--border-interactive); border-radius: 8px; padding: 5px 11px;
   white-space: nowrap;
@@ -893,8 +1005,15 @@ body.nav-open { overflow: hidden; }
 
 /* Nothing waiting is a real answer and deserves to look like one, not like an
    empty container that failed to load. */
+.needs-clear { display: flex; align-items: center; gap: 12px; }
+.needs-clear-mark {
+  width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-content: center;
   background: var(--success-soft); color: var(--success-ink);
 }
+.needs-clear-mark svg { width: 17px; height: 17px; }
+.needs-clear strong { font-size: var(--text-base); font-weight: 600; }
+
+/* ============================================================
    Hero (dashboard welcome)
    ============================================================ */
 .hero {
@@ -954,9 +1073,13 @@ body.nav-open { overflow: hidden; }
 /* Notifications panel */
 .notif { position: absolute; z-index: 120; width: 340px; padding: 8px; background: var(--elevated); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: var(--shadow-lg); animation: fadeUp .12s var(--ease); }
 .notif-head { display: flex; align-items: center; padding: 8px 10px; }
-.notif-item { display: flex; gap: 11px; padding: 10px; border-radius: 10px; }
+.notif-body { max-height: 380px; overflow-y: auto; }
+.notif-item { display: flex; gap: 11px; padding: 10px; border-radius: 10px; align-items: flex-start; }
 .notif-item:hover { background: var(--surface-2); }
-.notif-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; }
+.notif-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--info); }
+.notif-dot.error { background: var(--error); }
+.notif-dot.warning { background: var(--warning); }
+.notif-dot.success { background: var(--success); }
 
 /* Chart hover tooltip */
 .chart-host { position: relative; }
