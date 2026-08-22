@@ -47,3 +47,19 @@ test("deploy generates the token and compose hands it to both containers", () =>
   const wired = compose.match(/AGENTOS_RUNTIME_TOKEN=\$\{AGENTOS_RUNTIME_TOKEN:-\}/g) || [];
   assert.equal(wired.length, 2, "the API and the runtime both need the shared secret");
 });
+
+test("the container's own health probe carries the credential too", () => {
+  // Every caller was given the token except the one Docker uses. The probe
+  // kept asking anonymously, the runtime kept answering 401, and the container
+  // reported unhealthy for three days while serving every real request
+  // correctly — a smoke alarm going off continuously, which is worse than none,
+  // because nobody looks when it finally means something.
+  const dockerfile = fs.readFileSync(new URL("../agentos-runtime/Dockerfile", import.meta.url), "utf8");
+  const at = dockerfile.indexOf("HEALTHCHECK");
+  assert.notEqual(at, -1, "the runtime image has no health probe");
+  const probe = dockerfile.slice(at, dockerfile.indexOf("\nCMD ", at));
+  assert.match(probe, /AGENTOS_RUNTIME_TOKEN/, "the probe must read the token");
+  assert.match(probe, /Authorization/, "and send it as a bearer credential");
+  // Absent token means a local run, which the runtime still answers.
+  assert.match(probe, /if t else \{\}/, "no token, no header — a local run must still pass");
+});

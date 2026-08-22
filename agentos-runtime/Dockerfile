@@ -20,7 +20,15 @@ USER 1000:1000
 
 EXPOSE 8765
 
+# The probe carries the runtime token, because the runtime stopped answering
+# anonymous callers in Stage 0 (d29dc93) and this check did not. It has read
+# 401 -> unhealthy ever since: a container reporting sick while serving every
+# real request correctly, which is worse than no check at all — it is a smoke
+# alarm that has been going off for days, so nobody looks when it means it.
+#
+# The header is omitted when no token is set, which is how a local run without
+# one still passes.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/mila/status', timeout=3).read()"
+  CMD python -c "import os, urllib.request; t = os.environ.get('AGENTOS_RUNTIME_TOKEN', ''); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8765/api/mila/status', headers={'Authorization': 'Bearer ' + t} if t else {}), timeout=3).read()"
 
 CMD ["python", "dashboard/backend/app.py", "--workspace", "/app", "--host", "0.0.0.0", "--port", "8765"]
