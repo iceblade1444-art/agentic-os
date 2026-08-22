@@ -195,7 +195,7 @@ function sidebarHTML() {
       <a class="rail-brand" href="#/" aria-label="Mila · Agentic OS"></a>
       ${rail}
       <div class="rail-foot">
-        ${pages().mila ? `<a class="rail-orb" href="#/mila" aria-label="MILA"></a>` : ""}
+        ${pages().mila ? `<a class="rail-orb tip" data-tip="${tr("nav.mila")}" href="#/mila" aria-label="${tr("nav.mila")}"></a>` : ""}
         <button class="icon-btn" id="user-menu" aria-label="${esc(p.name)}">
           <span class="avatar" style="width:30px;height:30px">${p.avatar ? `<img src="${p.avatar}"/>` : initials(p.name)}</span>
         </button>
@@ -262,7 +262,7 @@ function tabbarHTML() {
       ${section.bottom && section.id === "today" ? `<span class="tab-count" id="tabNeeds" hidden></span>` : ""}
     </a>`;
   const orb = pages().mila
-    ? `<a class="tab-orb" href="#/mila" aria-label="MILA"></a>`
+    ? `<a class="tab-orb" href="#/mila" aria-label="${tr("nav.mila")}"></a>`
     : `<span class="tab-orb-spacer"></span>`;
   // The orb takes the middle slot, so the four sections split two and two
   // around it rather than being pushed to one side.
@@ -495,6 +495,17 @@ function buildCommands() {
     group: sectionLabel(it.section), icon: it.section.icon, text: navLabel(it),
     hint: "#/" + (it.route || ""), run: () => (location.hash = "#/" + it.route),
   }));
+  // MILA is the orb rather than a rail section, which took her out of this
+  // list — the palette walks section children and she is not one. She used to
+  // be a named row in the sidebar, so searching "mila" found her; after the
+  // rewrite it found nothing, and the only way in was knowing what the orb was.
+  // Being reachable is not the same as being findable.
+  if (pages().mila) {
+    cmds.push({
+      group: tr("shell.pages"), icon: "mic", text: tr("nav.mila"),
+      hint: "#/mila", run: () => (location.hash = "#/mila"),
+    });
+  }
   if (api.auth.canAdmin) {
     cmds.push({ group: tr("shell.pages"), icon: "layers", text: tr("shell.componentLibrary"), hint: "#/components", run: () => (location.hash = "#/components") });
     [

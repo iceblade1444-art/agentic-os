@@ -64,7 +64,7 @@ test("every destination the old flat list had still has a home", () => {
   // vanishing, and MILA became the orb.
   assert.match(APP, /text: tr\("shell\.settings"\), icon: "settings"/);
   assert.match(APP, /shell\.componentLibrary/);
-  assert.match(APP, /class="rail-orb" href="#\/mila"/);
+  assert.match(APP, /class="rail-orb tip"[^>]*href="#\/mila"/);
 });
 
 test("a Member's rail cannot reach an operator surface", () => {
@@ -188,4 +188,23 @@ test("relative time reads as the past, not as a negative number", () => {
   assert.doesNotMatch(store, /style: "narrow"/);
   const ru = new Intl.RelativeTimeFormat("ru-RU", { numeric: "auto", style: "short" });
   assert.equal(ru.format(-2, "hour"), "2 ч назад");
+});
+
+test("MILA stays findable by name, not only by knowing what the orb is", () => {
+  // She is the orb rather than a rail section, which is the right call — an
+  // assistant is not a destination you navigate to and leave. But the palette
+  // walks section children, so making her an orb silently took her out of it:
+  // typing "mila" found nothing, and the only way in was already knowing what
+  // the gradient circle did. Reachable is not the same as findable, and the
+  // person who noticed asked where she had gone.
+  assert.match(APP, /if \(pages\(\)\.mila\) \{\s*\r?\n\s*cmds\.push\(\{[\s\S]{0,200}?hint: "#\/mila"/,
+    "the command palette must offer Mila Live");
+  // The orb carries her name for a pointer and for a screen reader; every
+  // other rail control has a visible word beside it and this one cannot.
+  assert.match(APP, /class="rail-orb tip" data-tip="\$\{tr\("nav\.mila"\)\}"/);
+  assert.match(APP, /class="tab-orb" href="#\/mila" aria-label="\$\{tr\("nav\.mila"\)\}"/);
+  // And the page itself is still routed for the roles that had it.
+  assert.match(APP, /const OPERATOR_PAGES = \{[^}]*\bmila\b/);
+  assert.match(APP, /const MEMBER_PAGES = \{[^}]*\bmila\b/);
+  assert.match(APP, /if \(pages\(\)\.mila\) mountMilaDock\(\)/, "the live-call dock follows her");
 });

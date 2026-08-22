@@ -197,7 +197,7 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // longer a rail section — an assistant is not a destination — so the gate is
   // the page map, and the orb in the rail renders only where that map has her.
   assert.match(app, /const MEMBER_PAGES = \{[^}]*mila[^}]*\}/);
-  assert.match(app, /\$\{pages\(\)\.mila \? `<a class="rail-orb" href="#\/mila"/);
+  assert.match(app, /\$\{pages\(\)\.mila \? `<a class="rail-orb tip"/);
   assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome, mila: undefined/);
 
   // Neither /api/integrations nor /api/mila carry the blanket operator gate anymore —
