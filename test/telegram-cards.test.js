@@ -339,3 +339,33 @@ test("/today from an unlinked chat asks nothing of MILA", async () => {
   assert.match(h.sent()[0].body.text, /привязанным/);
   h.cleanup();
 });
+
+test("no test builds a bridge that reads the real profile store", () => {
+  // The failure this prevents cost a deploy. Every string the bridge sends is
+  // in the reader's own language now, and the reader is resolved through the
+  // onboarding store — so a bridge built without one reads whatever profile
+  // happens to be on the machine. On a laptop there is none and the Russian
+  // default applies; on the server the owner's is en-US, and four assertions
+  // that had been green for the whole change went red inside the release gate.
+  //
+  // This is the family this codebase keeps producing: code or tests that read
+  // ambient state and so pass where it does not matter.
+  // Assembled rather than written out, or the needle finds itself in this
+  // very line and reports the guard as its own first offender.
+  const needle = `new TelegramBridge` + `({`;
+  const dir = new URL("./", import.meta.url);
+  for (const name of fs.readdirSync(dir).filter((file) => file.endsWith(".test.js"))) {
+    const source = fs.readFileSync(new URL(name, dir), "utf8");
+    let at = source.indexOf(needle);
+    while (at !== -1) {
+      let depth = 0, end = source.length;
+      for (let i = source.indexOf("(", at); i < source.length; i++) {
+        if (source[i] === "(") depth++;
+        else if (source[i] === ")" && --depth === 0) { end = i; break; }
+      }
+      assert.match(source.slice(at, end), /onboarding:/,
+        `${name} builds a TelegramBridge without pinning onboarding — its locale would come from the host`);
+      at = source.indexOf(needle, end);
+    }
+  }
+});

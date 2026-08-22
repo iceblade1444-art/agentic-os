@@ -18,6 +18,8 @@ import { speechInternalHeaders } from "../server/lib/speech-internal.js";
 // is consistent with itself, which is how every voice note got a 401.
 const SECRET_HEADER = Object.keys(speechInternalHeaders({}, "probe"))[0];
 
+const OWNER = { id: "creator", name: "Бахадыр", role: "Creator" };
+
 function bridge({ voice, assistant, speaker } = {}) {
   const calls = [];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aos-tgv-"));
@@ -38,6 +40,15 @@ function bridge({ voice, assistant, speaker } = {}) {
     assistant: assistant || { respond: async (userId, text) => `эхо:${text}` },
     voice,
     speaker: speaker || { speak: async () => null },
+    // Every string the bridge sends is now in the reader's own language, so
+    // the language has to be pinned here or the assertions below are really
+    // asserting whatever locale the machine's owner happens to use. Left to
+    // the default this reached the real onboarding store: green on a laptop
+    // with no profile, red on the server where the owner's is en-US, and it
+    // failed in the deploy gate rather than anywhere a person would see it.
+    onboarding: { get: () => ({ profile: { locale: "ru-RU", timezone: "Asia/Tashkent" } }) },
+    users: { get: () => OWNER },
+    creatorUser: () => OWNER,
   });
   return { instance, calls, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }

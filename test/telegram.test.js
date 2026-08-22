@@ -31,6 +31,13 @@ function bridge({ token = "test-token" } = {}) {
       const result = method === "getMe" ? { username: "milana_mila_bot" } : { message_id: calls.length };
       return { ok: true, json: async () => ({ ok: true, result }) };
     },
+    // Pinned even though nothing here asserts a translated string yet: left to
+    // the default the bridge reads the real onboarding store, and the first
+    // assertion anyone adds on a button label would pass on a laptop and fail
+    // on the server, in the deploy gate.
+    onboarding: { get: () => ({ profile: { locale: "ru-RU", timezone: "Asia/Tashkent" } }) },
+    users: { get: () => OWNER },
+    creatorUser: () => OWNER,
   });
   return { instance, calls, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
