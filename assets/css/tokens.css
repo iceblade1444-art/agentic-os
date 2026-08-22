@@ -3,6 +3,25 @@
    Extracted from the reference UI kit (Inter, indigo/violet accent,
    8px spacing grid, deep-navy neutral scale).
    Light + dark themes via [data-theme] on <html>.
+
+   ── Ink / fill / soft ───────────────────────────────────────
+   One colour cannot do two jobs. #22c55e reads fine as a status
+   dot on white and is invisible as text on white — 2.28:1, where
+   AA asks 4.5. So every semantic splits three ways:
+
+     --x         FILL.  Dots, meters, bars, solid buttons. Bright.
+                        Do not darken these: styles.css hardcodes
+                        dark ink on --warning and --success fills.
+     --x-ink     TEXT.  >= 4.5:1 on every surface it can land on,
+                        which for the dark theme is --surface-3 and
+                        for the light theme is also --surface-3.
+                        Also used for borders that carry meaning.
+     --x-soft    TINT.  Background wash behind ink of the same hue.
+
+   Ratios were measured against all four grounds (bg, surface,
+   surface-2, surface-3), not just one, and test/design-tokens.test.js
+   fails the build if any pair drops below its floor. Change a value
+   there and here together, never here alone.
    ============================================================ */
 
 :root {
@@ -18,15 +37,19 @@
   --violet-800: #5b21b6;
   --violet-900: #4c1d95;
 
-  /* --- Semantic --- */
+  /* --- Semantic fills (theme-independent; see the ink/fill note above) --- */
   --success: #22c55e;
   --success-bg: rgba(34, 197, 94, 0.12);
+  --success-soft: rgba(34, 197, 94, 0.12);
   --warning: #f59e0b;
   --warning-bg: rgba(245, 158, 11, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.12);
   --error: #ef4444;
   --error-bg: rgba(239, 68, 68, 0.12);
+  --error-soft: rgba(239, 68, 68, 0.12);
   --info: #3b82f6;
   --info-bg: rgba(59, 130, 246, 0.12);
+  --info-soft: rgba(59, 130, 246, 0.12);
   --cyan: #06b6d4;
   /* Scout teal — CVD-validated so the fleet palette never hinges on
      violet-vs-blue, which is indistinguishable under deuteranopia. */
@@ -70,9 +93,46 @@
   --radius-full: 999px;
 
   /* --- Layout --- */
-  --sidebar-w: 248px;
+  /* Rail + section column. The rail is fixed; the sidebar total varies with
+     the breakpoint, which is why both are named. */
+  --rail-w: 68px;
+  --sidebar-w: 252px;
   --topbar-h: 64px;
+  /* What the bar actually occupies once it has cleared the notch. Every layout
+     that fills "the rest of the screen" subtracts this, not --topbar-h, or it
+     ends up taller than the space it was given by exactly the inset. */
+  --topbar-total: calc(var(--topbar-h) + var(--safe-t));
+  --tabbar-h: 60px;
   --maxw: 1600px;
+
+  /* --- Breakpoints ---
+     Four, and only four. Media queries cannot read a custom property, so these
+     are documentation the stylesheet is expected to honour — there had been
+     seventeen ad-hoc widths (560 620 640 700 720 760 800 820 900 1050 1060 1100
+     1120 1150 1180 1200 1280) and no way to tell which was deliberate.
+
+       640   phone      — one column, drawer navigation, wrapped rows
+       900   tablet     — sidebar leaves the flow
+       1280  desktop    — the full multi-column layouts
+       1680  wide       — room for a third column
+  */
+
+  /* --- Telegram Mini App ---
+     Telegram's container is not the browser viewport: it has a header of its
+     own, it can be collapsed, and it resizes as the keyboard opens.
+     viewportStableHeight is the one measurement that does not flicker while
+     that happens, and the bridge writes it here. Outside Telegram nothing sets
+     it and the fallback is the ordinary dynamic viewport. */
+  --tg-viewport: 100dvh;
+
+  /* --- Safe areas ---
+     Named rather than used inline so a layout can be tested: a probe can set
+     --safe-b and see the shell respond, which env() alone does not allow.
+     Non-zero only with viewport-fit=cover, which index.html sets. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
 
   /* --- Motion --- */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
@@ -90,18 +150,32 @@
   --elevated: #141a26;
   --border: #222c3c;
   --border-strong: #2c3849;
-  --ring: rgba(124, 58, 237, 0.55);
+  /* A boundary that carries meaning — input outline, checkbox edge, focus —
+     needs 3:1. --border-strong is 1.54:1 and is for decorative rules only. */
+  --border-interactive: #5c729e;
+  --ring: #a78bfa;
 
   --text: #e6eaf2;
   --text-2: #a9b2c3;
-  --text-3: #6b7688;
+  --text-3: #8b96a8;
   --text-inv: #ffffff;
 
   --primary: var(--violet-600);
   --primary-hover: var(--violet-500);
+  --primary-ink: var(--violet-400);
   --primary-soft: rgba(124, 58, 237, 0.16);
   --primary-text: #ffffff;
   --accent-grad: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+
+  /* Ink. The bright fills already clear 4.5:1 on this ground; blue and red
+     do not, so they lighten. */
+  --success-ink: #22c55e;
+  --warning-ink: #f59e0b;
+  --error-ink: #f87171;
+  --info-ink: #60a5fa;
+  --teal-ink: #2dd4bf;
+  /* .btn-danger puts white on this. White on --error is 3.76:1. */
+  --danger-fill: #dc2626;
 
   --teal: #2dd4bf;
   --teal-soft: rgba(45, 212, 191, 0.14);
@@ -130,18 +204,38 @@
   --elevated: #ffffff;
   --border: #e4e7f0;
   --border-strong: #d3d8e6;
-  --ring: rgba(124, 58, 237, 0.4);
+  --border-interactive: #78849f;
+  --ring: var(--violet-700);
 
   --text: #141a26;
   --text-2: #4b5568;
-  --text-3: #8a94a8;
+  --text-3: #5b6575;
   --text-inv: #ffffff;
 
   --primary: var(--violet-600);
   --primary-hover: var(--violet-700);
+  --primary-ink: var(--violet-700);
   --primary-soft: rgba(124, 58, 237, 0.1);
   --primary-text: #ffffff;
   --accent-grad: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+
+  /* Ink. This is where the old palette failed hardest: the fills were picked
+     against near-black and reused unchanged on white, so "Healthy" rendered
+     at 2.28:1 and "Degraded" at 2.15:1. */
+  --success-ink: #047857;
+  --warning-ink: #92400e;
+  --error-ink: #b91c1c;
+  --info-ink: #1d4ed8;
+  --teal-ink: #0f766e;
+  --danger-fill: #dc2626;
+
+  /* The tints are washes behind ink of the same hue; on white the dark-theme
+     alphas are too weak to read as a state, so they lift slightly. */
+  --success-soft: rgba(4, 120, 87, 0.10);
+  --warning-soft: rgba(146, 64, 14, 0.10);
+  --error-soft: rgba(185, 28, 28, 0.09);
+  --info-soft: rgba(29, 78, 216, 0.09);
+  --teal-soft: rgba(15, 118, 110, 0.10);
 
   --chart-grid: rgba(15, 23, 42, 0.07);
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);

@@ -25,6 +25,9 @@ export const api = {
   // The cached health above is from app boot. The dashboard polls, and the
   // database migration status only means something if it is current.
   healthNow: () => j("/api/health"),
+  // Everything blocked on the person asking, worst first. Which sources fill it
+  // is decided by their role on the server, never here.
+  needsYou: () => j("/api/needs-you"),
   voiceMetric: (body) => j("/api/telemetry/voice", { method: "POST", body }),
   serverHasLLM() { const p = state.health?.providers || {}; return state.on && Object.values(p).some(Boolean); },
   async detect() {

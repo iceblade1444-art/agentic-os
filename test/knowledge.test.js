@@ -74,5 +74,6 @@ test("Knowledge panel exposes the real vault and agent audit UI", async () => {
   assert.match(page, /knowledgeUsage/);
   assert.match(api, /\/api\/knowledge\/status/);
   assert.match(api, /\/api\/knowledge\/graph/);
-  assert.match(app, /label: "Obsidian Library"/);
+  // Labels moved into the dictionary; the shell keeps the route.
+  assert.match(app, /route: "knowledge"/);
 });

@@ -69,7 +69,7 @@ export default {
       let list = [];
       try { list = await api.missions.list(); } catch (e) { listEl.innerHTML = `<span class="muted">${esc(e.message)}</span>`; return; }
       if (!list.length) { listEl.innerHTML = `<span class="dim text-sm">${t("missions.empty")}</span>`; return; }
-      listEl.innerHTML = list.map((m) => `<button class="wf-node-btn" data-mid="${m.id}" style="width:100%${m.id === selected ? ";border-color:var(--primary)" : ""}">
+      listEl.innerHTML = list.map((m) => `<button class="wf-node-btn" data-mid="${m.id}" style="width:100%${m.id === selected ? ";border-color:var(--primary-ink)" : ""}">
         <span class="status-dot" style="background:${m.status === "completed" ? "var(--success)" : m.status === "running" ? "var(--warning)" : m.status === "failed" ? "var(--error)" : "var(--text-3)"};flex:none"></span>
         <div class="stack" style="min-width:0"><span class="t">${esc(m.title)}</span><span class="d">${m.status} · ${m.events} events · ${timeAgo(m.createdAt)}</span></div></button>`).join("");
       listEl.querySelectorAll("[data-mid]").forEach((b) => (b.onclick = () => openMission(b.dataset.mid)));

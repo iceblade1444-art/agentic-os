@@ -71,6 +71,8 @@ import { eveningSummary } from "./lib/evening-summary.js";
 import { erpAnomalies } from "./lib/erp-anomalies.js";
 import { eventAlerts } from "./lib/event-alerts.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
+import needsYouRoute from "./routes/needs-you.js";
+import { mountMiniApp, telegramAuthHandler } from "./routes/telegram-miniapp.js";
 import { salesBot } from "./lib/sales-bot.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -240,6 +242,9 @@ app.delete("/api/auth/mfa", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaDisa
 app.post("/api/auth/account/password", rateLimit({ windowMs: 10 * 60000, max: 5 }), changeOwnPasswordHandler);
 app.get("/api/auth/account/export", exportOwnDataHandler);
 app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
+// Not behind requireAuth: this is the thing that authenticates. Rate limited
+// like every other credential exchange on this server.
+app.post("/api/auth/telegram", rateLimit({ windowMs: 10 * 60000, max: 20 }), telegramAuthHandler());
 app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin", "CEO");
 // Design shares the studio surface with operators, nothing else.
@@ -250,6 +255,9 @@ app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), delet
 app.use("/api/llm", llm);
 app.use("/api/onboarding", onboarding);
 app.use("/api/member", member);
+// Not operator-gated: everyone has a queue. Which sources fill it is decided by
+// role inside needs-you.js.
+app.use("/api/needs-you", needsYouRoute);
 app.use("/api/messenger", messenger);
 app.use("/api/personal", personal);
 app.use("/api/telemetry", telemetry);
@@ -289,6 +297,7 @@ app.use("/atlas-downloads", express.static(process.env.ATLAS_RELEASES_DIR || pat
     if (filePath.endsWith(".apk")) res.setHeader("Content-Type", "application/vnd.android.package-archive");
   },
 }));
+mountMiniApp(app, { root: ROOT });
 app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(ROOT, "index.html")));
 // SPA fallback for any non-API GET
 app.use((req, res, next) => {
@@ -319,6 +328,9 @@ server.listen(config.port, async () => {
   reminders.start();
   morningBrief.start();
   telegram.assistant = telegramAssistant;
+  // Injected rather than imported: reminders.js reaches push-service.js, which
+  // reaches back here. Snoozing a card is what needs it.
+  telegram.reminders = reminders;
   telegram.start();
   salesBot.start();
   erpWeekly.start();

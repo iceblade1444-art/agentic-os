@@ -96,7 +96,7 @@ function section(s, llm) {
       <p class="hint mb-4">${t("settings.dataText")}</p>
       <div class="row gap-2">
         <button class="btn btn-secondary" id="exportData">${icon("upload")}${t("settings.export")}</button>
-        <button class="btn btn-outline" id="resetData" style="color:var(--error);border-color:var(--error)">${icon("refresh")}${t("settings.resetDemo")}</button>
+        <button class="btn btn-outline" id="resetData" style="color:var(--error-ink);border-color:var(--error-ink)">${icon("refresh")}${t("settings.resetDemo")}</button>
       </div>
     </div>`;
 }
@@ -129,7 +129,7 @@ function securitySection() {
     ${mfaState.enabled ? `
       <p class="hint mb-4">${t("settings.mfaRecoveryRemaining", { count: mfaState.recoveryCodesRemaining || 0 })}</p>
       <div class="field"><label class="label" for="mfaManageCode">${t("settings.mfaCode")}</label><input class="input mono" id="mfaManageCode" autocomplete="one-time-code" maxlength="16" placeholder="123456"/></div>
-      <div class="row gap-2 wrap"><button class="btn btn-secondary" id="mfaRegenerate">${icon("refresh")}${t("settings.mfaNewRecovery")}</button><button class="btn btn-outline" id="mfaDisable" style="color:var(--error);border-color:var(--error)">${icon("x")}${t("settings.mfaDisable")}</button></div>
+      <div class="row gap-2 wrap"><button class="btn btn-secondary" id="mfaRegenerate">${icon("refresh")}${t("settings.mfaNewRecovery")}</button><button class="btn btn-outline" id="mfaDisable" style="color:var(--error-ink);border-color:var(--error-ink)">${icon("x")}${t("settings.mfaDisable")}</button></div>
     ` : `
       <div class="field"><label class="label" for="mfaPassword">${t("settings.currentPassword")}</label><input class="input" id="mfaPassword" type="password" autocomplete="current-password"/></div>
       <button class="btn btn-primary" id="mfaSetup">${icon("shield")}${t("settings.mfaSetup")}</button>
@@ -148,11 +148,11 @@ function securitySection() {
     <button class="btn btn-secondary" id="exportPersonalData">${icon("upload")}${t("settings.exportPersonalData")}</button>
   </div>
   ${selfManaged ? `<div class="card pad-lg mt-4" style="border-color:color-mix(in srgb, var(--error) 45%, var(--border))">
-    <div class="section-title" style="color:var(--error)">${t("settings.deleteAccount")}</div>
+    <div class="section-title" style="color:var(--error-ink)">${t("settings.deleteAccount")}</div>
     <p class="hint mb-4">${t("settings.deleteAccountText")}</p>
     <div class="field"><label class="label" for="deleteEmail">${t("settings.confirmEmail")}</label><input class="input" id="deleteEmail" type="email" autocomplete="off" placeholder="${esc(api.auth.user?.email || "")}"/></div>
     <div class="field"><label class="label" for="deletePassword">${t("settings.currentPassword")}</label><input class="input" id="deletePassword" type="password" autocomplete="current-password"/></div>
-    <button class="btn btn-outline" id="deleteAccount" style="color:var(--error);border-color:var(--error)">${icon("x")}${t("settings.deleteAccount")}</button>
+    <button class="btn btn-outline" id="deleteAccount" style="color:var(--error-ink);border-color:var(--error-ink)">${icon("x")}${t("settings.deleteAccount")}</button>
   </div>` : ""}`;
 }
 
