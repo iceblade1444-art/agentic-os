@@ -2,7 +2,10 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) report anything
+         other than zero; the shell pads itself back off the notch and the
+         gesture bar through the --safe-* tokens. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Agentic OS — The Operating System for AI Agents</title>
     <meta
       name="description"

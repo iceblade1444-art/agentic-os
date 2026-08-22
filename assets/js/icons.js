@@ -87,11 +87,19 @@ const P = {
   monitor: '<rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/>',
 };
 
+// width/height are presentation attributes, which sit below every stylesheet
+// rule in the cascade — so `.nav-item svg { width: 18px }` and its forty
+// siblings still win, and nothing that was already sized changes size.
+//
+// They matter where no rule matches. An SVG with a viewBox and no dimensions
+// falls back to the replaced-element default and stretches to fill its
+// container: a breadcrumb separator in a plain .row was rendering 511px wide.
+// Nobody saw it because the row could not wrap and flex shrank it back down.
 export function icon(name, attrs = {}) {
   const inner = P[name] || P.dot;
   const cls = attrs.class ? ` class="${attrs.class}"` : "";
   const sw = attrs.sw || 2;
-  return `<svg${cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  return `<svg${cls} width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 }
 
 export const ICON_NAMES = Object.keys(P);

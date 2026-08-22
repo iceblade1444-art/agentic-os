@@ -186,8 +186,9 @@ function topbarHTML() {
   const theme = store.state.settings.theme;
   const member = !api.auth.canAdmin;
   return `<header class="topbar">
-    <button class="icon-btn menu-toggle" id="mtoggle">${icon("grid")}</button>
+    <button class="icon-btn menu-toggle" id="mtoggle" aria-label="${tr("shell.menu")}" aria-expanded="false" aria-controls="sidebar">${icon("grid")}</button>
     <div class="search"><span>${icon("search")}</span><input id="globalSearch" placeholder="${tr(member ? "shell.searchMember" : "shell.searchOperator")}"/><kbd>⌘K</kbd></div>
+    <button class="icon-btn search-compact" id="globalSearchCompact" aria-label="${tr(member ? "shell.searchMember" : "shell.searchOperator")}">${icon("search")}</button>
     <div class="topbar-actions">
       <label class="ui-language tip" data-tip="${tr("shell.language")}">
         ${icon("chat")}
@@ -230,11 +231,11 @@ function wireShell() {
       toast("error", tr("personal.languageError"), error.message);
     }
   };
-  const mt = qs("#mtoggle");
-  if (mt) mt.onclick = () => qs("#sidebar").classList.toggle("open");
-  qsa(".nav-item").forEach((a) => a.addEventListener("click", () => qs("#sidebar")?.classList.remove("open")));
+  wireNavDrawer();
   const gs = qs("#globalSearch");
   if (gs) { gs.readOnly = true; gs.addEventListener("focus", openCommandPalette); gs.addEventListener("click", openCommandPalette); }
+  const gsc = qs("#globalSearchCompact");
+  if (gsc) gsc.onclick = openCommandPalette;
   const bell = qs("#bellBtn");
   if (bell) bell.onclick = () => openNotifications(bell);
   const um = qs("#user-menu");
@@ -246,6 +247,140 @@ function wireShell() {
     { sep: true },
     { text: tr("shell.signOut"), icon: "logout", danger: true, onClick: async () => { if (api.health?.auth) { try { await api.auth.logout(); } catch {} location.reload(); } else m.toast("info", tr("shell.signOut")); } },
   ], { align: "right", placement: "top" }));
+}
+
+const DRAWER_MEDIA = "(max-width: 900px)";
+const isDrawer = () => window.matchMedia(DRAWER_MEDIA).matches;
+const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+let drawerTeardown = null;
+
+function closeNav() {
+  const sidebar = qs("#sidebar");
+  const scrim = qs("#navScrim");
+  const toggle = qs("#mtoggle");
+  sidebar?.classList.remove("open");
+  scrim?.classList.remove("open");
+  sidebar?.setAttribute("aria-hidden", isDrawer() ? "true" : "false");
+  toggle?.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("nav-open");
+  drawerTeardown?.();
+  drawerTeardown = null;
+  if (isDrawer()) toggle?.focus();
+}
+
+function openNav() {
+  const sidebar = qs("#sidebar");
+  const scrim = qs("#navScrim");
+  if (!sidebar || !scrim) return;
+  sidebar.classList.add("open");
+  scrim.classList.add("open");
+  sidebar.setAttribute("aria-hidden", "false");
+  qs("#mtoggle")?.setAttribute("aria-expanded", "true");
+  // The page behind must not scroll under the drawer.
+  document.body.classList.add("nav-open");
+
+  const onKey = (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closeNav(); return; }
+    if (event.key !== "Tab") return;
+    const stops = [...sidebar.querySelectorAll(FOCUSABLE)].filter((node) => node.offsetParent !== null);
+    if (!stops.length) return;
+    const [first, last] = [stops[0], stops[stops.length - 1]];
+    // Wrap at both ends, and pull focus back in if it has already escaped.
+    if (!sidebar.contains(document.activeElement)) { event.preventDefault(); first.focus(); return; }
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
+  document.addEventListener("keydown", onKey, true);
+  drawerTeardown = () => document.removeEventListener("keydown", onKey, true);
+
+  sidebar.querySelector(FOCUSABLE)?.focus();
+}
+
+// Between 900 and 1280 there is room for the rail but not for the rail plus a
+// section column plus a workspace. The column becomes a flyout the rail opens —
+// on hover for a mouse, on focus for a keyboard, and it closes as soon as a
+// destination is chosen.
+function wireSectionFlyout(sidebar) {
+  const narrow = window.matchMedia("(max-width: 1280px) and (min-width: 901px)");
+  const expand = () => { if (narrow.matches) sidebar.classList.add("expanded"); };
+  const collapse = () => sidebar.classList.remove("expanded");
+  sidebar.addEventListener("mouseenter", expand);
+  sidebar.addEventListener("mouseleave", collapse);
+  sidebar.addEventListener("focusin", expand);
+  sidebar.addEventListener("focusout", (event) => {
+    if (!sidebar.contains(event.relatedTarget)) collapse();
+  });
+  qsa(".nav-item", sidebar).forEach((link) => link.addEventListener("click", collapse));
+  narrow.addEventListener("change", collapse);
+}
+
+function wireNavDrawer() {
+  const sidebar = qs("#sidebar");
+  if (!sidebar) return;
+  wireSectionFlyout(sidebar);
+
+  // The scrim lives beside the sidebar rather than inside it, so a tap on the
+  // page area is a tap on the scrim and not on whatever sits underneath.
+  let scrim = qs("#navScrim");
+  if (!scrim) {
+    scrim = el(`<div class="nav-scrim" id="navScrim" hidden></div>`);
+    sidebar.after(scrim);
+  }
+  scrim.hidden = false;
+  scrim.onclick = closeNav;
+
+  const toggle = qs("#mtoggle");
+  if (toggle) toggle.onclick = () => (sidebar.classList.contains("open") ? closeNav() : openNav());
+  qsa(".nav-item, .rail-item").forEach((link) => link.addEventListener("click", () => { if (isDrawer()) closeNav(); }));
+
+  // Drag the drawer off to the left. Horizontal intent is decided once, on the
+  // first few pixels, so a vertical scroll of a long nav list is never stolen.
+  let startX = 0, startY = 0, dragging = null;
+  sidebar.addEventListener("touchstart", (event) => {
+    if (!isDrawer() || !sidebar.classList.contains("open")) return;
+    startX = event.touches[0].clientX;
+    startY = event.touches[0].clientY;
+    dragging = null;
+  }, { passive: true });
+  sidebar.addEventListener("touchmove", (event) => {
+    if (!isDrawer() || !sidebar.classList.contains("open") || startX === 0) return;
+    const dx = event.touches[0].clientX - startX;
+    const dy = event.touches[0].clientY - startY;
+    if (dragging === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      dragging = Math.abs(dx) > Math.abs(dy) && dx < 0;
+    }
+    if (!dragging) return;
+    sidebar.style.transition = "none";
+    sidebar.style.transform = `translateX(${Math.min(0, dx)}px)`;
+  }, { passive: true });
+  const endDrag = (event) => {
+    if (!dragging) { startX = 0; return; }
+    const dx = (event.changedTouches?.[0]?.clientX ?? startX) - startX;
+    sidebar.style.transition = "";
+    sidebar.style.transform = "";
+    if (dx < -60) closeNav();
+    dragging = null; startX = 0;
+  };
+  sidebar.addEventListener("touchend", endDrag, { passive: true });
+  sidebar.addEventListener("touchcancel", endDrag, { passive: true });
+
+  // Resizing past the breakpoint with the drawer open would otherwise leave the
+  // scrim and the scroll lock on a layout that no longer has a drawer.
+  const media = window.matchMedia(DRAWER_MEDIA);
+  const sync = () => {
+    if (!media.matches) {
+      scrim.classList.remove("open");
+      sidebar.classList.remove("open");
+      document.body.classList.remove("nav-open");
+      drawerTeardown?.();
+      drawerTeardown = null;
+    }
+    sidebar.setAttribute("aria-hidden", media.matches && !sidebar.classList.contains("open") ? "true" : "false");
+  };
+  media.addEventListener("change", sync);
+  sync();
 }
 
 /* ---------------- Command palette (⌘K) ---------------- */
