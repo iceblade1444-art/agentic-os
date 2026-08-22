@@ -154,7 +154,11 @@ test("every notification rides along to a linked chat", () => {
   // call a second method.
   const source = fs.readFileSync(new URL("../server/lib/push-service.js", import.meta.url), "utf8");
   const body = source.slice(source.indexOf("async sendInbox"));
-  assert.match(body, /telegram\s*\n?\s*\.sendText\(userId/);
+  // The whole item crosses, not a flattened title+body string: Telegram renders
+  // it as the kind of thing it is and offers the verbs that kind supports.
+  assert.match(body, /telegram\s*\n?\s*\.sendCard\(userId, item\)/);
+  assert.doesNotMatch(body, /\[item\?\.title, item\?\.body\]/,
+    "flattening here would throw away the type the card is built from");
   const noDevices = body.indexOf("if (!devices.length)");
   assert.ok(body.indexOf("telegram") < noDevices, "telegram must go first: no FCM devices used to end delivery entirely");
 });

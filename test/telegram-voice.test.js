@@ -140,8 +140,25 @@ test("an empty transcript is a failure, not an empty question to MILA", async ()
 test("starting the poller replaces the previous bot's command menu", async () => {
   const { instance, calls, cleanup } = bridge({ voice: { transcribe: async () => "unused" } });
   assert.equal(await instance.publishCommands(), true);
-  const published = calls.find((call) => call.method === "setMyCommands");
-  assert.deepEqual(published.body.commands.map((c) => c.command), ["help", "stop"]);
+  const published = calls.filter((call) => call.method === "setMyCommands");
+
+  // The default list, for a client whose language nobody published for.
+  const fallback = published.find((call) => !call.body.language_code);
+  assert.deepEqual(fallback.body.commands.map((c) => c.command),
+    ["today", "tasks", "erp", "ask", "help", "stop"]);
+
+  // And one list per language the app speaks, because the menu used to be
+  // Russian for everyone regardless of what they had set their client to.
+  assert.deepEqual(published.map((call) => call.body.language_code || "default"),
+    ["default", "en", "uz"]);
+  const english = published.find((call) => call.body.language_code === "en");
+  assert.equal(english.body.commands.find((c) => c.command === "stop").description, "Unlink this chat");
+  for (const call of published) {
+    for (const entry of call.body.commands) {
+      assert.ok(entry.description && !entry.description.startsWith("telegram."),
+        `${entry.command} has no translation in ${call.body.language_code || "default"}`);
+    }
+  }
   cleanup();
 });
 

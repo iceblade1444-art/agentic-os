@@ -16,8 +16,16 @@ import path from "node:path";
 
 import { config } from "../config.js";
 import { db } from "../store.js";
+import { tIn } from "../../assets/js/i18n.js";
+import { creatorUser } from "./auth.js";
+import { memberWorkspaces } from "./member-workspace.js";
+import { onboarding } from "./onboarding.js";
 import { hardenRuntimeFile } from "./runtime-files.js";
+import {
+  ASSISTANT_COMMANDS, buildCard, commandList, parseCallback,
+} from "./telegram-cards.js";
 import { audioFileId, speaker, voiceTranscriber } from "./telegram-voice.js";
+import { users } from "./users.js";
 
 const API = "https://api.telegram.org";
 const CODE_TTL_MS = 15 * 60 * 1000;
@@ -37,8 +45,8 @@ const clean = (value, max) => String(value ?? "").trim().slice(0, max);
 // button press anyway. So the text to speak is read from the message the
 // button sits under, and nothing has to be stored between the two events.
 const SPEAK_CALLBACK = "speak";
-const speakButton = () => ({
-  inline_keyboard: [[{ text: "🔊 Озвучить", callback_data: SPEAK_CALLBACK }]],
+const speakButton = (locale = "ru-RU") => ({
+  inline_keyboard: [[{ text: `🔊 ${tIn(locale, "telegram.act.listen")}`, callback_data: SPEAK_CALLBACK }]],
 });
 
 export class TelegramBridge {
@@ -55,9 +63,51 @@ export class TelegramBridge {
     this.assistant = options.assistant || null;
     this.voice = options.voice || voiceTranscriber;
     this.speaker = options.speaker || speaker;
+    // Snoozing creates a reminder, and reminders.js imports push-service.js,
+    // which imports this file. Injected for the same reason the assistant is:
+    // the cycle is real, not hypothetical.
+    this.reminders = options.reminders || null;
+    this.workspaces = options.workspaces || memberWorkspaces;
+    this.users = options.users || users;
+    this.creatorUser = options.creatorUser || creatorUser;
+    this.onboarding = options.onboarding || onboarding;
+    this.publicUrl = options.publicUrl || (() => config.publicUrl);
     this.timer = null;
     this.offset = 0;
     this.botName = "";
+  }
+
+  // The reader's own language, for a message nobody asked for. Falls back to
+  // Russian, which is what the factory floor reads.
+  localeFor(userId) {
+    try {
+      const user = this.#user(userId);
+      return user ? this.onboarding.get(user).profile?.locale || "ru-RU" : "ru-RU";
+    } catch {
+      return "ru-RU";
+    }
+  }
+
+  #user(userId) {
+    if (userId === "creator") return this.creatorUser();
+    const user = this.users.get(userId);
+    return user && !user.disabledAt ? user : null;
+  }
+
+  #userIdForChat(chatId) {
+    const found = Object.entries(this.#read()).find(([, value]) => value.chatId === chatId);
+    return found ? found[0] : null;
+  }
+
+  /// Which account, if any, this Telegram chat belongs to.
+  ///
+  #chatLocale(chatId, from = null) {
+    const userId = this.#userIdForChat(chatId);
+    if (userId) return this.localeFor(userId);
+    const declared = String(from?.language_code || "").toLowerCase();
+    if (declared.startsWith("uz")) return "uz-UZ";
+    if (declared.startsWith("en")) return "en-US";
+    return "ru-RU";
   }
 
   token() {
@@ -144,8 +194,56 @@ export class TelegramBridge {
       await this.#call("sendMessage", {
         chat_id: entry.chatId,
         text: body.slice(start, start + CHUNK),
-        reply_markup: speakButton(),
+        reply_markup: speakButton(this.localeFor(userId)),
       });
+    }
+    return true;
+  }
+
+  /// A notification, as the thing it actually is.
+  ///
+  /// Everything that reaches a person here is one of a handful of objects — a
+  /// reminder, a task, a calendar alert, a colleague's message, an ERP anomaly —
+  /// and each supports different verbs. The card carries those verbs as buttons
+  /// so the common case never needs the app: mark it done, push it an hour,
+  /// clear it, open it.
+  ///
+  /// Falls back to plain text when the item has no shape worth formatting, and
+  /// returns false when there is no link, exactly like sendText.
+  async sendCard(userId, item) {
+    const entry = this.#read()[userId];
+    if (!entry?.chatId || !this.configured()) return false;
+    const card = buildCard(item, {
+      locale: this.localeFor(userId),
+      publicUrl: typeof this.publicUrl === "function" ? this.publicUrl() : this.publicUrl,
+    });
+    if (!card) return false;
+    // A card longer than one Telegram message is a card that should have been a
+    // link. Send the head with its buttons, then the rest as plain continuation
+    // so nothing is lost and the buttons stay attached to the top.
+    const head = card.text.slice(0, CHUNK);
+    await this.#call("sendMessage", {
+      chat_id: entry.chatId,
+      text: head,
+      parse_mode: card.parseMode,
+      reply_markup: card.keyboard,
+    });
+    for (let start = CHUNK; start < card.text.length; start += CHUNK) {
+      await this.#call("sendMessage", {
+        chat_id: entry.chatId,
+        text: card.text.slice(start, start + CHUNK),
+        parse_mode: card.parseMode,
+      });
+    }
+    // Only what asked to be read aloud, and only after the text is already
+    // there. A speech service that is down costs the voice, not the brief.
+    if (item?.speak === true) {
+      try {
+        const audio = await this.speaker.speak([item.title, item.body].filter(Boolean).join("\n"));
+        if (audio) await this.#sendVoice(entry.chatId, audio);
+      } catch (error) {
+        console.warn(`[telegram] could not speak for ${userId}: ${error.message}`);
+      }
     }
     return true;
   }
@@ -179,14 +277,25 @@ export class TelegramBridge {
   // /new_session — offering people a menu that does nothing here. Publishing
   // ours at startup replaces that inheritance instead of waiting for someone
   // to request a link.
+  // Six commands, in each language the app speaks. Telegram keeps one list per
+  // language_code and falls back to the unqualified one, so publishing all
+  // three means the menu is readable whatever the person set their client to —
+  // the two commands that were here before were Russian for everybody.
   async publishCommands() {
     if (!this.configured()) return false;
-    await this.#call("setMyCommands", {
-      commands: [
-        { command: "help", description: "Что я умею" },
-        { command: "stop", description: "Отвязать этот чат" },
-      ],
-    });
+    await this.#call("setMyCommands", { commands: commandList("ru-RU") });
+    for (const [locale, code] of [["en-US", "en"], ["uz-UZ", "uz"]]) {
+      await this.#call("setMyCommands", { commands: commandList(locale), language_code: code })
+        .catch((error) => console.warn(`[telegram] commands for ${code}: ${error.message}`));
+    }
+    // The composer gets a button straight into the app instead of only ever
+    // offering "/".
+    const base = String(typeof this.publicUrl === "function" ? this.publicUrl() : this.publicUrl || "").replace(/\/+$/, "");
+    if (base.startsWith("https://")) {
+      await this.#call("setChatMenuButton", {
+        menu_button: { type: "web_app", text: tIn("ru-RU", "telegram.menuButton"), web_app: { url: `${base}/` } },
+      }).catch((error) => console.warn(`[telegram] menu button: ${error.message}`));
+    }
     return true;
   }
 
@@ -233,22 +342,129 @@ export class TelegramBridge {
 
     if (!chatId || !text) return answer();
     const linked = Object.values(this.#read()).some((value) => value.chatId === chatId);
-    if (!linked) return answer("Этот чат не привязан.");
+    if (!linked) return answer(tIn(this.#chatLocale(chatId), "telegram.sys.strangerChat"));
 
     // Telegram spins the button until it is answered, so the acknowledgement
     // goes first and the synthesis — which takes seconds — follows.
-    await answer("Озвучиваю — это займёт несколько секунд.");
+    await answer(tIn(this.#chatLocale(chatId), "telegram.sys.speaking"));
     try {
       const audio = await this.speaker.speak(text);
       if (!audio) {
-        await this.#call("sendMessage", { chat_id: chatId, text: "Это сообщение слишком длинное, чтобы его слушать." });
+        await this.#call("sendMessage", { chat_id: chatId, text: tIn(this.#chatLocale(chatId), "telegram.sys.tooLongToListen") });
         return;
       }
       await this.#sendVoice(chatId, audio);
     } catch (error) {
       console.warn(`[telegram] speak-on-tap failed: ${error.message}`);
-      await this.#call("sendMessage", { chat_id: chatId, text: "Не получилось озвучить — попробуйте ещё раз." }).catch(() => {});
+      await this.#call("sendMessage", { chat_id: chatId, text: tIn(this.#chatLocale(chatId), "telegram.sys.speakFailed") }).catch(() => {});
     }
+  }
+
+  // Somebody tapped Done, +1 hour, Tonight or Got it.
+  //
+  // The chat is the authentication, exactly as it is for a typed message: a
+  // chat id is in the link table only because its owner put it there from a
+  // signed-in session. So the verb is applied to that person's own inbox and
+  // nobody else's, and a press from an unlinked chat reaches nothing.
+  async #handleActionTap(callback) {
+    const chatId = callback?.message?.chat?.id;
+    const answer = (text = "") => this.#call("answerCallbackQuery", {
+      callback_query_id: callback.id,
+      ...(text ? { text } : {}),
+    }).catch(() => {});
+
+    const parsed = parseCallback(callback?.data);
+    if (!chatId || !parsed) return answer();
+    const userId = this.#userIdForChat(chatId);
+    if (!userId) return answer(tIn(this.#chatLocale(chatId), "telegram.sys.strangerChat"));
+
+    const locale = this.localeFor(userId);
+    const T = (key, values) => tIn(locale, key, values);
+
+    try {
+      if (parsed.action === "d" || parsed.action === "a") {
+        const updated = this.workspaces.updateInboxItem(userId, parsed.id, {
+          status: parsed.action === "d" ? "archived" : "read",
+        });
+        // Plenty of what arrives here was never an inbox item — the ERP
+        // anomalies and the evening summary are composed on the fly. Saying so
+        // is better than a button that silently does nothing.
+        if (!updated) return answer(T("telegram.actionGone"));
+        await answer(T(parsed.action === "d" ? "telegram.done" : "telegram.acked"));
+        return this.#strikeKeyboard(chatId, callback.message.message_id);
+      }
+
+      if (parsed.action === "s") {
+        if (!this.reminders) return answer(T("telegram.actionFailed"));
+        const item = this.workspaces.listInbox(userId, { limit: 200 })
+          .find((entry) => entry.id === parsed.id);
+        if (!item) return answer(T("telegram.actionGone"));
+        const due = this.#snoozeTarget(parsed.arg, userId);
+        this.reminders.create(userId, {
+          title: item.title || T("telegram.card.reminder"),
+          body: item.body,
+          dueAt: due.toISOString(),
+          route: item.route,
+        });
+        this.workspaces.updateInboxItem(userId, parsed.id, { status: "archived" });
+        await answer(T("telegram.snoozed", { time: this.#clock(due, userId) }));
+        return this.#strikeKeyboard(chatId, callback.message.message_id);
+      }
+    } catch (error) {
+      console.warn(`[telegram] action ${parsed.action} failed for ${userId}: ${error.message}`);
+      return answer(T("telegram.actionFailed"));
+    }
+    return answer();
+  }
+
+  // An hour from now, or this evening in the person's own timezone. "Evening"
+  // has to mean their evening: the factory is in Andijan and the owner is not
+  // always there.
+  #snoozeTarget(arg, userId) {
+    const now = new Date();
+    if (arg !== "evening") return new Date(now.getTime() + (Number(arg) || 60) * 60000);
+    const zone = this.#timezone(userId);
+    const hourNow = Number(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hour12: false }).format(now));
+    // 19:00 tonight, or tomorrow evening if tonight has already been and gone.
+    const days = hourNow >= 19 ? 1 : 0;
+    const target = new Date(now.getTime() + days * 86400000);
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" })
+      .format(target);
+    const offset = this.#zoneOffset(zone, now);
+    return new Date(`${parts}T19:00:00${offset}`);
+  }
+
+  #timezone(userId) {
+    try {
+      const user = this.#user(userId);
+      return (user && this.onboarding.get(user).profile?.timezone) || "Asia/Tashkent";
+    } catch {
+      return "Asia/Tashkent";
+    }
+  }
+
+  // Intl gives the offset as "GMT+5"; an ISO string needs "+05:00".
+  #zoneOffset(zone, at) {
+    const label = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" })
+      .formatToParts(at).find((part) => part.type === "timeZoneName")?.value || "GMT+00:00";
+    const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(label);
+    if (!match) return "+00:00";
+    return `${match[1]}${match[2].padStart(2, "0")}:${match[3] || "00"}`;
+  }
+
+  #clock(date, userId) {
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: this.#timezone(userId), hour: "2-digit", minute: "2-digit",
+    }).format(date);
+  }
+
+  // The buttons come off once the verb has been applied, so the card cannot be
+  // completed twice and reads as settled in the scrollback.
+  async #strikeKeyboard(chatId, messageId) {
+    if (!messageId) return;
+    await this.#call("editMessageReplyMarkup", {
+      chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] },
+    }).catch(() => {});
   }
 
   // Public: the poller calls it per update, and tests drive it directly —
@@ -256,6 +472,9 @@ export class TelegramBridge {
   async handleUpdateForTest(update) {
     if (update?.callback_query?.data === SPEAK_CALLBACK) {
       return this.#handleSpeakTap(update.callback_query);
+    }
+    if (update?.callback_query?.data) {
+      return this.#handleActionTap(update.callback_query);
     }
     const message = update.message;
     const chatId = message?.chat?.id;
@@ -276,7 +495,7 @@ export class TelegramBridge {
         console.warn(`[telegram] transcription failed: ${error.message}`);
         await this.#call("sendMessage", {
           chat_id: chatId,
-          text: "Не смогла разобрать голосовое — напишите текстом, пожалуйста.",
+          text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.voiceUnclear"),
         });
         return;
       }
@@ -287,7 +506,7 @@ export class TelegramBridge {
     if (!text && chatId && (message?.photo || message?.document || message?.video)) {
       await this.#call("sendMessage", {
         chat_id: chatId,
-        text: "Пока я читаю только текст и голосовые. Опишите словами, что на файле, — и я помогу.",
+        text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.filesUnsupported"),
       });
       return;
     }
@@ -299,7 +518,7 @@ export class TelegramBridge {
       if (!userId) {
         await this.#call("sendMessage", {
           chat_id: chatId,
-          text: "Эта ссылка устарела. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать» ещё раз.",
+          text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.linkExpired"),
         });
         return;
       }
@@ -317,7 +536,45 @@ export class TelegramBridge {
       this.#write(all);
       await this.#call("sendMessage", {
         chat_id: chatId,
-        text: "Готово — Telegram привязан. MILA сможет присылать сюда напоминания, утренний бриф и всё, что вы попросите переслать. Отвязать: /stop",
+        text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.linked"),
+      });
+      return;
+    }
+
+    // /today, /tasks and /erp are questions, not features. Each is put to MILA
+    // exactly as if the person had typed it, so they inherit her tools, her
+    // audience gate and her tone rather than growing a second answering path
+    // that would drift from the first.
+    const command = /^\/([a-z]+)/.exec(text)?.[1] || "";
+    if (Object.hasOwn(ASSISTANT_COMMANDS, command)) {
+      const asker = this.#userIdForChat(chatId);
+      if (!asker || !this.assistant) {
+        await this.#call("sendMessage", {
+          chat_id: chatId,
+          text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.notLinked"),
+        });
+        return;
+      }
+      const locale = this.localeFor(asker);
+      await this.#call("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+      const reply = await this.assistant.respond(asker, tIn(locale, ASSISTANT_COMMANDS[command]));
+      if (reply) {
+        for (let start = 0; start < reply.length; start += CHUNK) {
+          await this.#call("sendMessage", {
+            chat_id: chatId,
+            text: reply.slice(start, start + CHUNK),
+            reply_markup: speakButton(locale),
+          });
+        }
+      }
+      return;
+    }
+
+    if (text.startsWith("/ask")) {
+      const asker = this.#userIdForChat(chatId);
+      await this.#call("sendMessage", {
+        chat_id: chatId,
+        text: tIn(asker ? this.localeFor(asker) : "ru-RU", "telegram.ask.prompt"),
       });
       return;
     }
@@ -325,32 +582,21 @@ export class TelegramBridge {
     if (text.startsWith("/help")) {
       await this.#call("sendMessage", {
         chat_id: chatId,
-        text: [
-          "Я MILA — ваш ассистент из Agentic OS. Пишите обычными словами или наговаривайте голосовое.",
-          "",
-          "Что спросить:",
-          "• «что у меня на сегодня» — план дня, задачи, календарь",
-          "• «напомни завтра в 9 позвонить на склад» — напоминание",
-          "• «запиши: обсудили отгрузку в Ташкент» — заметка",
-          "• «сколько сшили вчера» — швейная выработка из ERP",
-          "• «сколько готовой продукции на складе» — остатки",
-          "",
-          "Руководителям дополнительно: «кто сегодня на месте», «какой заказ на каком этапе», «сколько человек в отделе».",
-          "",
-          "Отвязать чат: /stop",
-        ].join("\n"),
+        text: tIn(this.#chatLocale(chatId, message?.from), "telegram.help.body"),
       });
       return;
     }
 
     if (text.startsWith("/stop")) {
+      // Resolved before the link goes, or the goodbye is in the wrong language.
+      const locale = this.#chatLocale(chatId, message?.from);
       const all = this.#read();
       const entry = Object.entries(all).find(([, value]) => value.chatId === chatId);
       if (entry) {
         delete all[entry[0]];
         this.#write(all);
       }
-      await this.#call("sendMessage", { chat_id: chatId, text: "Отвязано. Привязать заново можно из Agentic OS." });
+      await this.#call("sendMessage", { chat_id: chatId, text: tIn(locale, "telegram.sys.unlinked") });
       return;
     }
 
@@ -367,7 +613,7 @@ export class TelegramBridge {
           await this.#call("sendMessage", {
             chat_id: chatId,
             text: reply.slice(start, start + CHUNK),
-            reply_markup: speakButton(),
+            reply_markup: speakButton(this.#chatLocale(chatId, message?.from)),
           });
         }
         // Asked out loud, answered out loud. Somebody who spoke because their
@@ -390,7 +636,7 @@ export class TelegramBridge {
     }
     await this.#call("sendMessage", {
       chat_id: chatId,
-      text: "Я отвечаю только привязанным сотрудникам. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать». Команды: /stop — отвязать.",
+      text: tIn(this.#chatLocale(chatId, message?.from), "telegram.sys.notLinked"),
     });
   }
 

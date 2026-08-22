@@ -25,6 +25,38 @@ const COPY = {
     "shell.projectOwner": "Владелец проекта", "shell.settings": "Настройки",
     "shell.signOut": "Выйти", "shell.componentLibrary": "Библиотека компонентов",
     "shell.menu": "Меню",
+  "telegram.card.reminder": "Напоминание", "telegram.card.task": "Задача",
+  "telegram.card.calendar": "Календарь", "telegram.card.message": "Сообщение",
+  "telegram.card.agent": "Агент", "telegram.card.erp": "ERP",
+  "telegram.card.erpWeek": "ERP за неделю", "telegram.card.evening": "Итоги дня",
+  "telegram.card.brief": "Утренний бриф", "telegram.card.lead": "Заявка",
+  "telegram.card.notice": "Уведомление",
+  "telegram.act.done": "Готово", "telegram.act.hour": "+1 час",
+  "telegram.act.evening": "Вечером", "telegram.act.ack": "Понятно",
+  "telegram.act.open": "Открыть", "telegram.act.listen": "Озвучить",
+  "telegram.done": "Отметила как выполненное.", "telegram.acked": "Убрала из непрочитанного.",
+  "telegram.snoozed": "Напомню в {time}.", "telegram.actionGone": "Не нашла, к чему это относится.",
+  "telegram.actionFailed": "Не получилось — попробуйте в приложении.",
+  "telegram.cmd.today": "План на сегодня", "telegram.cmd.tasks": "Мои задачи",
+  "telegram.cmd.erp": "Сводка по производству", "telegram.cmd.ask": "Как спросить",
+  "telegram.cmd.help": "Что я умею", "telegram.cmd.stop": "Отвязать этот чат",
+  "telegram.ask.today": "Что у меня сегодня: календарь, задачи и что срочного?",
+  "telegram.ask.tasks": "Покажи мои открытые задачи.",
+  "telegram.ask.erp": "Дай сводку по производству: выработка и остатки готовой продукции.",
+  "telegram.ask.prompt": "Спросите обычными словами или наговорите голосовое — например «что у меня на сегодня» или «напомни завтра в 9 позвонить на склад».",
+  "telegram.menuButton": "Открыть Agentic OS",
+  "telegram.help.body": "Я MILA — ваш ассистент из Agentic OS. Пишите обычными словами или наговаривайте голосовое.\n\nКоманды:\n/today — план на сегодня\n/tasks — мои задачи\n/erp — сводка по производству\n/ask — как спросить\n/stop — отвязать этот чат\n\nПод каждым уведомлением есть кнопки: отметить готовым, отложить на час или до вечера, открыть в приложении, послушать.",
+  "telegram.sys.tooLongToListen": "Это сообщение слишком длинное, чтобы его слушать.",
+  "telegram.sys.speakFailed": "Не получилось озвучить — попробуйте ещё раз.",
+  "telegram.sys.voiceUnclear": "Не смогла разобрать голосовое — напишите текстом, пожалуйста.",
+  "telegram.sys.filesUnsupported": "Пока я читаю только текст и голосовые. Опишите словами, что на файле, — и я помогу.",
+  "telegram.sys.linkExpired": "Эта ссылка устарела. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать» ещё раз.",
+  "telegram.sys.linked": "Готово — Telegram привязан. MILA сможет присылать сюда напоминания, утренний бриф и всё, что вы попросите переслать. Что я умею: /help",
+  "telegram.sys.unlinked": "Отвязано. Привязать заново можно из Agentic OS.",
+  "telegram.sys.notLinked": "Я отвечаю только привязанным сотрудникам. Откройте Agentic OS → Персональное → Telegram и нажмите «Привязать».",
+  "telegram.sys.speaking": "Озвучиваю — это займёт несколько секунд.",
+  "telegram.sys.strangerChat": "Этот чат не привязан.",
+
  "shell.theme": "Сменить тему", "shell.help": "Помощь", "shell.notifications": "Уведомления",
     "shell.language": "Язык интерфейса",
     "shell.pages": "Страницы", "shell.agents": "Агенты", "shell.actions": "Действия",
@@ -695,6 +727,38 @@ const COPY = {
     "shell.projectOwner": "Project owner", "shell.settings": "Settings",
     "shell.signOut": "Sign out", "shell.componentLibrary": "Component library",
     "shell.menu": "Menu",
+  "telegram.card.reminder": "Reminder", "telegram.card.task": "Task",
+  "telegram.card.calendar": "Calendar", "telegram.card.message": "Message",
+  "telegram.card.agent": "Agent", "telegram.card.erp": "ERP",
+  "telegram.card.erpWeek": "ERP this week", "telegram.card.evening": "Day summary",
+  "telegram.card.brief": "Morning brief", "telegram.card.lead": "Lead",
+  "telegram.card.notice": "Notification",
+  "telegram.act.done": "Done", "telegram.act.hour": "+1 hour",
+  "telegram.act.evening": "Tonight", "telegram.act.ack": "Got it",
+  "telegram.act.open": "Open", "telegram.act.listen": "Listen",
+  "telegram.done": "Marked as done.", "telegram.acked": "Cleared from unread.",
+  "telegram.snoozed": "I'll remind you at {time}.", "telegram.actionGone": "I could not find what this refers to.",
+  "telegram.actionFailed": "That did not work — try it in the app.",
+  "telegram.cmd.today": "Today's plan", "telegram.cmd.tasks": "My tasks",
+  "telegram.cmd.erp": "Production snapshot", "telegram.cmd.ask": "How to ask",
+  "telegram.cmd.help": "What I can do", "telegram.cmd.stop": "Unlink this chat",
+  "telegram.ask.today": "What is on for me today: calendar, tasks, and anything urgent?",
+  "telegram.ask.tasks": "Show me my open tasks.",
+  "telegram.ask.erp": "Give me the production snapshot: output and finished-goods stock.",
+  "telegram.ask.prompt": "Just ask in your own words, or send a voice note — for example \"what's on today\" or \"remind me tomorrow at 9 to call the warehouse\".",
+  "telegram.menuButton": "Open Agentic OS",
+  "telegram.help.body": "I'm MILA, your assistant from Agentic OS. Write in your own words or send a voice note.\n\nCommands:\n/today — today's plan\n/tasks — my tasks\n/erp — production snapshot\n/ask — how to ask\n/stop — unlink this chat\n\nEvery notification carries buttons: mark it done, push it an hour or to this evening, open it in the app, or hear it read out.",
+  "telegram.sys.tooLongToListen": "This message is too long to listen to.",
+  "telegram.sys.speakFailed": "I could not read that out — please try again.",
+  "telegram.sys.voiceUnclear": "I could not make out the voice note — please write it instead.",
+  "telegram.sys.filesUnsupported": "I read text and voice notes so far. Describe what is in the file and I'll help.",
+  "telegram.sys.linkExpired": "That link has expired. Open Agentic OS → Personal → Telegram and tap Link again.",
+  "telegram.sys.linked": "Done — Telegram is linked. MILA can send reminders, the morning brief and anything you ask her to forward here. What I can do: /help",
+  "telegram.sys.unlinked": "Unlinked. You can link again from Agentic OS.",
+  "telegram.sys.notLinked": "I only answer linked colleagues. Open Agentic OS → Personal → Telegram and tap Link.",
+  "telegram.sys.speaking": "Reading it out — this takes a few seconds.",
+  "telegram.sys.strangerChat": "This chat is not linked.",
+
  "shell.theme": "Toggle theme", "shell.help": "Help", "shell.notifications": "Notifications",
     "shell.language": "Interface language",
     "shell.pages": "Pages", "shell.agents": "Agents", "shell.actions": "Actions",
@@ -1365,6 +1429,38 @@ const COPY = {
     "shell.projectOwner": "Loyiha egasi", "shell.settings": "Sozlamalar",
     "shell.signOut": "Chiqish", "shell.componentLibrary": "Komponentlar kutubxonasi",
     "shell.menu": "Menyu",
+  "telegram.card.reminder": "Eslatma", "telegram.card.task": "Vazifa",
+  "telegram.card.calendar": "Kalendar", "telegram.card.message": "Xabar",
+  "telegram.card.agent": "Agent", "telegram.card.erp": "ERP",
+  "telegram.card.erpWeek": "Haftalik ERP", "telegram.card.evening": "Kun yakuni",
+  "telegram.card.brief": "Ertalabki brif", "telegram.card.lead": "Ariza",
+  "telegram.card.notice": "Bildirishnoma",
+  "telegram.act.done": "Bajarildi", "telegram.act.hour": "+1 soat",
+  "telegram.act.evening": "Kechqurun", "telegram.act.ack": "Tushunarli",
+  "telegram.act.open": "Ochish", "telegram.act.listen": "Ovoz chiqarib o‘qish",
+  "telegram.done": "Bajarildi deb belgiladim.", "telegram.acked": "O‘qilmaganlardan olib tashladim.",
+  "telegram.snoozed": "{time} da eslataman.", "telegram.actionGone": "Bu nimaga tegishli ekanini topolmadim.",
+  "telegram.actionFailed": "Bo‘lmadi — ilovada urinib ko‘ring.",
+  "telegram.cmd.today": "Bugungi reja", "telegram.cmd.tasks": "Mening vazifalarim",
+  "telegram.cmd.erp": "Ishlab chiqarish sharhi", "telegram.cmd.ask": "Qanday so‘rash kerak",
+  "telegram.cmd.help": "Nima qila olaman", "telegram.cmd.stop": "Bu chatni uzish",
+  "telegram.ask.today": "Bugun menda nima bor: kalendar, vazifalar va shoshilinch ishlar?",
+  "telegram.ask.tasks": "Ochiq vazifalarimni ko‘rsat.",
+  "telegram.ask.erp": "Ishlab chiqarish sharhini ber: ishlab chiqarish va tayyor mahsulot qoldig‘i.",
+  "telegram.ask.prompt": "Oddiy so‘zlar bilan so‘rang yoki ovozli xabar yuboring — masalan «bugun menda nima bor» yoki «ertaga soat 9 da omborga qo‘ng‘iroq qilishni eslat».",
+  "telegram.menuButton": "Agentic OS'ni ochish",
+  "telegram.help.body": "Men MILA — Agentic OS'dagi yordamchingizman. Oddiy so‘zlar bilan yozing yoki ovozli xabar yuboring.\n\nBuyruqlar:\n/today — bugungi reja\n/tasks — mening vazifalarim\n/erp — ishlab chiqarish sharhi\n/ask — qanday so‘rash kerak\n/stop — bu chatni uzish\n\nHar bir bildirishnomada tugmalar bor: bajarildi deb belgilash, bir soatga yoki kechgacha qoldirish, ilovada ochish, ovoz chiqarib eshitish.",
+  "telegram.sys.tooLongToListen": "Bu xabar tinglash uchun juda uzun.",
+  "telegram.sys.speakFailed": "Ovoz chiqarib o‘qiy olmadim — yana urinib ko‘ring.",
+  "telegram.sys.voiceUnclear": "Ovozli xabarni tushunolmadim — matn bilan yozing, iltimos.",
+  "telegram.sys.filesUnsupported": "Hozircha faqat matn va ovozli xabarlarni o‘qiyman. Faylda nima borligini so‘z bilan tasvirlab bering.",
+  "telegram.sys.linkExpired": "Bu havola eskirgan. Agentic OS → Shaxsiy → Telegram bo‘limini oching va «Bog‘lash» tugmasini yana bosing.",
+  "telegram.sys.linked": "Tayyor — Telegram bog‘landi. MILA bu yerga eslatmalar, ertalabki brif va siz so‘ragan hamma narsani yubora oladi. Nima qila olaman: /help",
+  "telegram.sys.unlinked": "Uzildi. Agentic OS orqali qayta bog‘lash mumkin.",
+  "telegram.sys.notLinked": "Men faqat bog‘langan xodimlarga javob beraman. Agentic OS → Shaxsiy → Telegram bo‘limini oching va «Bog‘lash» tugmasini bosing.",
+  "telegram.sys.speaking": "Ovoz chiqarib o‘qiyapman — bir necha soniya oladi.",
+  "telegram.sys.strangerChat": "Bu chat bog‘lanmagan.",
+
  "shell.theme": "Mavzuni almashtirish", "shell.help": "Yordam", "shell.notifications": "Bildirishnomalar",
     "shell.language": "Interfeys tili",
     "shell.pages": "Sahifalar", "shell.agents": "Agentlar", "shell.actions": "Harakatlar",
@@ -2455,12 +2551,21 @@ export function getLocale() {
   return currentLocale;
 }
 
-export function t(key, values = {}) {
-  const template = COPY[currentLocale]?.[key] || COPY["en-US"]?.[key] || key;
+// Look up one string in one named locale, without touching the module's idea of
+// the current one. The browser has a single reader and can keep a global; the
+// server is answering several people at once, and setLocale() there would mean
+// one person's language leaking into another person's message.
+export function tIn(locale, key, values = {}) {
+  const wanted = normalize(locale);
+  const template = COPY[wanted]?.[key] || COPY["en-US"]?.[key] || key;
   return Object.entries(values).reduce(
     (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
     template,
   );
+}
+
+export function t(key, values = {}) {
+  return tIn(currentLocale, key, values);
 }
 
 export function localizedDate(value, options = { day: "numeric", month: "short" }) {

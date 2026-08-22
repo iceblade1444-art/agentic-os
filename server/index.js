@@ -319,6 +319,9 @@ server.listen(config.port, async () => {
   reminders.start();
   morningBrief.start();
   telegram.assistant = telegramAssistant;
+  // Injected rather than imported: reminders.js reaches push-service.js, which
+  // reaches back here. Snoozing a card is what needs it.
+  telegram.reminders = reminders;
   telegram.start();
   salesBot.start();
   erpWeekly.start();
