@@ -148,11 +148,11 @@ export function lineChart({ series, labels = [], w = 640, h = 240, area = true, 
   for (let r = 0; r <= rows; r++) {
     const y = padT + (r / rows) * ih;
     grid += `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="var(--chart-grid)"/>`;
-    if (showAxis) grid += `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-3)" font-size="10">${Math.round(max - (r / rows) * max)}</text>`;
+    if (showAxis) grid += `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-3)" font-size="12">${Math.round(max - (r / rows) * max)}</text>`;
   }
   let xlabels = "";
   if (showAxis && labels.length) labels.forEach((lb, i) => {
-    xlabels += `<text x="${xAt(i)}" y="${h - 8}" text-anchor="middle" fill="var(--text-3)" font-size="10">${esc(lb)}</text>`;
+    xlabels += `<text x="${xAt(i)}" y="${h - 8}" text-anchor="middle" fill="var(--text-3)" font-size="12">${esc(lb)}</text>`;
   });
   const paths = series.map((s, si) => {
     const pts = s.data.map((v, i) => [xAt(i), yAt(v)]);
@@ -187,7 +187,7 @@ export function donut({ segments, size = 180, thickness = 22, centerLabel = "", 
     <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${thickness}"/>
     ${rings}
     ${centerLabel ? `<text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="var(--text)" font-size="26" font-weight="800">${esc(centerLabel)}</text>` : ""}
-    ${centerSub ? `<text x="${cx}" y="${cy + 18}" text-anchor="middle" fill="var(--text-3)" font-size="11">${esc(centerSub)}</text>` : ""}
+    ${centerSub ? `<text x="${cx}" y="${cy + 18}" text-anchor="middle" fill="var(--text-3)" font-size="12">${esc(centerSub)}</text>` : ""}
   </svg>`;
 }
 

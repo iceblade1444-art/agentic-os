@@ -13,7 +13,7 @@ function ensureUI() {
   if (ui) return ui;
   const wrap = document.createElement("div");
   wrap.id = "milaLocalOverlay";
-  wrap.style.cssText = "position:fixed;right:24px;bottom:24px;width:340px;z-index:9999;background:var(--card-bg,#151527);border:1px solid rgba(128,128,255,.25);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.45);padding:14px;font-size:13px";
+  wrap.style.cssText = "position:fixed;right:24px;bottom:24px;width:340px;z-index:9999;background:var(--surface);border:1px solid rgba(128,128,255,.25);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.45);padding:14px;font-size:13px";
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px">
       <span style="width:10px;height:10px;border-radius:50%;background:#22c55e" id="mlDot"></span>

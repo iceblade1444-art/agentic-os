@@ -146,7 +146,7 @@ result = agent.<span class="tok-fn">run</span>(<span class="tok-str">"Latest tre
           </div>
           <div class="section-title mt-6">Radius &amp; spacing</div>
           <div class="row gap-2">${[6, 10, 14, 18, 24].map((r) => `<div style="width:44px;height:44px;background:var(--surface-3);border:1px solid var(--border);border-radius:${r}px"></div>`).join("")}</div>
-          <div class="row gap-2 mt-4">${[4, 8, 12, 16, 24, 32].map((s) => `<div class="stack" style="align-items:center"><div style="width:${s}px;height:${s}px;background:var(--primary)"></div><span class="dim" style="font-size:10px">${s}</span></div>`).join("")}</div>
+          <div class="row gap-2 mt-4">${[4, 8, 12, 16, 24, 32].map((s) => `<div class="stack" style="align-items:center"><div style="width:${s}px;height:${s}px;background:var(--primary)"></div><span class="dim" style="font-size:12px">${s}</span></div>`).join("")}</div>
         </div>
       </div>`)}
 

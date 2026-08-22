@@ -324,7 +324,7 @@ function openNotifications(anchor) {
   ];
   const panel = el(`<div class="notif">
     <div class="notif-head"><span class="fw-700">Notifications</span><div class="spacer"></div><button class="btn btn-ghost sm" id="notifClear">Mark all read</button></div>
-    ${items.map((i) => `<div class="notif-item"><span class="notif-dot" style="background:${i.dot}"></span><div class="stack" style="min-width:0"><span class="fw-600 text-sm">${i.title}</span><span class="cell-sub">${i.desc}</span></div><div class="spacer"></div><span class="dim nowrap" style="font-size:11px">${i.at}</span></div>`).join("")}
+    ${items.map((i) => `<div class="notif-item"><span class="notif-dot" style="background:${i.dot}"></span><div class="stack" style="min-width:0"><span class="fw-600 text-sm">${i.title}</span><span class="cell-sub">${i.desc}</span></div><div class="spacer"></div><span class="dim nowrap" style="font-size:12px">${i.at}</span></div>`).join("")}
     <div class="menu-sep"></div>
     <a class="menu-item" href="#/observability">${icon("activity")}<span>View all activity</span></a>
   </div>`);
