@@ -140,6 +140,11 @@ button { font-family: inherit; cursor: pointer; }
 .rail-count.warning { background: var(--warning); color: #2b1a02; }
 .rail-count[hidden] { display: none; }
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 10px; }
+/* The rail carries an avatar and the section column carries a full name-and-role
+   chip, and both open the same menu. When the column is on screen that is two
+   account buttons side by side. Whichever column is actually visible owns the
+   account; the rail only takes it over when the column has become a flyout. */
+.rail-foot #user-menu { display: none; }
 .rail-orb {
   width: 40px; height: 40px; border-radius: 50%; flex: none;
   background: conic-gradient(from 210deg, var(--teal), var(--primary), var(--violet-400), var(--teal));
@@ -275,7 +280,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 .ui-language svg { width: 14px; height: 14px; flex: none; }
 .ui-language select {
-  width: 34px; border: 0; outline: 0; padding: 0; background: transparent;
+  /* stretch, or the control is 34px tall and only its middle 17px opens the
+     menu — clicking the visible chip anywhere else does nothing. */
+  width: 34px; align-self: stretch; border: 0; outline: 0; padding: 0; background: transparent;
   color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .ui-language select:disabled { cursor: wait; opacity: .6; }
@@ -287,8 +294,8 @@ button { font-family: inherit; cursor: pointer; }
 }
 .login-language svg { width: 13px; height: 13px; }
 .login-language select {
-  width: 34px; border: 0; outline: 0; padding: 0; background: transparent;
-  color: var(--text); font: inherit; font-size: 12px; font-weight: 700;
+  width: 34px; align-self: stretch; border: 0; outline: 0; padding: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
 }
 
 /* ---------- Page container ---------- */
@@ -439,6 +446,12 @@ button { font-family: inherit; cursor: pointer; }
 .input:focus, .select:focus, .textarea:focus {
   outline: none; border-color: var(--primary-ink); box-shadow: 0 0 0 3px var(--primary-soft);
 }
+/* The option list is painted by the browser and inherits the select, not the
+   box around it. Three selects here sit on a transparent background — both
+   language pickers and the Claude project picker — and handed a near-white
+   foreground to whatever ground the platform picked. color-scheme in
+   tokens.css settles the ground; naming both ends here settles the rest. */
+select option { background-color: var(--surface); color: var(--text); }
 .textarea { resize: vertical; min-height: 92px; }
 .select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7688' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
 .input.error, .textarea.error { border-color: var(--error-ink); }
@@ -897,10 +910,18 @@ body.nav-open { overflow: hidden; }
     position: absolute; left: var(--rail-w); top: 0; bottom: 0; width: 200px;
     background: var(--bg-1); border-right: 1px solid var(--border);
     box-shadow: var(--shadow-lg); z-index: 91;
-    transform: translateX(-102%); transition: transform var(--dur) var(--ease);
+    /* It is anchored at left:var(--rail-w), so sliding it by its own width
+       alone leaves the last 68px of it sitting on top of the rail: opaque,
+       z-index 91, swallowing every click on a nav item. It has to travel its
+       own width AND the rail offset to actually be gone. */
+    transform: translateX(calc(-100% - var(--rail-w) - 6px));
+    transition: transform var(--dur) var(--ease);
   }
   .sidebar.expanded { overflow: visible; }
   .sidebar.expanded .sectionnav { transform: none; }
+  /* The column is a flyout now, so its chip is behind a tap — the rail takes
+     the account back. */
+  .rail-foot #user-menu { display: grid; }
 }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -916,6 +937,8 @@ body.nav-open { overflow: hidden; }
     position: static; width: auto; transform: none; box-shadow: none;
     border-right: 0; background: transparent;
   }
+  /* Both columns are back inside the drawer, so the chip is visible again. */
+  .rail-foot #user-menu { display: none; }
   .menu-toggle { display: grid; }
   /* Once the menu button joins the row there is no longer room for everything.
      The live/demo badge and the help button are the two that carry least — the

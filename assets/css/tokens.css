@@ -142,6 +142,12 @@
 /* ---------------- Dark theme (default) ---------------- */
 :root,
 :root[data-theme="dark"] {
+
+  /* Native controls the page does not paint: <select> popups, scrollbars,
+     date pickers. Without this the browser draws them light under a dark
+     page, and the language dropdown put near-white text on a white popup. */
+  color-scheme: dark;
+
   --bg: #080b14;
   --bg-1: #0b0f19;
   --surface: #10151f;
@@ -196,6 +202,8 @@
 
 /* ---------------- Light theme ---------------- */
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --bg: #f4f5fa;
   --bg-1: #eef0f7;
   --surface: #ffffff;
