@@ -76,6 +76,17 @@ import { mountMiniApp, telegramAuthHandler } from "./routes/telegram-miniapp.js"
 import { salesBot } from "./lib/sales-bot.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+// Read once, from the one place that declares it. The literal "1.0.0" that
+// used to sit in /api/health never moved in the life of the repository, so
+// the endpoint could not answer the only question anyone asks it after a
+// deploy: is production running what I just pushed.
+const VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 const app = express();
 const server = createServer(app);
 const postgresOutbox = new PostgresShadowOutbox({ dataDir: config.dataDir });
@@ -169,7 +180,7 @@ app.use("/api", rateLimit({ windowMs: 60000, max: 600 }));
 // ---- Public API ----
 app.get("/api/health", (req, res) =>
   res.json({
-    ok: true, name: "agentic-os", version: "1.0.0",
+    ok: true, name: "agentic-os", version: VERSION,
     features: { llm: true, mcp: true, integrations: true, operations: true, push: pushService.configured() },
     providers: {
       openai: !!(config.openai.key || db.integrations.byProvider("openai")?.config?.apiKey),
