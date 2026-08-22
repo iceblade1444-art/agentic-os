@@ -101,6 +101,21 @@ export class TelegramBridge {
 
   /// Which account, if any, this Telegram chat belongs to.
   ///
+  /// Public because the Mini App needs it: Telegram proves who is asking, and
+  /// this is the only thing that says whether that person is anybody here. For
+  /// a private chat the chat id and the user id are the same number, which is
+  /// what makes a bot link usable as a Mini App credential.
+  ///
+  /// Read-only and one-directional on purpose — it answers "whose chat is
+  /// this", never "what is so-and-so's chat".
+  accountForChat(chatId) {
+    const id = Number(chatId);
+    return Number.isSafeInteger(id) ? this.#userIdForChat(id) : null;
+  }
+
+  // For someone we already know, their profile. For a stranger — the expired
+  // link, the wrong chat — Telegram's own language_code is the only signal
+  // there is, and it beats answering everyone in Russian.
   #chatLocale(chatId, from = null) {
     const userId = this.#userIdForChat(chatId);
     if (userId) return this.localeFor(userId);

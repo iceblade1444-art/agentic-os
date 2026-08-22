@@ -57,12 +57,16 @@ button { font-family: inherit; cursor: pointer; }
 /* ============================================================
    App shell
    ============================================================ */
+/* svh, not dvh, for anything that only sets a minimum: dvh grows when the
+   browser toolbar retracts, and a min-height that grows mid-scroll reflows the
    page under the reader's thumb. svh is the short measurement, so the shell
    fills the screen without ever inventing a scrollbar. The plain vh line above
    each one is the fallback for browsers that predate the unit. */
 .app-shell { min-height: 100vh; min-height: 100svh; }
 /* Inside Telegram the container decides how tall the page is, and svh is the
    browser's answer to a question Telegram is not being asked. */
+[data-surface="telegram"] .app-shell,
+[data-surface="telegram"] .layout { min-height: var(--tg-viewport); }
 .layout {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;

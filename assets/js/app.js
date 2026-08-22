@@ -7,6 +7,7 @@ import { mountMilaDock } from "./mila-dock.js";
 import { renderOnboarding } from "./onboarding.js";
 import { SUPPORTED_LOCALES, getLocale, setLocale, t as tr } from "./i18n.js";
 import { saveProfileLocale } from "./profile-locale.js";
+import { authenticate as telegramAuthenticate, inTelegram, mountTelegramBridge } from "./telegram-miniapp.js";
 
 import dashboard from "./pages/dashboard.js";
 import agents from "./pages/agents.js";
@@ -667,6 +668,10 @@ async function boot() {
   // Inside Telegram, sign in with what the container already proved before the
   // app has a chance to decide it needs a login form. Outside it this returns
   // null and nothing changes.
+  if (inTelegram()) {
+    const signedIn = await telegramAuthenticate();
+    if (signedIn?.error) console.warn("[telegram]", signedIn.code || signedIn.error);
+  }
   await api.detect();
   if (!api.needsAuth) {
     // setScope swaps in this account's own settings, so both preferences have
@@ -700,6 +705,9 @@ async function boot() {
     }
   }
   renderShell();
+  // After the shell, so the container's Back and Main buttons have something
+  // to point at. A no-op outside Telegram.
+  mountTelegramBridge();
   // Anyone whose nav has Mila Live keeps the floating call widget while they
   // browse other tabs — otherwise leaving the page would strand a live call.
   if (pages().mila) mountMilaDock();
