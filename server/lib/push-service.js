@@ -5,6 +5,8 @@ import crypto from "node:crypto";
 import { config } from "../config.js";
 import { pushDevices } from "./push-devices.js";
 import { telegram } from "./telegram.js";
+import { activity, entryFromItem } from "./activity.js";
+import { cardKindOf } from "./telegram-cards.js";
 
 const oauthUrl = "https://oauth2.googleapis.com/token";
 const messagingScope = "https://www.googleapis.com/auth/firebase.messaging";
@@ -128,6 +130,15 @@ class PushService {
     // anomaly — and offers the verbs that kind supports. Whether it is also
     // read aloud is item.speak, decided by whoever composed it, since they are
     // holding the profile already.
+    // The phone's feed is written here because this is the one place every
+    // notification passes through, and it already knows whose it is. Recording
+    // it adds no audience: the same item is on its way to that person now.
+    // Never allowed to break delivery — a feed is worth less than a reminder.
+    try {
+      activity.append(userId, entryFromItem(userId, item, cardKindOf));
+    } catch (error) {
+      console.warn(`[activity] not recorded for ${userId}: ${error.message}`);
+    }
     telegram.sendCard(userId, item)
       .catch((error) => console.warn(`[telegram] delivery failed for ${userId}: ${error.message}`));
 

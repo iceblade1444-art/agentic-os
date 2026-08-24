@@ -11,6 +11,7 @@ import { googleWorkspace } from "./google-workspace.js";
 import { personalFiles } from "./personal-files.js";
 import { personalProfiles } from "./personal-profile.js";
 import { pushDevices } from "./push-devices.js";
+import { activity } from "./activity.js";
 import { reminders } from "./reminders.js";
 import { messenger } from "./messenger.js";
 import { telegram } from "./telegram.js";
@@ -29,6 +30,7 @@ export async function deleteUserAccount(id, dependencies = {}) {
   const personalFileStore = dependencies.personalFiles || personalFiles;
   const profileStore = dependencies.personalProfiles || personalProfiles;
   const pushDeviceStore = dependencies.pushDevices || pushDevices;
+  const activityStore = dependencies.activity || activity;
   const reminderStore = dependencies.reminders || reminders;
   const messengerStore = dependencies.messenger || messenger;
   const telegramStore = dependencies.telegram || telegram;
@@ -44,6 +46,9 @@ export async function deleteUserAccount(id, dependencies = {}) {
   // Everything MILA was told about this person goes with the account.
   profileStore.clear(id);
   pushDeviceStore.removeUser(id);
+  // The feed of what MILA did for them. Per-user, so it would otherwise
+  // outlive the account in full.
+  activityStore.removeUser(id);
   // Their reminders would otherwise keep coming due forever, and they would stay
   // a member of every channel — counted in the header, missing from the list,
   // because one reads raw ids and the other resolves them against the directory.

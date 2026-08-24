@@ -72,6 +72,7 @@ import { erpAnomalies } from "./lib/erp-anomalies.js";
 import { eventAlerts } from "./lib/event-alerts.js";
 import { telegramAssistant } from "./lib/telegram-assistant.js";
 import needsYouRoute from "./routes/needs-you.js";
+import activityRoute from "./routes/activity.js";
 import { mountMiniApp, telegramAuthHandler } from "./routes/telegram-miniapp.js";
 import { salesBot } from "./lib/sales-bot.js";
 
@@ -269,6 +270,8 @@ app.use("/api/member", member);
 // Not operator-gated: everyone has a queue. Which sources fill it is decided by
 // role inside needs-you.js.
 app.use("/api/needs-you", needsYouRoute);
+// The feed the phone opens on. Own entries only — see routes/activity.js.
+app.use("/api/activity", activityRoute);
 app.use("/api/messenger", messenger);
 app.use("/api/personal", personal);
 app.use("/api/telemetry", telemetry);
