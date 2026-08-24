@@ -54,6 +54,12 @@ export const config = {
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
   livekitUrl: strip(env.LIVEKIT_URL, "http://host.docker.internal:7880"),
+  // The room token the phone arrives with is signed with these. Without them
+  // the signalling gate can only recognise a console session, and a phone —
+  // which authenticates against the MILA backend, not this one — is turned
+  // away at the door with a token LiveKit itself would have accepted.
+  livekitApiKey: strip(env.LIVEKIT_API_KEY, ""),
+  livekitApiSecret: strip(env.LIVEKIT_API_SECRET, ""),
   operationsStateFile: env.OPS_STATE_FILE || "/run/agentic-os/operations.json",
   operationsBackupRequestFile: env.OPS_BACKUP_REQUEST_FILE || "/run/agentic-os/backup.request",
   operationsRestoreRequestFile: env.OPS_RESTORE_REQUEST_FILE || "/run/agentic-os/restore.request",
