@@ -139,11 +139,42 @@ test("MILA can remember, read and forget — on her own account only", async () 
   const other = await actions.call("read_about_me", {}, { actor: OTHER.name, user: OTHER });
   assert.deepEqual(other.facts, []);
 
-  await actions.call("forget_about_me", { factId: saved.fact.id }, { actor: OWNER.name, user: OWNER });
-  assert.equal(s.profiles.count(OWNER.id), 0);
+  // Forgetting is asked about now. Everything else on this desk adds something
+  // and is one tap to undo; this one deletes, and afterwards MILA does not know
+  // the fact was ever true.
+  const staged = await actions.call(
+    "forget_about_me", { factId: saved.fact.id }, { actor: OWNER.name, user: OWNER },
+  );
+  assert.equal(staged.confirmationRequired, true);
+  assert.match(staged.summary, /Forget the fact/);
+  assert.equal(s.profiles.count(OWNER.id), 1, "nothing may be deleted before the answer");
+
+  // A token minted for one person cannot be spent by another.
   await assert.rejects(
-    actions.call("forget_about_me", { factId: saved.fact.id }, { actor: OWNER.name, user: OWNER }),
-    (error) => error.status === 404,
+    actions.call(
+      "forget_about_me",
+      { confirmationToken: staged.confirmationToken },
+      { actor: OTHER.name, user: OTHER },
+    ),
+    (error) => error.status === 409,
+  );
+  assert.equal(s.profiles.count(OWNER.id), 1, "and the refusal must not consume it either");
+
+  await actions.call(
+    "forget_about_me",
+    { confirmationToken: staged.confirmationToken },
+    { actor: OWNER.name, user: OWNER },
+  );
+  assert.equal(s.profiles.count(OWNER.id), 0);
+
+  // Single use: the same token cannot delete twice.
+  await assert.rejects(
+    actions.call(
+      "forget_about_me",
+      { confirmationToken: staged.confirmationToken },
+      { actor: OWNER.name, user: OWNER },
+    ),
+    (error) => error.status === 409,
   );
   s.cleanup();
 });

@@ -26,6 +26,15 @@ const WRITE_ACTIONS = new Set([
   "create_calendar_event", "reschedule_calendar_event", "cancel_calendar_event",
   "create_erp_task", "send_erp_notification", "save_company_knowledge", "learn_skill",
 ]);
+// Personal actions that still have to be asked about. They execute through the
+// immediate path like the rest of the desk, but they destroy something rather
+// than adding to it: a task created by mistake is one tap to delete, a fact
+// forgotten by mistake is gone and MILA no longer knows it was ever true.
+//
+// Kept apart from WRITE_ACTIONS because that set also decides which executor
+// runs; these belong to the read path and only borrow the gate.
+const CONFIRMED_PERSONAL_ACTIONS = new Set(["forget_about_me"]);
+
 const ERP_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
 const ERP_TARGETS = new Set(["user", "department", "safe_group"]);
 
@@ -361,6 +370,7 @@ function actionSummary(name, args) {
   if (name === "write_obsidian_note") return `${args.mode === "append" ? "Append to" : "Create"} Obsidian note “${bounded(args.path, 160)}”`;
   if (name === "ask_claude_code") return `Start Claude Workspace task “${bounded(args.title || args.request, 120)}”`;
   if (name === "call_mcp_tool") return `Call MCP tool “${bounded(args.tool, 120)}” on “${bounded(args.server, 120)}”`;
+  if (name === "forget_about_me") return `Forget the fact ${bounded(args.factId, 120)} from your personal profile`;
   return "Run Agentic OS action";
 }
 
@@ -457,10 +467,14 @@ function cleanMutationArgs(name, args = {}) {
     tool: bounded(args.tool || args.name, 160),
     args: args.args && typeof args.args === "object" && !Array.isArray(args.args) ? args.args : {},
   };
+  if (name === "forget_about_me") return { factId: bounded(args.factId, 120) };
   return {};
 }
 
 function requireFields(name, args) {
+  if (name === "forget_about_me" && !args.factId) {
+    throw Object.assign(new Error("Which fact should be forgotten?"), { status: 400 });
+  }
   if (name === "learn_skill") {
     if (!args.instruction) throw Object.assign(new Error("Describe the process the fleet should learn"), { status: 400 });
   }
@@ -556,17 +570,23 @@ export function createMilaActions(options = {}) {
     cleanupConfirmations();
     const token = makeToken();
     const summary = actionSummary(name, args);
-    pending.set(token, { name, args, actor, summary, expiresAt: now() + CONFIRMATION_TTL_MS });
+    pending.set(token, {
+      name, args, actor, summary, expiresAt: now() + CONFIRMATION_TTL_MS, stagedAt: now(),
+    });
     return { confirmationRequired: true, confirmationToken: token, summary, expiresInSeconds: CONFIRMATION_TTL_MS / 1000 };
   }
 
   function consume(name, token, actor) {
     cleanupConfirmations();
     const value = pending.get(token);
-    pending.delete(token);
+    // Checked before it is removed. Deleting first meant anyone presenting
+    // somebody else's token destroyed their staged action on the way to being
+    // refused — the refusal was correct and the damage was already done.
     if (!value || value.name !== name || value.actor !== actor || value.expiresAt <= now()) {
       throw Object.assign(new Error("Confirmation expired or does not match this action"), { status: 409 });
     }
+    // Single use, and only once it has been earned.
+    pending.delete(token);
     return value.args;
   }
 
@@ -1049,11 +1069,16 @@ export function createMilaActions(options = {}) {
     // name, so a token minted for one user can never be spent by another.
     const identity = bounded(context.user?.id || actor, 200);
     const scope = { actor, user: context.user || null };
-    if (WRITE_ACTIONS.has(action)) {
+    // Two kinds of gated action, one gate. WRITE_ACTIONS reach other people;
+    // CONFIRMED_PERSONAL_ACTIONS stay on this desk but destroy something.
+    const gated = WRITE_ACTIONS.has(action) || CONFIRMED_PERSONAL_ACTIONS.has(action);
+    if (gated) {
       const token = bounded(args.confirmationToken, 200);
       if (token) {
         const confirmed = consume(action, token, identity);
-        const result = await executeWrite(action, confirmed, scope);
+        const result = WRITE_ACTIONS.has(action)
+          ? await executeWrite(action, confirmed, scope)
+          : await executeRead(action, confirmed, scope);
         // Only after it actually happened: a staged action is not history.
         await record(action, confirmed, result, scope);
         return result;
@@ -1082,7 +1107,41 @@ export function createMilaActions(options = {}) {
     return executeRead(action, args, scope);
   }
 
-  return { call, pendingCount: () => pending.size };
+  /// Everything this person has staged and not yet answered.
+  ///
+  /// Without this the gate is real but invisible: MILA prepares a cancellation,
+  /// the conversation ends, and five minutes later it expires with nobody ever
+  /// having been asked. The token is returned because it is already the
+  /// caller's own — stage() handed it to them — and it is single-use and bound
+  /// to their account, so listing it widens nothing.
+  function listPending(identity) {
+    cleanupConfirmations();
+    const id = bounded(identity, 200);
+    if (!id) return [];
+    return [...pending.entries()]
+      .filter(([, value]) => value.actor === id)
+      .sort((a, b) => a[1].stagedAt - b[1].stagedAt)
+      .map(([token, value]) => ({
+        token,
+        action: value.name,
+        summary: value.summary,
+        stagedAt: new Date(value.stagedAt).toISOString(),
+        expiresAt: new Date(value.expiresAt).toISOString(),
+      }));
+  }
+
+  /// Answer one. Declining is a first-class outcome, not a timeout: a person
+  /// who says no should see it go, not watch it linger for five minutes.
+  function decline(token, identity) {
+    cleanupConfirmations();
+    const key = bounded(token, 200);
+    const value = pending.get(key);
+    if (!value || value.actor !== bounded(identity, 200)) return false;
+    pending.delete(key);
+    return true;
+  }
+
+  return { call, listPending, decline, pendingCount: () => pending.size };
 }
 
 export const milaActions = createMilaActions();

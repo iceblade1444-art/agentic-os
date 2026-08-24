@@ -86,6 +86,36 @@ export function awaitingDecision(approvals) {
   }));
 }
 
+/**
+ * Actions MILA has prepared and is holding until this person answers.
+ *
+ * The gate itself was never the missing part — a write action without a token
+ * has always refused to run. What was missing is that nobody could see one
+ * waiting. MILA would prepare a cancellation, the conversation would end, and
+ * five minutes later it expired with the question never having been asked out
+ * loud. A gate nobody can answer is a gate that only ever says no.
+ *
+ * Personal by construction: the caller's own id is the only key passed in.
+ */
+export function awaitingConfirmation(staged) {
+  if (!Array.isArray(staged)) return [];
+  return staged.slice(0, 10).map((item) => ({
+    id: `cnf_${clean(item.token, 200)}`,
+    kind: "confirmation",
+    // Worst tier: it is not merely late, it is stopped and holding, and it
+    // stops for good in a few minutes.
+    severity: "blocked",
+    title: clean(item.summary, 200) || "MILA ждёт подтверждения",
+    detail: clean(item.action, 80),
+    since: clean(item.stagedAt, 40),
+    expiresAt: clean(item.expiresAt, 40),
+    // Carried so a client can answer without a second round trip. Already the
+    // caller's own, single-use, and bound to their account.
+    confirmationToken: clean(item.token, 200),
+    route: "personal",
+  }));
+}
+
 /** The person's own tasks that are past their date. */
 export function overdueTasks(tasks, today) {
   if (!Array.isArray(tasks)) return [];
@@ -138,6 +168,11 @@ export async function needsYou(user, deps = {}) {
     if (workspaces) {
       own.push(...overdueTasks(workspaces.listTasks(user.id), today));
       own.push(...urgentUnread(workspaces.listInbox(user.id, { limit: 100 })));
+    }
+    // Everyone has these, Member and operator alike: they are the caller's own
+    // staged actions and belong to no fleet.
+    if (deps.staged) {
+      own.push(...awaitingConfirmation(deps.staged(user.id)));
     }
   } catch (error) {
     // One broken store must not empty the whole queue: a partial answer here is

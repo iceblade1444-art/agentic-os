@@ -11,6 +11,7 @@ import { authenticatedUser } from "../lib/auth.js";
 import { config } from "../config.js";
 import { hermesKanbanRequest, kanbanPath } from "../lib/hermes-kanban.js";
 import { memberWorkspaces } from "../lib/member-workspace.js";
+import { milaActions } from "../lib/mila-actions.js";
 import { needsYou } from "../lib/needs-you.js";
 import { pendingApprovals } from "../lib/pulse.js";
 
@@ -33,6 +34,8 @@ r.get("/", async (req, res) => {
       workspaces: memberWorkspaces,
       board: () => settle(hermesKanbanRequest(kanbanPath("/board", config.hermesKanbanBoard)), null),
       approvals: () => settle(pendingApprovals(), null),
+      // Synchronous and in-process: what MILA is holding for this person.
+      staged: (id) => milaActions.listPending(id),
     });
     res.json(result);
   } catch (error) {

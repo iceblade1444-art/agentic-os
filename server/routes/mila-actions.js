@@ -77,4 +77,57 @@ r.post("/actions", async (req, res) => {
   }
 });
 
+// What MILA is holding, and the answer to it.
+//
+// The gate has always refused to run an unconfirmed write. What it could not
+// do is be answered anywhere except by continuing the same conversation, so a
+// staged action whose chat ended simply expired unasked. These two make it a
+// queue: the phone shows it in "needs you" and answers it from there.
+r.get("/pending", (req, res) => {
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+  const items = milaActions.listPending(user.id);
+  res.json({ items, count: items.length });
+});
+
+r.post("/confirm", async (req, res) => {
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+  const token = String(req.body?.token || "").slice(0, 200);
+  const decision = String(req.body?.decision || "");
+  if (decision !== "approve" && decision !== "decline") {
+    return res.status(400).json({ error: "Decision must be approve or decline" });
+  }
+
+  // Looked up among this person's own staged actions. Someone else's token is
+  // simply not in the list, so it reads as expired rather than as forbidden —
+  // there is nothing to learn from the difference.
+  const staged = milaActions.listPending(user.id).find((item) => item.token === token);
+  if (!staged) {
+    return res.status(409).json({ error: "Confirmation expired or does not match this action" });
+  }
+
+  if (decision === "decline") {
+    milaActions.decline(token, user.id);
+    return res.json({ ok: true, decision, action: staged.action, summary: staged.summary });
+  }
+
+  // The same door as any other call, so the channel rules still apply: a voice
+  // call cannot approve something a voice call was never allowed to start.
+  if (!permitted(req, staged.action)) {
+    return res.status(403).json({ error: "forbidden", code: "mila_action_restricted", channel: requestChannel(req) });
+  }
+  try {
+    // Only the token travels. The arguments are the ones that were staged, so
+    // what runs is what was described to the person, not what a later request
+    // says it was.
+    const result = await milaActions.call(staged.action, { confirmationToken: token }, {
+      actor: user.name || "Creator", user,
+    });
+    res.json({ ok: true, decision, action: staged.action, result });
+  } catch (error) {
+    res.status(error.status >= 400 && error.status < 600 ? error.status : 500).json({ error: error.message });
+  }
+});
+
 export default r;
