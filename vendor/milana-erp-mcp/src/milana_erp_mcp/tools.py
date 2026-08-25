@@ -1079,6 +1079,24 @@ def _model_composition(model: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+BOM_PERMISSION = "modeling.bom"
+
+
+def _may_read_bom(user: dict[str, Any]) -> bool:
+    """Whether this ERP account is allowed the bill of materials.
+
+    The model detail endpoint embeds the BOM and does not check the permission
+    that gates the Bill of materials page, so an account granted Models alone
+    still receives it. Somebody unticking that box in the ERP has said what
+    they want; routing around it because the API forgot to enforce it would
+    make the assistant a way of getting at data its own operator withheld.
+    """
+    granted = user.get("permissions") or []
+    extra = user.get("extra_permissions") or []
+    both = [*granted, *extra] if isinstance(granted, list) and isinstance(extra, list) else []
+    return BOM_PERMISSION in both
+
+
 def _model_bom(model: dict[str, Any]) -> list[dict[str, Any]]:
     """Which materials and how much of each, without the money.
 
@@ -1227,7 +1245,7 @@ async def erp_model_details_tool(
     and the materials it consumes."""
     args = {"code": code, "model_id": model_id}
 
-    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+    async def handler(api: ERPApiClient, _settings: Settings, user: dict[str, Any]) -> ToolExecution:
         resolved = model_id
         if not resolved:
             wanted = (code or "").strip()
@@ -1269,6 +1287,7 @@ async def erp_model_details_tool(
                 }
             )
         details = model.get("details_json") if isinstance(model.get("details_json"), dict) else {}
+        may_read_bom = _may_read_bom(user)
         payload = _model_summary(model)
         payload.update(
             {
@@ -1283,7 +1302,11 @@ async def erp_model_details_tool(
                     for c in (model.get("colors") or [])
                 ],
                 "sam_minutes": model.get("sam_minutes"),
-                "materials": _model_bom(model),
+                "materials": _model_bom(model) if may_read_bom else [],
+                # Absent because it was withheld is a different fact from
+                # absent because nobody filled it in, and only one of them
+                # means the catalogue record is incomplete.
+                "materials_withheld": not may_read_bom,
                 "image_count": len(model.get("images") or []),
                 "approved_at": model.get("approved_at"),
                 "translations": details.get("translation") or {},

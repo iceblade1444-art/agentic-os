@@ -1002,7 +1002,7 @@ export function createMilaActions(options = {}) {
       return {
         ok: true,
         ...(result?.data || {}),
-        source_policy: "One model, as the ERP holds it. Empty sizes, colors or composition mean the catalogue record is incomplete — say that rather than inferring from the name. materials carries quantity per piece and no cost; for cost use the finance tool.",
+        source_policy: "One model, as the ERP holds it. Empty sizes, colors or composition mean the catalogue record is incomplete — say that rather than inferring from the name. materials carries quantity per piece and no cost; for cost use the finance tool. If materials_withheld is true the bill of materials was not shared with this installation — say it is not available to you, never that the model has no materials.",
         source_page: "/models",
       };
     }

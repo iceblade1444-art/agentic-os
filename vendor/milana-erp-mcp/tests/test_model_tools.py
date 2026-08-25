@@ -264,9 +264,13 @@ async def test_details_reads_composition_from_where_it_actually_lives() -> None:
 async def test_details_leaves_the_money_out_of_the_materials() -> None:
     # The raw BOM carries default_cost and supplier SKUs on every line. What
     # comes back is which fabric and how much; cost is finance's to answer.
+    #
+    # Granted modeling.bom on purpose: this is about what the materials carry,
+    # not about whether they are shared at all, and without the permission the
+    # list is empty and the assertion proves nothing.
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/auth/me":
-            return _json(200, ME)
+            return _json(200, {**ME, "permissions": ["management.view", "modeling.bom"]})
         return _json(200, {
             "id": 7201,
             "code": "TJ2211",
@@ -361,3 +365,69 @@ async def test_details_needs_to_be_told_which_model() -> None:
     )
     assert result["ok"] is False
     assert result["error"]["status_code"] == 400
+
+def _me_with(*permissions: str) -> dict[str, Any]:
+    return {**ME, "permissions": list(permissions)}
+
+
+def _detail_handler(me: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json(200, me)
+        return _json(200, {
+            "id": 7201,
+            "code": "TJ2211",
+            "name": "Туника",
+            "bom": [{
+                "quantity_per_piece": 1,
+                "unit": "kg",
+                "item": {"name": "30/1 COMPACT PENYE SUPREM", "category": "fabric"},
+            }],
+        })
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_materials_need_the_permission_that_gates_them() -> None:
+    # The detail endpoint embeds the BOM and does not check modeling.bom, so an
+    # account granted Models alone still receives it. Somebody unticking Bill of
+    # materials in the ERP has said what they want; handing it over anyway would
+    # make the assistant a way around their own decision.
+    result = await _run(
+        _detail_handler(_me_with("modeling.models")),
+        lambda client, settings: erp_model_details_tool(
+            model_id=7201, settings=settings, client=client
+        ),
+    )
+    assert result["data"]["materials"] == []
+    assert result["data"]["materials_withheld"] is True
+    assert "COMPACT PENYE" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_materials_are_returned_when_the_permission_is_there() -> None:
+    result = await _run(
+        _detail_handler(_me_with("modeling.models", "modeling.bom")),
+        lambda client, settings: erp_model_details_tool(
+            model_id=7201, settings=settings, client=client
+        ),
+    )
+    assert result["data"]["materials_withheld"] is False
+    assert result["data"]["materials"][0]["material"] == "30/1 COMPACT PENYE SUPREM"
+
+
+@pytest.mark.asyncio
+async def test_the_permission_is_also_honoured_from_extra_permissions() -> None:
+    # The ERP grants page access two ways: baked into the role, and ticked on
+    # as extra. Reading only one of the lists withholds data the operator
+    # deliberately granted.
+    me = {**ME, "permissions": ["modeling.models"], "extra_permissions": ["modeling.bom"]}
+    result = await _run(
+        _detail_handler(me),
+        lambda client, settings: erp_model_details_tool(
+            model_id=7201, settings=settings, client=client
+        ),
+    )
+    assert result["data"]["materials_withheld"] is False
+    assert len(result["data"]["materials"]) == 1
