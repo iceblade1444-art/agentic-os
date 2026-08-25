@@ -31,7 +31,12 @@ const KNOWN_TOOLS = new Set(MILA_TOOLS.map((tool) => tool.name));
 // Keep it in step with that file. Too narrow strips the agent of ERP rules it
 // genuinely needs; too wide puts back the promises this gating exists to stop.
 export const LIVEKIT_BASELINE_TOOLS = [
-  "get_finished_goods_stock", "get_erp_business_context", "get_system_status",
+  "get_finished_goods_stock", "get_erp_business_context",
+  // The model catalogue. Added here and in voice-agent/agent.py together:
+  // announcing a tool the agent has no function for is the failure this list
+  // exists to prevent.
+  "get_models_overview", "find_models", "get_model_details",
+  "get_system_status",
   "list_kanban_tasks", "create_kanban_task", "delegate_to_hermes",
   "search_obsidian_notes", "read_obsidian_note", "write_obsidian_note", "ask_claude_code",
 ];

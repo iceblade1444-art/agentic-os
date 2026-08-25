@@ -16,6 +16,7 @@ import test from "node:test";
 
 import { MILA_MEMBER_TOOLS, MILA_TOOLS } from "../assets/js/mila-tools.js";
 import { channelAllows } from "../server/lib/mila-audience.js";
+import { LIVEKIT_BASELINE_TOOLS } from "../server/lib/voice-instruction.js";
 import { OPERATOR_ERP_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../server/lib/mila-actions.js";
 
 const read = (rel) => fs.readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
@@ -147,4 +148,42 @@ test("the search parameters the ERP ignores are never sent", () => {
     assert.equal(walk.includes(ignored), false, `${ignored} is sent to an endpoint that ignores it`);
   }
   assert.match(walk, /params\["status"\] = status/, "status is a real filter and should be used");
+});
+
+test("a voice call is offered them too, and only because the agent can run them", () => {
+  // The browser reads MILA_TOOLS directly and the phone, Telegram and the
+  // messenger get a per-user list, so all four had the catalogue as soon as the
+  // action existed. A LiveKit call does not: it falls back to a hardcoded list
+  // that mirrors the @function_tool methods in the agent. The first version of
+  // this work shipped with that list untouched, so on a voice call MILA still
+  // knew nothing about models while every other surface did — and no test
+  // noticed, because they all checked the browser list.
+  for (const name of MODEL_ACTIONS) {
+    assert.ok(
+      LIVEKIT_BASELINE_TOOLS.includes(name),
+      `${name} is missing from the LiveKit baseline — a voice call will not know it exists`,
+    );
+  }
+});
+
+test("the baseline never promises a tool the agent cannot run", () => {
+  // Too wide is its own failure: the model calls something the agent has no
+  // function for and the call dies mid-sentence. These two lists are one list
+  // kept in two repositories, so they are compared rather than trusted.
+  const agent = process.env.MILA_AGENT_PY
+    || "C:/AI Agent/mila/voice-agent/agent.py";
+  if (!fs.existsSync(agent)) {
+    // The sibling repository is not always checked out beside this one.
+    return;
+  }
+  const source = fs.readFileSync(agent, "utf8");
+  const served = source.slice(source.indexOf("SERVED_PROMPT_TOOLS = ["));
+  const declared = [...served.slice(0, served.indexOf("]")).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(declared.length >= 10, "SERVED_PROMPT_TOOLS moved or could not be read");
+  for (const name of LIVEKIT_BASELINE_TOOLS) {
+    assert.ok(
+      declared.includes(name),
+      `${name} is announced to a voice call but the agent has no function for it`,
+    );
+  }
 });
