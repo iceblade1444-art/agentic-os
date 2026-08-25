@@ -353,6 +353,19 @@ button { font-family: inherit; cursor: pointer; }
 .page-head .spacer { flex: 1; }
 
 .grid { display: grid; gap: 16px; }
+/* A wide pane beside a narrower one — a form and its list, a table and its
+   summary. It exists because pages were writing the same layout inline, and an
+   inline grid-template-columns cannot be folded by a media query: the missions
+   page carried a literal 380px first column, which on a 358px phone put its
+   second card 22px past the right edge and slid the whole document sideways.
+
+   minmax(0, …) on both tracks, so neither can be held open by its content. */
+.grid-aside { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); align-items: start; }
+.grid-aside-wide { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 900px) {
+  .grid-aside, .grid-aside-wide { grid-template-columns: minmax(0, 1fr); }
+}
+
 .cols-2 { grid-template-columns: repeat(2, 1fr); }
 .cols-3 { grid-template-columns: repeat(3, 1fr); }
 .cols-4 { grid-template-columns: repeat(4, 1fr); }
@@ -2467,7 +2480,11 @@ body.compact .card.pad-lg { padding: 16px; }
 .oh-attn-body small { color: var(--text-3); font-size: var(--text-xs); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oh-attn-actions { display: flex; gap: 6px; flex: none; }
 
-.oh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* minmax(0, 1fr) and not 1fr. A plain fr track takes its automatic minimum
+   from its content, so two KPI tiles whose labels do not wrap held the row at
+   716px inside a 390px phone and dragged the whole page sideways with them.
+   The tiles already ellipsis their own text; they were never given the chance. */
+.oh-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .oh-kpi { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; text-decoration: none; color: inherit; }
 .oh-kpi:hover { border-color: var(--border-strong); box-shadow: var(--card-hover-shadow); }
 .oh-kpi-label { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
@@ -2529,8 +2546,10 @@ body.compact .card.pad-lg { padding: 16px; }
   .oh-pulse-anim, .oh-bar.running::after, .oh-feed-item.fresh { animation: none; }
 }
 @media (max-width: 1280px) {
-  .oh-top, .oh-mid { grid-template-columns: 1fr; }
-  .oh-low { grid-template-columns: 1fr; }
+  /* The wide rules above say minmax(0, ...) and these said 1fr, so folding to
+     one column reintroduced exactly the overflow the wide layout had avoided. */
+  .oh-top, .oh-mid { grid-template-columns: minmax(0, 1fr); }
+  .oh-low { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* On a phone the lane label and the track cannot share a row. At 375px the card

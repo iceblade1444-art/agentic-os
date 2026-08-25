@@ -40,7 +40,7 @@ export default {
     }
     return `
     <div class="page-head"><div><div class="page-title">${t("missions.title")}</div><div class="page-sub">${t("missions.sub")}</div></div></div>
-    <div class="grid" style="grid-template-columns:380px 1fr;align-items:start">
+    <div class="grid grid-aside">
       <div class="stack gap-4">
         <div class="card pad-lg">
           <div class="section-title">${t("missions.new")}</div>

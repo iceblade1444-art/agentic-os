@@ -95,3 +95,49 @@ test("nothing was hidden that cannot be reached another way", () => {
   assert.equal(hidden.length, 1, `more than the theme toggle is hidden: ${hidden.join(" | ")}`);
   assert.match(hidden[0], /#themeBtn/);
 });
+
+test("no page carries a grid a phone cannot fold", () => {
+  // An inline grid-template-columns cannot be overridden by a media query, so
+  // a literal width written into the markup is a layout no breakpoint can
+  // rescue. The missions page carried "380px 1fr"; on a 358px phone that put
+  // its second card past the right edge and slid the whole document sideways,
+  // which is what a Mini App feels like when it is "not optimised".
+  const pages = fs.readdirSync(new URL("../assets/js/pages/", import.meta.url))
+    .filter((name) => name.endsWith(".js"));
+  const offenders = [];
+  for (const name of pages) {
+    const source = read(`assets/js/pages/${name}`);
+    for (const [, template] of source.matchAll(/style="[^"]*grid-template-columns:([^";]*)/g)) {
+      // A bare px track, or a minmax whose floor is a px width, cannot shrink.
+      if (/(^|[\s,(])\d{3,}px/.test(template) && !/minmax\(0/.test(template.split(" ")[0])) {
+        if (/minmax\(\s*\d{3,}px/.test(template) || /^\s*\d{3,}px/.test(template)) {
+          offenders.push(`${name}: ${template.trim()}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(offenders, [],
+    "these grids are pinned to a width wider than a phone and no media query can fold them");
+});
+
+test("the shared aside layout folds instead of being written inline", () => {
+  const styles = STYLES;
+  assert.match(styles, /\.grid-aside \{ grid-template-columns: minmax\(0, 380px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.grid-aside-wide \{ grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1fr\)/);
+  const fold = styles.slice(styles.indexOf(".grid-aside, .grid-aside-wide"));
+  assert.match(fold.slice(0, 120), /grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test("the dashboard grids can shrink below their content", () => {
+  // A plain fr track takes its automatic minimum from its content. The KPI row
+  // held itself at 716px inside a 390px phone because of it.
+  assert.match(STYLES, /\.oh-kpis \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  // Anchored on the rule, not on the breakpoint: several media queries share
+  // "max-width: 1280px" and indexOf finds the first, which is about the
+  // sidebar and says nothing about any of this.
+  const at = STYLES.indexOf(".oh-top, .oh-mid { grid-template-columns:");
+  assert.notEqual(at, -1, "the fold rule moved — re-point this test");
+  const block = STYLES.slice(at, at + 200);
+  assert.match(block, /\.oh-top, \.oh-mid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(block, /\.oh-low \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+});

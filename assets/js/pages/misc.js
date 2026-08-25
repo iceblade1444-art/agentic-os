@@ -625,7 +625,7 @@ function operationsHTML(state) {
       ${statMini(t("operations.restoreVerified"), opsAge(restoreDrill.lastSuccessAt), "check")}
       ${statMini(t("operations.serverStorage"), disk?.metrics?.usedPercent != null ? `${disk.metrics.usedPercent}%` : t("operations.unknown"), "database")}
     </div>
-    <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr);margin-bottom:16px">
+    <div class="grid grid-aside-wide" style="margin-bottom:16px">
       <div class="card" style="padding:0"><div class="card-head" style="padding:16px 16px 0"><h3>${t("operations.hostChecks")}</h3><span class="badge ${opsTone(state.status)}">${esc(opsStatusText(state.status))}</span></div><div class="table-wrap"><table class="tbl">
         <thead><tr><th>${t("operations.service")}</th><th>${t("system.status")}</th><th>${t("operations.detail")}</th><th>${t("operations.checked")}</th></tr></thead>
         <tbody>${(state.checks || []).map((check) => `<tr><td class="fw-600">${esc(check.name)}</td><td><span class="badge ${opsTone(check.status)}"><span class="dot"></span>${esc(opsStatusText(check.status))}</span></td><td class="muted">${esc(check.detail || "")}</td><td class="muted nowrap">${opsAge(check.checkedAt)}</td></tr>`).join("")}</tbody>
