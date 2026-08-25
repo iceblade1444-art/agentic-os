@@ -107,3 +107,28 @@ test("the version the endpoint would report is the one package.json declares", (
       `${p} is in the shipping list but not in the repository`);
   }
 });
+
+test("the version on screen is the running one, not a picture", () => {
+  // The badge in the sidebar read the literal "v1.0" for the life of the
+  // repository, beside an /api/health that reported "1.0.0" from a different
+  // literal. Fixing only the endpoint left the number people actually look at
+  // frozen, which is exactly how it stayed wrong without anyone noticing.
+  const app = read("assets/js/app.js");
+  assert.match(app, /function versionBadge\(\) \{/);
+  assert.match(app, /const version = api\.health\?\.version;/);
+  assert.doesNotMatch(app, /class="brand-badge">v\d/,
+    "the badge is a literal again");
+  // Absent rather than stale when the server cannot be reached: a number that
+  // used to be true is worse than no number.
+  assert.match(app, /if \(!version\) return "";/);
+});
+
+test("no surface reports a version it did not read", () => {
+  // Three places have claimed to know the version: the endpoint, the badge and
+  // package.json. Only the last one is allowed to be a literal.
+  for (const file of ["server/index.js", "assets/js/app.js"]) {
+    const source = read(file).replace(/\/\/.*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(source, /version: "\d+\.\d+\.\d+"/,
+      `${file} carries a hardcoded version`);
+  }
+});

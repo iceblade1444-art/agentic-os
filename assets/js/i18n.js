@@ -71,7 +71,7 @@ const COPY = {
   "telegram.sys.speaking": "Озвучиваю — это займёт несколько секунд.",
   "telegram.sys.strangerChat": "Этот чат не привязан.",
 
- "shell.theme": "Сменить тему", "shell.help": "Помощь", "shell.notifications": "Уведомления",
+ "shell.version": "Версия Agentic OS", "shell.theme": "Сменить тему", "shell.help": "Помощь", "shell.notifications": "Уведомления",
     "shell.language": "Язык интерфейса",
     "shell.pages": "Страницы", "shell.agents": "Агенты", "shell.actions": "Действия",
     "shell.searchPalette": "Поиск страниц, агентов и действий…", "shell.noResults": "Ничего не найдено",
@@ -787,7 +787,7 @@ const COPY = {
   "telegram.sys.speaking": "Reading it out — this takes a few seconds.",
   "telegram.sys.strangerChat": "This chat is not linked.",
 
- "shell.theme": "Toggle theme", "shell.help": "Help", "shell.notifications": "Notifications",
+ "shell.version": "Agentic OS version", "shell.theme": "Toggle theme", "shell.help": "Help", "shell.notifications": "Notifications",
     "shell.language": "Interface language",
     "shell.pages": "Pages", "shell.agents": "Agents", "shell.actions": "Actions",
     "shell.searchPalette": "Search pages, agents and actions…", "shell.noResults": "No results",
@@ -1503,7 +1503,7 @@ const COPY = {
   "telegram.sys.speaking": "Ovoz chiqarib o‘qiyapman — bir necha soniya oladi.",
   "telegram.sys.strangerChat": "Bu chat bog‘lanmagan.",
 
- "shell.theme": "Mavzuni almashtirish", "shell.help": "Yordam", "shell.notifications": "Bildirishnomalar",
+ "shell.version": "Agentic OS versiyasi", "shell.theme": "Mavzuni almashtirish", "shell.help": "Yordam", "shell.notifications": "Bildirishnomalar",
     "shell.language": "Interfeys tili",
     "shell.pages": "Sahifalar", "shell.agents": "Agentlar", "shell.actions": "Harakatlar",
     "shell.searchPalette": "Sahifalar, agentlar va harakatlarni qidiring…", "shell.noResults": "Hech narsa topilmadi",

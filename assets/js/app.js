@@ -168,6 +168,21 @@ function toggleTheme() {
 }
 
 /* ---------------- Shell ---------------- */
+// The version on screen, or nothing at all.
+//
+// This read "v1.0" as a literal for the life of the repository, next to an
+// /api/health that reported the same string from a different literal. Fixing
+// the endpoint and leaving this made the number people actually look at a
+// decoration — which is how the question "is that just a picture?" gets asked.
+//
+// Absent rather than stale when the server is unreachable: no number is
+// better than one that used to be true.
+function versionBadge() {
+  const version = api.health?.version;
+  if (!version) return "";
+  return `<span class="brand-badge" title="${tr("shell.version")}">v${esc(version)}</span>`;
+}
+
 function sidebarHTML() {
   const cur = currentRoute();
   const p = store.state.profile;
@@ -204,7 +219,7 @@ function sidebarHTML() {
     <div class="sectionnav" id="sectionNav">
       <div class="sectionnav-head">
         <a class="brand-lockup" href="#/" aria-label="Mila · Agentic OS"></a>
-        <span class="brand-badge">v1.0</span>
+        ${versionBadge()}
       </div>
       <div class="sectionnav-title">${sectionLabel(active)}</div>
       <div class="nav-group">${children}</div>
