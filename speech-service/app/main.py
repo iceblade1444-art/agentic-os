@@ -11,7 +11,7 @@ import tempfile
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from . import cache, config, correct, opus, stt, tts
+from . import cache, config, correct, gpu, opus, stt, tts
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s %(message)s")
 
@@ -49,7 +49,7 @@ def _preload_voices():
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True}
+    return {"ok": True, "gpu": gpu.status()}
 
 
 @app.post("/stt")

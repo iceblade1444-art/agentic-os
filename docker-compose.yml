@@ -100,6 +100,10 @@ services:
       - LLM_INTERNAL_SECRET=${INTERNAL_SECRET:-}
       - SPEECH_CPU_THREADS=${SPEECH_CPU_THREADS:-6}
       - STT_MODEL_UZ=/app/models/nova-uz-v1
+      # the office PC GPU, reached over a reverse tunnel it opens itself;
+      # unset this and everything runs on the CPU exactly as before
+      - GPU_WORKER_URL=${GPU_WORKER_URL:-}
+      - GPU_WORKER_SECRET=${SPEECH_INTERNAL_SECRET:-}
     volumes:
       - ${SPEECH_MODELS_DIR:-./speech-models}:/app/models
       - ${QWEN_TTS_MODELS_DIR:-./speech-qwen-models}:/app/models-qwen:ro

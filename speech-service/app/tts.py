@@ -21,6 +21,7 @@ import threading
 
 import soundfile as sf
 
+from . import gpu
 from . import cache
 from . import config
 from . import quality
@@ -377,6 +378,11 @@ def synthesize(text: str, language: str | None = None, speaker: str | None = Non
         return hit
 
     if eng == "premium" and lang == "Uzbek":
+        # 1.6 s on the card against 48 s here; None means the PC is unavailable
+        remote = gpu.synthesize(text, lang, "premium")
+        if remote is not None:
+            cache.put(text, remote, **ck)
+            return remote
         wav = _voxcpm(text)
         cache.put(text, wav, **ck)
         return wav

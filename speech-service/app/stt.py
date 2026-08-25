@@ -10,7 +10,7 @@ import threading
 
 from faster_whisper import WhisperModel
 
-from . import config
+from . import config, gpu
 
 log = logging.getLogger("speech.stt")
 
@@ -44,6 +44,15 @@ def transcribe(audio_path: str, language: str | None = None) -> dict:
     """language=None -> detect with the default-language model, then, if the
     detected language has a dedicated fine-tune, redo with that model."""
     lang = language or config.STT_DEFAULT
+
+    # the office GPU is ~6x faster and, running full precision instead of int8,
+    # measurably more accurate — but it is someone's desktop, so any failure
+    # falls straight through to local compute
+    remote = gpu.transcribe(audio_path, language)
+    if remote is not None:
+        remote["device"] = "gpu"
+        return remote
+
     model = _load(lang)
     segments, info = model.transcribe(
         audio_path,
