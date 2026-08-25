@@ -431,3 +431,85 @@ async def test_the_permission_is_also_honoured_from_extra_permissions() -> None:
     )
     assert result["data"]["materials_withheld"] is False
     assert len(result["data"]["materials"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_latin_spelling_finds_a_cyrillic_code() -> None:
+    # 2,258 of the 6,625 codes carry a Cyrillic letter and almost all of those
+    # letters look identical to a Latin one. "ХJ3121" in the ERP and "XJ3121"
+    # from a person are the same code to anyone reading either, and different
+    # to any comparison. Asked about XJ3121 the assistant said the model did
+    # not exist. It does.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json(200, ME)
+        if request.url.path == "/api/models":
+            # The ERP's own code filter knows nothing about the two alphabets,
+            # so the Latin spelling comes back empty and the walk has to find it.
+            if "code" in request.url.params:
+                return _json(200, [])
+            page = int(request.url.params.get("page", 1))
+            if page > 1:
+                return _json(200, [])
+            return _json(200, [_model(1, id=7199, code="ХJ3121-V-5873")])
+        assert request.url.path == "/api/models/7199"
+        return _json(200, {"id": 7199, "code": "ХJ3121-V-5873", "name": "Халат"})
+
+    result = await _run(
+        handler,
+        lambda client, settings: erp_model_details_tool(
+            code="XJ3121-V-5873", settings=settings, client=client
+        ),
+    )
+    assert result["ok"] is True
+    # Shown as the ERP stores it, never as the folded spelling.
+    assert result["data"]["code"] == "ХJ3121-V-5873"
+
+
+@pytest.mark.asyncio
+async def test_search_crosses_the_alphabets_both_ways() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/auth/me":
+            return _json(200, ME)
+        page = int(request.url.params.get("page", 1))
+        if page > 1:
+            return _json(200, [])
+        return _json(200, [
+            _model(1, code="ХJ3121", name="Халат"),
+            _model(2, code="TJ2211", name="Туника"),
+        ])
+
+    # Latin query, Cyrillic code.
+    latin = await _run(
+        handler,
+        lambda client, settings: erp_model_search_tool(
+            query="XJ3121", settings=settings, client=client
+        ),
+    )
+    assert latin["data"]["total_matches"] == 1
+    assert latin["data"]["models"][0]["code"] == "ХJ3121"
+
+    # And a Cyrillic query against a Latin code, which is the same mistake made
+    # in the other direction.
+    cyrillic = await _run(
+        handler,
+        lambda client, settings: erp_model_search_tool(
+            query="ТJ2211", settings=settings, client=client
+        ),
+    )
+    assert cyrillic["data"]["total_matches"] == 1
+    assert cyrillic["data"]["models"][0]["code"] == "TJ2211"
+
+
+def test_folding_leaves_genuinely_cyrillic_letters_alone() -> None:
+    from milana_erp_mcp.tools import fold_code
+
+    # Х, Р, Т have Latin twins and must fold. Ф, П, Д, И do not: folding them
+    # would merge codes that really are different.
+    assert fold_code("ХJ3121") == fold_code("XJ3121")
+    assert fold_code("РJ1043") == fold_code("PJ1043")
+    assert fold_code("ТJ2211") == fold_code("TJ2211")
+    assert fold_code("ФJ1") != fold_code("FJ1")
+    assert fold_code("ПJ1") != fold_code("PJ1")
+    # And it is only ever a comparison key — case is dropped, spacing trimmed.
+    assert fold_code("  tj2211 ") == fold_code("TJ2211")

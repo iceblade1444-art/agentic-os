@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS } from "../server/lib/mila-actions.js";
+import { PERSONAL_ACTIONS, KNOWLEDGE_ACTIONS, READ_ONLY_ERP_ACTIONS } from "../server/lib/mila-actions.js";
 
 // The phone declares its own tool list to Gemini Live, in Dart, in the other
 // repository, and that list ships inside an APK that people already have
@@ -23,12 +23,17 @@ const SHIPPED_PHONE_TOOLS = [
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
   "remember_about_me", "read_about_me", "forget_about_me",
   "send_telegram",
+  // Added in the app's 1.9.0. Before them the phone could not look anything up
+  // in the catalogue at all: its prompt carries a warehouse-and-orders snapshot
+  // and nothing else, so asked about a real model it answered that the model
+  // was not in the warehouse — true, and the wrong answer.
+  "get_models_overview", "find_models", "get_model_details",
 ];
 
-// Mirrors the route's own composition, which member-portal.test.js pins to the
-// source. Kept here as data so this file can answer "would a Member get through"
-// without booting the server or running the action for real.
-const READ_ONLY_ERP_ACTIONS = new Set(["get_erp_business_context", "get_finished_goods_stock"]);
+// Imported rather than mirrored. The copy that used to sit here had already
+// fallen a release behind — it was missing get_sewing_daily_report — and a
+// stale mirror in a contract test answers the wrong question confidently.
+// member-portal.test.js pins the real set's contents to the source.
 const allowedForEveryone = (name) =>
   READ_ONLY_ERP_ACTIONS.has(name) || PERSONAL_ACTIONS.has(name) || KNOWLEDGE_ACTIONS.has(name);
 

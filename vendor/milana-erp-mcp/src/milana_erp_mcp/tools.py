@@ -1048,6 +1048,36 @@ async def erp_process_tracking_tool(
 # ---------------------------------------------------------------------------
 
 MODELS_PATH = "/api/models"
+
+
+# A third of the model codes are typed in a mixed keyboard layout: 2,258 of the
+# 6,625 carry a Cyrillic letter, and almost all of those letters are ones that
+# look identical to a Latin one — Т 723, Р 670, Х 447, В, М, К. So "ХJ3121"
+# in the ERP and "XJ3121" from a person are the same code as far as anyone
+# reading either can tell, and different as far as any comparison is concerned.
+#
+# Asked about XJ3121 the assistant said the model did not exist. It does.
+#
+# Folded one way only — Cyrillic to Latin — because the confusable pairs are
+# symmetric and one direction is enough to make them meet. Letters with no
+# lookalike (Ф, П, Д, И, Л) are left alone: nobody types those by accident on a
+# Latin layout, and mapping them would merge codes that really are different.
+_HOMOGLYPHS = str.maketrans({
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+    "Р": "P", "С": "C", "Т": "T", "У": "Y", "Х": "X", "Ѕ": "S", "І": "I",
+    "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h", "о": "o",
+    "р": "p", "с": "c", "т": "t", "у": "y", "х": "x",
+})
+
+
+def fold_code(value: Any) -> str:
+    """One spelling for two alphabets, for comparison only.
+
+    Never used for display or for anything sent back to the ERP: what a person
+    is shown is the code as the ERP stores it.
+    """
+    return str(value or "").strip().translate(_HOMOGLYPHS).lower()
+
 MODELS_PAGE_SIZE = 100
 # 67 pages today. The budget bounds a catalogue that keeps growing, and when it
 # bites the answer says so rather than being quietly partial.
@@ -1149,13 +1179,16 @@ async def _walk_models(
 
 
 def _matches(model: dict[str, Any], needle: str) -> bool:
+    """`needle` is already folded by the caller."""
     if not needle:
         return True
-    hay = " ".join(
-        str(part)
-        for part in (model.get("code"), model.get("name"), model.get("product_type"))
-        if part
-    ).lower()
+    hay = fold_code(
+        " ".join(
+            str(part)
+            for part in (model.get("code"), model.get("name"), model.get("product_type"))
+            if part
+        )
+    )
     return needle in hay
 
 
@@ -1210,7 +1243,7 @@ async def erp_model_search_tool(
     async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
         capped = max(1, min(int(limit or 25), 100))
         models, truncated = await _walk_models(api, status=status)
-        needle = (query or "").strip().lower()
+        needle = fold_code(query)
         found = [m for m in models if _matches(m, needle)]
         return ToolExecution(
             {
@@ -1256,15 +1289,26 @@ async def erp_model_details_tool(
             # code is one of the two filters the ERP honours, so this stays a
             # single request instead of a walk.
             rows = await api.get(MODELS_PATH, params={"code": wanted, "page_size": 5})
+            folded = fold_code(wanted)
             exact = None
             if isinstance(rows, list):
                 exact = next(
                     (
                         row
                         for row in rows
-                        if isinstance(row, dict)
-                        and str(row.get("code", "")).strip().lower() == wanted.lower()
+                        if isinstance(row, dict) and fold_code(row.get("code")) == folded
                     ),
+                    None,
+                )
+            if not exact:
+                # The ERP filters on `code` itself and knows nothing about the
+                # two alphabets, so a Latin spelling of a Cyrillic code comes
+                # back empty. A third of the catalogue is spelled that way, so
+                # the miss is worth one walk rather than an answer of "no such
+                # model" about a garment that exists.
+                catalogue, _truncated = await _walk_models(api)
+                exact = next(
+                    (row for row in catalogue if fold_code(row.get("code")) == folded),
                     None,
                 )
             if not exact:
