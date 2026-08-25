@@ -224,9 +224,17 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // surfaces need the same answer, and the copies drifted. What matters to this
   // test is the contents of the gate, not where the words are typed.
   assert.match(milaActionsRoute, /import \{[^}]*READ_ONLY_ERP_ACTIONS[^}]*\} from "\.\.\/lib\/mila-actions\.js"/);
+  // Pinned exactly, so widening what a Member can read is a decision somebody
+  // writes down rather than a set that quietly grows. The three model tools
+  // joined deliberately: the product catalogue carries no personal data and no
+  // money — the materials list comes back without unit cost — and which
+  // garments the factory makes is what a floor manager is asked all day.
   assert.deepEqual(
     [...READ_ONLY_ERP_ACTIONS].sort(),
-    ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"],
+    [
+      "find_models", "get_erp_business_context", "get_finished_goods_stock",
+      "get_model_details", "get_models_overview", "get_sewing_daily_report",
+    ],
   );
   // Company knowledge joins the everyone list: it is read-only and scoped to one
   // vault folder, so an employee looking up a price reaches nothing that was not

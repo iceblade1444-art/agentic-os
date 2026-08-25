@@ -303,6 +303,28 @@ export const MILA_TOOLS = [
     } },
   },
   {
+    name: "get_models_overview",
+    description: "How many garment models the factory has on file and in what state (approved, draft). The product catalogue behind the ERP /models page. Use for «сколько у нас моделей», «какие модели есть», «сколько артикулов». This is the catalogue, not warehouse stock and not production output.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "find_models",
+    description: "Find garment models by code, name or product type. Use for «есть ли у нас туники», «найди модель TJ2211», «какие халаты мы шьём». Matching covers code and name. The result says whether every match is listed — if showing_all_matches is false, give the total and offer to narrow rather than implying the list is complete.",
+    parameters: { type: "object", properties: {
+      query: { type: "string", description: "Part of a model code, name or product type, e.g. «туника» or «TJ2211»" },
+      status: { type: "string", description: "Narrow to one catalogue status, e.g. approved or draft" },
+      limit: { type: "integer", minimum: 1, maximum: 100, description: "How many models to list back" },
+    } },
+  },
+  {
+    name: "get_model_details",
+    description: "Everything the ERP holds for one garment model: sizes, colours, fibre composition, how many images, and the materials it consumes per piece. Name it by code (e.g. TJ2211) or by id. Use after find_models, or when the person names a model directly. Material lines carry quantity per piece and no cost — cost questions go to the finance tool.",
+    parameters: { type: "object", properties: {
+      code: { type: "string", description: "Model code as it appears in the ERP, e.g. TJ2211" },
+      modelId: { type: "integer", description: "Numeric model id, when the code is not known" },
+    } },
+  },
+  {
     name: "get_erp_late_orders",
     description: "Read orders that are already behind schedule in Milana ERP. Use this for questions about delays, at-risk orders and what is slipping.",
     parameters: { type: "object", properties: {
@@ -368,7 +390,10 @@ export const MILA_TOOLS = [
 // Claude Code or MCP tool — the server enforces this too (server/routes/mila-actions.js),
 // this list only keeps the model from offering actions it cannot actually perform.
 export const MILA_MEMBER_TOOLS = MILA_TOOLS.filter((tool) =>
-  ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report"].includes(tool.name)
+  // The product catalogue too: which garments the factory makes is what a floor
+  // manager is asked all day, and the record carries no personal data and no money.
+  ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
+   "get_models_overview", "find_models", "get_model_details"].includes(tool.name)
   || MILA_PERSONAL_TOOLS.some((personal) => personal.name === tool.name)
   // Reading company knowledge, but not writing it: an employee looking up the
   // minimum order is the point, an employee rewriting it is not.

@@ -1026,3 +1026,276 @@ async def erp_process_tracking_tool(
         )
 
     return await _run_tool("erp_process_tracking", {}, handler, settings=settings, client=client)
+
+
+# ---------------------------------------------------------------------------
+# The model catalogue (the ERP's /models page).
+#
+# Three facts about /api/models decided the shape of these tools, and each was
+# established by probing the live endpoint rather than assumed:
+#
+#   * It pages at 100 (page_size above that is a validation error) and there
+#     are roughly 6,600 models. A full walk costs about 1.2 seconds and 1.8 MB,
+#     so these read everything and filter here rather than keeping a catalogue
+#     copy that could go stale and then answer confidently from yesterday.
+#   * Only `status` and `code` are real query filters. `search`, `q`, `name`,
+#     `season` and `product_type` are accepted and then silently ignored —
+#     passing them returns the unfiltered first page, which is the worst kind
+#     of wrong answer. Name matching therefore happens here, never delegated.
+#   * The flat `material_composition` field is empty on live records while the
+#     composition actually sits in `details_json.composition`. Reading the
+#     obvious field reports "no composition" for a garment that is 100% cotton.
+# ---------------------------------------------------------------------------
+
+MODELS_PATH = "/api/models"
+MODELS_PAGE_SIZE = 100
+# 67 pages today. The budget bounds a catalogue that keeps growing, and when it
+# bites the answer says so rather than being quietly partial.
+MODELS_PAGE_BUDGET = 120
+
+
+def _model_summary(model: dict[str, Any]) -> dict[str, Any]:
+    details = model.get("details_json") if isinstance(model.get("details_json"), dict) else {}
+    general = details.get("general") if isinstance(details.get("general"), dict) else {}
+    return {
+        "id": model.get("id"),
+        "code": model.get("code"),
+        "name": model.get("name"),
+        "status": model.get("status"),
+        "product_type": model.get("product_type") or general.get("product_type"),
+        "season": model.get("season"),
+        "has_image": bool(model.get("thumbnail_url")),
+    }
+
+
+def _model_composition(model: dict[str, Any]) -> list[dict[str, Any]]:
+    """Composition, from wherever this record happens to keep it."""
+    flat = model.get("material_composition")
+    if isinstance(flat, list) and flat:
+        return flat
+    details = model.get("details_json")
+    if isinstance(details, dict) and isinstance(details.get("composition"), list):
+        return details["composition"]
+    return []
+
+
+def _model_bom(model: dict[str, Any]) -> list[dict[str, Any]]:
+    """Which materials and how much of each, without the money.
+
+    The raw BOM carries default_cost and supplier SKUs on every line. What a
+    person asking about a model needs is which fabric and how much of it; unit
+    cost belongs to finance and has its own tool, gated for it.
+    """
+    rows: list[dict[str, Any]] = []
+    for line in model.get("bom") or []:
+        if not isinstance(line, dict):
+            continue
+        item = line.get("item") if isinstance(line.get("item"), dict) else {}
+        rows.append(
+            {
+                "material": line.get("material_name") or item.get("name"),
+                "category": item.get("category"),
+                "quantity_per_piece": line.get("quantity_per_piece"),
+                "unit": line.get("unit") or item.get("unit"),
+                "waste_percent": line.get("waste_percent"),
+                "color": line.get("color") or line.get("stock_batch_color"),
+                "size": line.get("size"),
+            }
+        )
+    return rows
+
+
+async def _walk_models(
+    api: ERPApiClient, status: str | None = None
+) -> tuple[list[dict[str, Any]], bool]:
+    """Every model the ERP will hand over, and whether the walk was cut short.
+
+    Stops on a short page: the endpoint reports no total, and this client does
+    not surface the x-has-more header it sends.
+    """
+    collected: list[dict[str, Any]] = []
+    truncated = False
+    for page in range(1, MODELS_PAGE_BUDGET + 1):
+        params: dict[str, Any] = {"page": page, "page_size": MODELS_PAGE_SIZE}
+        if status:
+            params["status"] = status
+        rows = await api.get(MODELS_PATH, params=params)
+        if not isinstance(rows, list) or not rows:
+            break
+        collected.extend(row for row in rows if isinstance(row, dict))
+        if len(rows) < MODELS_PAGE_SIZE:
+            break
+        if page == MODELS_PAGE_BUDGET:
+            truncated = True
+    return collected, truncated
+
+
+def _matches(model: dict[str, Any], needle: str) -> bool:
+    if not needle:
+        return True
+    hay = " ".join(
+        str(part)
+        for part in (model.get("code"), model.get("name"), model.get("product_type"))
+        if part
+    ).lower()
+    return needle in hay
+
+
+async def erp_models_overview_tool(
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """How many models exist and in what state — the shape of the catalogue."""
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        models, truncated = await _walk_models(api)
+        by_status: dict[str, int] = {}
+        for model in models:
+            key = str(model.get("status") or "unknown")
+            by_status[key] = by_status.get(key, 0) + 1
+        newest = sorted(models, key=lambda m: str(m.get("created_at") or ""), reverse=True)[:5]
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": {
+                    "total_models": len(models),
+                    "by_status": by_status,
+                    "with_image": sum(1 for m in models if m.get("thumbnail_url")),
+                    "newest": [_model_summary(m) for m in newest],
+                    "counted_completely": not truncated,
+                },
+                "source": MODELS_PATH,
+                "source_page": "/models",
+                "meaning": (
+                    "The product model catalogue: every garment model the factory has on "
+                    "file, with its approval status. Not warehouse stock and not production output."
+                ),
+            }
+        )
+
+    return await _run_tool("erp_models_overview", {}, handler, settings=settings, client=client)
+
+
+async def erp_model_search_tool(
+    query: str | None = None,
+    status: str | None = None,
+    limit: int = 25,
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """Find models by code, name or type. Matching happens here, because the
+    ERP accepts a search parameter and then ignores it."""
+    args = {"query": query, "status": status, "limit": limit}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        capped = max(1, min(int(limit or 25), 100))
+        models, truncated = await _walk_models(api, status=status)
+        needle = (query or "").strip().lower()
+        found = [m for m in models if _matches(m, needle)]
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": {
+                    "query": query,
+                    "status": status,
+                    "total_matches": len(found),
+                    "returned": min(len(found), capped),
+                    "models": [_model_summary(m) for m in found[:capped]],
+                    # Said out loud, so an answer built on the first 25 of 300
+                    # is never presented as the whole truth.
+                    "showing_all_matches": len(found) <= capped,
+                    "searched_whole_catalogue": not truncated,
+                },
+                "source": MODELS_PATH,
+                "source_page": "/models",
+            }
+        )
+
+    return await _run_tool("erp_model_search", args, handler, settings=settings, client=client)
+
+
+async def erp_model_details_tool(
+    code: str | None = None,
+    model_id: int | None = None,
+    *,
+    settings: Settings | None = None,
+    client: ERPApiClient | None = None,
+) -> dict[str, Any]:
+    """Everything on file for one model: sizes, colours, composition, images
+    and the materials it consumes."""
+    args = {"code": code, "model_id": model_id}
+
+    async def handler(api: ERPApiClient, _settings: Settings, _user: dict[str, Any]) -> ToolExecution:
+        resolved = model_id
+        if not resolved:
+            wanted = (code or "").strip()
+            if not wanted:
+                return ToolExecution(
+                    {"ok": False, "error": {"status_code": 400, "message": "Name the model by code or id"}}
+                )
+            # code is one of the two filters the ERP honours, so this stays a
+            # single request instead of a walk.
+            rows = await api.get(MODELS_PATH, params={"code": wanted, "page_size": 5})
+            exact = None
+            if isinstance(rows, list):
+                exact = next(
+                    (
+                        row
+                        for row in rows
+                        if isinstance(row, dict)
+                        and str(row.get("code", "")).strip().lower() == wanted.lower()
+                    ),
+                    None,
+                )
+            if not exact:
+                return ToolExecution(
+                    {
+                        "ok": False,
+                        "error": {"status_code": 404, "message": "No model with code " + wanted},
+                        "source": MODELS_PATH,
+                    }
+                )
+            resolved = exact.get("id")
+
+        model = await api.get(MODELS_PATH + "/" + str(resolved))
+        if not isinstance(model, dict) or not model.get("id"):
+            return ToolExecution(
+                {
+                    "ok": False,
+                    "error": {"status_code": 404, "message": "Model not found"},
+                    "source": MODELS_PATH + "/" + str(resolved),
+                }
+            )
+        details = model.get("details_json") if isinstance(model.get("details_json"), dict) else {}
+        payload = _model_summary(model)
+        payload.update(
+            {
+                "description": model.get("description"),
+                "composition": _model_composition(model),
+                "sizes": [
+                    (s.get("name") or s.get("size")) if isinstance(s, dict) else s
+                    for s in (model.get("sizes") or [])
+                ],
+                "colors": [
+                    (c.get("name") or c.get("color")) if isinstance(c, dict) else c
+                    for c in (model.get("colors") or [])
+                ],
+                "sam_minutes": model.get("sam_minutes"),
+                "materials": _model_bom(model),
+                "image_count": len(model.get("images") or []),
+                "approved_at": model.get("approved_at"),
+                "translations": details.get("translation") or {},
+            }
+        )
+        return ToolExecution(
+            {
+                "ok": True,
+                "data": payload,
+                "source": MODELS_PATH + "/" + str(resolved),
+                "source_page": "/models",
+            }
+        )
+
+    return await _run_tool("erp_model_details", args, handler, settings=settings, client=client)

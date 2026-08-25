@@ -11,6 +11,9 @@ from .tools import (
     erp_create_task_tool,
     erp_finance_summary_tool,
     erp_finished_goods_stock_tool,
+    erp_model_details_tool,
+    erp_model_search_tool,
+    erp_models_overview_tool,
     erp_gm_summary_tool,
     erp_inventory_status_tool,
     erp_late_orders_tool,
@@ -93,6 +96,24 @@ async def erp_business_control(limit: int = 25) -> dict[str, Any]:
 async def erp_late_orders(limit: int = 25) -> dict[str, Any]:
     """Return late active orders by filtering the active production dashboard data."""
     return await erp_late_orders_tool(limit=limit)
+
+
+@mcp.tool(structured_output=True)
+async def erp_models_overview() -> dict[str, Any]:
+    """How many garment models the factory has on file and in what state. The product catalogue behind the ERP /models page — not warehouse stock, not production output."""
+    return await erp_models_overview_tool()
+
+
+@mcp.tool(structured_output=True)
+async def erp_model_search(query: str | None = None, status: str | None = None, limit: int = 25) -> dict[str, Any]:
+    """Find garment models by code, name or product type. Says whether it is showing every match and whether the whole catalogue was searched."""
+    return await erp_model_search_tool(query=query, status=status, limit=limit)
+
+
+@mcp.tool(structured_output=True)
+async def erp_model_details(code: str | None = None, model_id: int | None = None) -> dict[str, Any]:
+    """Everything on file for one garment model: sizes, colours, fibre composition, images and the materials it consumes. Name it by code (for example TJ2211) or id."""
+    return await erp_model_details_tool(code=code, model_id=model_id)
 
 
 @mcp.tool(structured_output=True)

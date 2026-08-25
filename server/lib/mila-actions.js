@@ -70,6 +70,10 @@ export const KNOWLEDGE_ACTIONS = new Set([
 // reached some channels and not others.
 export const READ_ONLY_ERP_ACTIONS = new Set([
   "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
+  // The product catalogue: which garments the factory makes, their sizes,
+  // colours and fibre composition. No personal data and no money — the
+  // materials list comes back without unit cost, which stays with finance.
+  "get_models_overview", "find_models", "get_model_details",
 ]);
 // Staff and order data: real names of people and customers, so it follows the
 // person's role rather than the channel they happen to be using.
@@ -946,6 +950,63 @@ export function createMilaActions(options = {}) {
         filters: result?.filters || null,
       };
     }
+    // The model catalogue. Kept apart from the business-context block because
+    // that one fans out to five tools to answer one broad question; these are
+    // three narrow questions with one tool each.
+    if (name === "get_models_overview" || name === "find_models" || name === "get_model_details") {
+      const server = store.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
+      if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
+      if (!mcp.isLive(server.id)) {
+        const connected = await mcp.connect(server);
+        store.mcp.update(server.id, { status: "active", tools: connected.tools });
+      }
+      const callTool = async (tool, toolArgs = {}) => {
+        const result = await mcp.callTool(server.id, tool, toolArgs);
+        const text = result?.content?.find((item) => item.type === "text")?.text || "{}";
+        try { return JSON.parse(text); } catch { return { ok: true, text }; }
+      };
+
+      if (name === "get_models_overview") {
+        const result = await callTool("erp_models_overview");
+        return {
+          ok: result?.ok !== false,
+          ...(result?.data || {}),
+          source_policy: "The product model catalogue. Answer only from this payload. counted_completely:false means the walk was cut short and the total is a floor, not the figure — say so. This is not warehouse stock and not production output.",
+          source_page: "/models",
+        };
+      }
+
+      if (name === "find_models") {
+        const result = await callTool("erp_model_search", {
+          query: bounded(args.query, 120),
+          status: bounded(args.status, 40) || undefined,
+          limit: integer(args.limit, 1, 100, 25),
+        });
+        const data = result?.data || {};
+        return {
+          ok: result?.ok !== false,
+          ...data,
+          source_policy: "Models matching the query. showing_all_matches:false means more matched than are listed — give the count and offer to narrow, never imply the list is complete. searched_whole_catalogue:false means even the count is a floor.",
+          source_page: "/models",
+        };
+      }
+
+      const result = await callTool("erp_model_details", {
+        code: bounded(args.code, 80) || undefined,
+        model_id: Number.parseInt(args.modelId ?? args.model_id, 10) || undefined,
+      });
+      if (result?.ok === false) {
+        const status = Number(result.error?.status_code) || 404;
+        throw Object.assign(new Error(bounded(result.error?.message, 200) || "Model not found"), { status });
+      }
+      return {
+        ok: true,
+        ...(result?.data || {}),
+        source_policy: "One model, as the ERP holds it. Empty sizes, colors or composition mean the catalogue record is incomplete — say that rather than inferring from the name. materials carries quantity per piece and no cost; for cost use the finance tool.",
+        source_page: "/models",
+      };
+    }
+
     if (name === "get_erp_business_context" || name === "get_finished_goods_stock") {
       const server = store.mcp.list().find((item) => item.id === "mcp_erp" || item.kind === "erp" || item.name === "milana-erp");
       if (!server) throw Object.assign(new Error("ERP MCP server is not registered"), { status: 404 });
