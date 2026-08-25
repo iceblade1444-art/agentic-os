@@ -67,6 +67,35 @@ button { font-family: inherit; cursor: pointer; }
    browser's answer to a question Telegram is not being asked. */
 [data-surface="telegram"] .app-shell,
 [data-surface="telegram"] .layout { min-height: var(--tg-viewport); }
+
+/* ---------- Inside Telegram ----------
+   The container already draws a header carrying the app's name and its own
+   back-or-close control, and it owns the palette. What the console adds on top
+   of that has to earn its height: the viewport here is about 660px, and the
+   topbar and the tab bar together were taking 124 of them — a fifth of the
+   screen — before a single row of content.
+
+   Nothing is removed that cannot be reached another way. The drawer still
+   opens the whole of navigation, search still opens the palette. */
+[data-surface="telegram"] .topbar {
+  /* 64 -> 48. A second header under Telegram's own does not need the height
+     of a first one. */
+  height: 48px;
+  padding-top: 0;
+}
+
+/* The theme belongs to the container. A toggle here fights it: Telegram hands
+   the app its colours and the page would sit in a scheme the chat around it
+   does not share. */
+[data-surface="telegram"] #themeBtn { display: none; }
+
+
+/* Telegram reports the home indicator through contentSafeAreaInset, which the
+   bridge feeds into --safe-b. The bar sits above it rather than under it. */
+[data-surface="telegram"] .tabbar {
+  height: calc(52px + var(--safe-b));
+  padding-bottom: var(--safe-b);
+}
 .layout {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;

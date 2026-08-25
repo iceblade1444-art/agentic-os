@@ -305,6 +305,15 @@ export class TelegramBridge {
     }
     // The composer gets a button straight into the app instead of only ever
     // offering "/".
+    //
+    // Just the product name. Telegram gives this button a fixed strip beside
+    // the message field, and "Открыть Agentic OS" pushed the field into a
+    // sliver on a phone. A name is what a person needs there; the verb is
+    // already carried by the button being a button.
+    //
+    // Unlike setMyCommands this is published once rather than per language,
+    // which used to mean an English chat got the Russian wording. A product
+    // name is the same in all three, so the question stops arising.
     const base = String(typeof this.publicUrl === "function" ? this.publicUrl() : this.publicUrl || "").replace(/\/+$/, "");
     if (base.startsWith("https://")) {
       await this.#call("setChatMenuButton", {

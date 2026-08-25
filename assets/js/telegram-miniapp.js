@@ -102,6 +102,39 @@ export function applyViewport(app = webApp()) {
   if (height > 0) document.documentElement.style.setProperty("--tg-viewport", `${Math.round(height)}px`);
 }
 
+/* ---------------- the container's own gestures and edges ----------------
+   Three things a Mini App has to ask for, none of which a web page needs.
+
+   A vertical swipe inside Telegram drags the sheet closed. On a page that
+   scrolls — this one scrolls to about four screens — that means a normal
+   flick to read further can dismiss the app mid-sentence. disableVerticalSwipes
+   hands the gesture back to the content.
+
+   The header is drawn by Telegram in whatever colour it was told, so it is
+   told ours; otherwise the app sits under a strip that belongs to a different
+   design.
+
+   And the newer clients report the hardware insets separately from the
+   viewport — a notch at the top, a home indicator at the bottom. Everything is
+   feature-detected: these arrived across several Bot API versions and an older
+   client simply does not have them. */
+export function applyContainerChrome(app = webApp()) {
+  if (!app) return;
+  app.disableVerticalSwipes?.();
+  const ground = app.themeParams?.bg_color;
+  if (ground) app.setHeaderColor?.(ground);
+  const root = document.documentElement;
+  const inset = app.contentSafeAreaInset || app.safeAreaInset;
+  if (inset) {
+    // Fed into the same --safe-* tokens the phone layout already uses, so the
+    // bar at the bottom clears the home indicator without a second mechanism.
+    for (const [side, key] of [["t", "top"], ["r", "right"], ["b", "bottom"], ["l", "left"]]) {
+      const value = Number(inset[key] || 0);
+      if (value > 0) root.style.setProperty(`--safe-${side}`, `${Math.round(value)}px`);
+    }
+  }
+}
+
 /* ---------------- back button ----------------
    Telegram draws the back affordance in its own header. A Mini App that leaves
    it hidden strands the reader on any screen below the first. */
@@ -144,6 +177,7 @@ export function mountTelegramBridge() {
   app.expand?.();
   applyTheme(app);
   applyViewport(app);
+  applyContainerChrome(app);
   syncBackButton(app);
 
   const onBack = () => history.back();
@@ -162,6 +196,8 @@ export function mountTelegramBridge() {
   window.addEventListener("hashchange", refresh);
   app.onEvent?.("themeChanged", () => applyTheme(app));
   app.onEvent?.("viewportChanged", () => applyViewport(app));
+  app.onEvent?.("safeAreaChanged", () => applyContainerChrome(app));
+  app.onEvent?.("contentSafeAreaChanged", () => applyContainerChrome(app));
   // A page can rebuild its own primary action without changing route.
   const observer = new MutationObserver(() => { mainTarget = syncMainButton(app); });
   const view = document.getElementById("view");
