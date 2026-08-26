@@ -121,35 +121,75 @@ const LANG_NAMES = {
   kk: "казахский", ky: "киргизский",
 };
 
+// One call stays coherent to roughly 2500 characters and starts truncating
+// past that, so long text is translated in sentence-sized pieces. Splitting on
+// sentence ends keeps the seams inaudible when the result is read aloud.
+const TRANSLATE_CHUNK = 1800;
+const TRANSLATE_MAX = 20000;
+const BREAKS = ["\n\n", "\n", ". ", "! ", "? ", "; "];
+
+function splitForTranslation(text, limit = TRANSLATE_CHUNK) {
+  if (text.length <= limit) return [text];
+  const parts = [];
+  let rest = text;
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
+    // Prefer a paragraph break, then a sentence end, then any space. A seam in
+    // the middle of a sentence gives the model half a thought to translate.
+    let cut = -1;
+    for (const mark of BREAKS) {
+      const at = window.lastIndexOf(mark);
+      if (at >= 0) cut = Math.max(cut, at + mark.length - 1);
+    }
+    if (cut < limit * 0.5) cut = window.lastIndexOf(" ");
+    if (cut <= 0) cut = limit - 1;          // no break at all: cut on length
+    parts.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1);
+  }
+  if (rest.trim()) parts.push(rest.trim());
+  return parts.filter(Boolean);
+}
+
+async function translateOnce(text, targetName) {
+  const prompt =
+    "Переведи на " + targetName + " язык. Верни ТОЛЬКО перевод, " +
+    "без пояснений и без кавычек.\n\n" + text;
+  const secret = process.env.INTERNAL_SECRET || "";
+  const upstream = await fetch(
+    process.env.LLM_COMPLETE_URL || "http://agentic-os:8787/api/llm/complete",
+    {
+      method: "POST",
+      headers: secret
+        ? { "Content-Type": "application/json", "x-internal-secret": secret }
+        : { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        temperature: 0,
+        max_tokens: Math.ceil(text.length / 2) + 512,
+      }),
+    },
+  );
+  if (!upstream.ok) {
+    const detail = (await upstream.text()).slice(0, 300);
+    throw new Error("translation unavailable: " + detail);
+  }
+  const data = await upstream.json();
+  const out = String(data.text || "").trim();
+  if (!out) throw new Error("empty translation");
+  return out;
+}
+
 r.post("/translate", async (req, res) => {
   try {
-    const text = String(req.body?.text || "").trim().slice(0, 4000);
+    const text = String(req.body?.text || "").trim().slice(0, TRANSLATE_MAX);
     const target = String(req.body?.target || "").toLowerCase();
     if (!text) return res.status(400).json({ error: "text is required" });
     if (!LANG_NAMES[target]) return res.status(400).json({ error: "unsupported target language" });
 
-    const prompt =
-      `Переведи на ${LANG_NAMES[target]} язык. Верни ТОЛЬКО перевод, ` +
-      `без пояснений и без кавычек.\n\n${text}`;
-    const secret = process.env.INTERNAL_SECRET || "";
-    const upstream = await fetch(
-      process.env.LLM_COMPLETE_URL || "http://agentic-os:8787/api/llm/complete",
-      {
-        method: "POST",
-        headers: secret
-          ? { "Content-Type": "application/json", "x-internal-secret": secret }
-          : { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, temperature: 0 }),
-      },
-    );
-    if (!upstream.ok) {
-      const detail = (await upstream.text()).slice(0, 300);
-      return res.status(502).json({ error: `translation unavailable: ${detail}` });
-    }
-    const data = await upstream.json();
-    const translated = String(data.text || "").trim();
-    if (!translated) return res.status(502).json({ error: "empty translation" });
-    res.json({ text: translated });
+    const parts = splitForTranslation(text);
+    const out = [];
+    for (const part of parts) out.push(await translateOnce(part, LANG_NAMES[target]));
+    res.json({ text: out.join("\n\n"), parts: parts.length });
   } catch (error) { res.status(502).json({ error: error.message }); }
 });
 

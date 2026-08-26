@@ -40,10 +40,55 @@ function toSrt(segments) {
 }
 
 
-// Slow engines scale with text length, and the proxy in front of us gives up at
-// 60 s. Splitting keeps every request short and lets playback start early.
+// Every engine costs something different per character, measured on this stack:
+// piper renders 6000 characters in 29 s, the Qwen engines need about a second
+// each because they render twice and keep the better take, and the cloned voice
+// moved to the graphics card and now costs a fraction of what it did.
+const ENGINE_RATE = { fast: 0.005, quality: 0.95, emotion: 0.95, premium: 0.15, clone: 0.15 };
+
+// The proxy in front of us gives up at 60 s; leave room for the round trip.
+const REQUEST_BUDGET = 45;
+
+// Where the constraint is the voice rather than the clock: past roughly 400
+// characters the cloned voice starts repeating clauses, however fast the card
+// answers. A quick wrong reading is worse than a slow right one.
+const ENGINE_CEILING = { premium: 300, clone: 300, fast: 6000 };
+
 const SLOW_ENGINES = new Set(["quality", "emotion", "premium", "clone"]);
-const PART_CHARS = 160;
+
+function partLimit(engine) {
+  const rate = ENGINE_RATE[engine] || ENGINE_RATE.fast;
+  const byTime = Math.floor(REQUEST_BUDGET / rate);
+  return Math.max(40, Math.min(byTime, ENGINE_CEILING[engine] || 6000));
+}
+
+const PART_CHARS = partLimit("quality");
+
+// A translation request costs about 16 s per 1500 characters, and the proxy
+// allows 60. Sending the whole text and hoping is how a long paragraph turns
+// into a gateway error, so the page sends pieces that comfortably fit.
+const TRANSLATE_PART = 3000;
+
+function splitForTranslation(text, limit = TRANSLATE_PART) {
+  text = text.trim();
+  if (text.length <= limit) return [text];
+  const parts = [];
+  let rest = text;
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
+    let cut = -1;
+    for (const mark of ["\n\n", "\n", ". ", "! ", "? ", "; "]) {
+      const at = window.lastIndexOf(mark);
+      if (at >= 0) cut = Math.max(cut, at + mark.length - 1);
+    }
+    if (cut < limit / 2) cut = window.lastIndexOf(" ");
+    if (cut <= 0) cut = limit - 1;
+    parts.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trimStart();
+  }
+  if (rest.trim()) parts.push(rest.trim());
+  return parts.filter(Boolean);
+}
 
 function splitForSpeech(text, limit = PART_CHARS) {
   const parts = [];
@@ -243,8 +288,8 @@ export default {
           </select>
         </div>
         <div class="sp-row" id="speedRow"><label>Скорость</label> <input type="range" id="ttsSpeed" min="0.7" max="1.3" step="0.05" value="1" style="width:140px"/> <span class="hint" id="speedVal">1.0x</span></div>
-        <textarea id="ttsText" class="input mt-4" rows="3" placeholder="Введите текст для озвучки…" maxlength="4000">Здравствуйте! Чем я могу вам помочь?</textarea>
-        <div class="hint" style="text-align:right"><span id="ttsCount">0</span>/4000</div>
+        <textarea id="ttsText" class="input mt-4" rows="3" placeholder="Введите текст для озвучки…" maxlength="8000">Здравствуйте! Чем я могу вам помочь?</textarea>
+        <div class="hint" style="text-align:right"><span id="ttsCount">0</span>/8000</div>
         <input id="ttsInstruct" class="input mt-4" style="display:none" placeholder="Характер голоса: тёплый дружелюбный тон, с улыбкой…" value="Тёплый, дружелюбный тон, говорит с улыбкой"/>
         <div id="cloneRow" class="sp-sec" style="display:none">
           <div class="hint">Образец голоса (3–10 сек чистой записи без шума):</div>
@@ -405,14 +450,27 @@ export default {
       }, 500);
       q("#sttTrState").textContent = "перевожу…";
       try {
-        const res = await fetch("/api/speech/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, target }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error || res.status);
-        const data = await res.json();
-        q("#sttTrOut").value = data.text || "";
+        const pieces = splitForTranslation(text);
+        const out = [];
+        for (const [i, piece] of pieces.entries()) {
+          if (pieces.length > 1) {
+            q("#sttTrState").textContent =
+              `перевожу часть ${i + 1} из ${pieces.length}… ` +
+              `${Math.round((Date.now() - started) / 1000)} с`;
+          }
+          const res = await fetch("/api/speech/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: piece, target }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error || res.status);
+          out.push(((await res.json()).text || "").trim());
+          // Show the text as it arrives — a long translation should not look
+          // like nothing is happening until the very end.
+          q("#sttTrOut").value = out.join("\n\n");
+          q("#sttTrOut").style.display = "";
+        }
+        q("#sttTrOut").value = out.join("\n\n");
         q("#sttTrOut").style.display = "";
         q("#sttTrActions").style.display = "";
         q("#sttTrState").textContent = `готово за ${Math.round((Date.now() - started) / 1000)} с`;
@@ -550,7 +608,8 @@ export default {
             }),
           });
 
-          const parts = SLOW_ENGINES.has(engine) ? splitForSpeech(text) : [text];
+          const limit = partLimit(engine);
+          const parts = text.length > limit ? splitForSpeech(text, limit) : [text];
           if (parts.length > 1) {
             clearInterval(ttsTicker);
             const blob = await synthesizeInParts(parts, say, (done, total) => {

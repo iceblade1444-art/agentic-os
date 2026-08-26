@@ -47,7 +47,9 @@ if os.getenv("LLM_INTERNAL_SECRET"):
 ALLOWED = {int(x) for x in os.getenv("TELEGRAM_ALLOWED_IDS", "").replace(" ", "").split(",") if x}
 RATE_PER_HOUR = int(os.getenv("TELEGRAM_RATE_PER_HOUR", "60"))
 MAX_BYTES = 20 * 1024 * 1024          # Telegram's getFile ceiling
-MAX_TTS_CHARS = 1500
+# Not a per-request limit any more — long text is split and sent as pieces.
+# This is the point past which a voice message stops being a voice message.
+MAX_TTS_CHARS = 8000
 
 LANGS = {"uz": "O'zbekcha", "ru": "Русский", "en": "English",
          "kk": "Қазақша", "ky": "Кыргызча", "auto": "определять самому"}
@@ -219,9 +221,44 @@ def call(method, **params):
         return {}
 
 
+# Telegram accepts 4096 characters per message. That ceiling is theirs; what
+# happens when text reaches it is ours, and dropping the remainder was the wrong
+# answer — a translation that stops mid-word still looks like a translation.
+TELEGRAM_LIMIT = 4000
+
+
+def split_message(text, limit=TELEGRAM_LIMIT):
+    """Break a long reply between paragraphs, then sentences, then words."""
+    text = text.strip()
+    if len(text) <= limit:
+        return [text]
+    parts, rest = [], text
+    while len(rest) > limit:
+        window = rest[:limit]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"))
+        if cut < limit // 2:
+            for mark in (". ", "! ", "? ", "… "):
+                cut = max(cut, window.rfind(mark) + len(mark) - 1)
+        if cut < limit // 2:
+            cut = window.rfind(" ")
+        if cut <= 0:
+            cut = limit - 1
+        parts.append(rest[:cut + 1].strip())
+        rest = rest[cut + 1:].lstrip()
+    if rest.strip():
+        parts.append(rest.strip())
+    return [part for part in parts if part]
+
+
 def send(chat_id, text, **extra):
-    return call("sendMessage", chat_id=chat_id, text=text[:4000],
-                disable_web_page_preview=True, **extra)
+    pieces = split_message(text)
+    result = None
+    for i, piece in enumerate(pieces, 1):
+        # Buttons belong to the finished thought, so they go on the last piece.
+        tail = extra if i == len(pieces) else {}
+        result = call("sendMessage", chat_id=chat_id, text=piece,
+                      disable_web_page_preview=True, **tail)
+    return result
 
 
 def send_document(chat_id, name, content, caption=""):
@@ -276,22 +313,50 @@ def synthesize(text, lang, uid=None):
     return r.content
 
 
-def translate(text, target):
-    """Reuses the router that already corrects transcripts — no new dependency."""
+# One call stays faithful to roughly 2500 characters. Past that the reply comes
+# back short — a summary wearing a translation's clothes — so long text goes in
+# sentence-sized pieces and is stitched back together.
+TRANSLATE_CHUNK = 1800
+
+
+def translate_once(text, target):
     prompt = ("Переведи на " + LANG_NAMES_RU.get(target, target) + " язык. "
               "Верни ТОЛЬКО перевод, без пояснений и без кавычек." + "\n\n" + text)
-    r = requests.post(LLM_URL, headers=LLM_HEADERS,
-                      json={"prompt": prompt, "temperature": 0}, timeout=180)
+    r = requests.post(LLM_URL, headers=LLM_HEADERS, timeout=300,
+                      json={"prompt": prompt, "temperature": 0,
+                            "max_tokens": len(text) // 2 + 512})
     r.raise_for_status()
     return (r.json().get("text") or "").strip()
 
 
+def translate(text, target):
+    """Reuses the router that already corrects transcripts — no new dependency."""
+    text = text.strip()
+    if len(text) <= TRANSLATE_CHUNK:
+        return translate_once(text, target)
+    return "\n\n".join(translate_once(part, target)
+                        for part in split_message(text, TRANSLATE_CHUNK))
+
+
 # --- keyboards --------------------------------------------------------------
-# measured from this bot's own log: the emotion engine took 487 s for 327
-# characters and 275 s for 347. piper answers in a fraction of a second.
-SECONDS_PER_CHAR = {"fast": 0.005, "quality": 1.2, "emotion": 1.2, "premium": 1.2}
-CHUNK_CHARS = 180          # about two minutes on the slow engines
+# Measured on this stack, not guessed. Piper: 6000 characters in 29 s. The Qwen
+# engines: 150 characters in 143 s — slow because they render twice and keep the
+# better take. The cloned voice moved to the graphics card and now costs a
+# fraction of what it did on the CPU.
+SECONDS_PER_CHAR = {"fast": 0.005, "quality": 0.95, "emotion": 0.95, "premium": 0.15}
+
+# How much text goes into a single synthesis request. For piper this is a
+# comfort limit — it could take far more, but pieces let the first audio arrive
+# while the rest is still rendering. For the cloned voice it is a quality limit:
+# past roughly 400 characters it starts repeating clauses, and a fast wrong
+# answer is worse than a slow right one.
+ENGINE_CHUNK = {"fast": 3000, "quality": 220, "emotion": 220, "premium": 300}
+CHUNK_CHARS = 220          # fallback for an engine we have not measured
 WARN_SECONDS = 45
+
+
+def chunk_limit(engine):
+    return ENGINE_CHUNK.get(engine, CHUNK_CHARS)
 
 
 def split_sentences(text, limit=CHUNK_CHARS):
@@ -469,10 +534,12 @@ def handle_tts(chat_id, uid, text, caption=""):
         engine = "fast"
     total = estimate_seconds(text, engine)
 
-    # the slow engines take minutes on long text; splitting means the first
-    # audio arrives quickly and no single request can hit the timeout
-    chunks = split_sentences(text) if total > WARN_SECONDS else [text]
-    if total > WARN_SECONDS:
+    # Split when the text exceeds what this engine renders well in one go, not
+    # when a stopwatch says so: the cloned voice needs pieces for the sake of
+    # the voice itself, however fast the card is.
+    limit = chunk_limit(engine)
+    chunks = split_sentences(text, limit) if len(text) > limit else [text]
+    if total > WARN_SECONDS or len(chunks) > 1:
         send(chat_id, f"Режим «{ENGINES.get(engine, engine)}» — это {human_time(total)}"
                       f"{f', пришлю {len(chunks)} частями' if len(chunks) > 1 else ''}."
                       f"\nБыстрее будет через /engine.")

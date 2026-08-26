@@ -50,6 +50,17 @@ r.get("/models", (req, res) => {
 });
 
 // Non-streaming completion (used by orchestrators / the MCP bridge's run_llm tool).
+// A reply is usually about as long as what it answers. Translation is the
+// clearest case: ask for 1024 tokens and a long paragraph comes back severed
+// mid-sentence. So size the ceiling from the input, and let a caller override.
+function tokenBudget(body, msgs, system) {
+  const asked = Number(body?.max_tokens);
+  if (Number.isFinite(asked) && asked > 0) return Math.min(asked, 16384);
+  const chars = (system || "").length +
+    (msgs || []).reduce((n, m) => n + String(m?.content || "").length, 0);
+  return Math.max(1024, Math.min(16384, Math.ceil(chars / 2) + 512));
+}
+
 r.post("/complete", async (req, res) => {
   const { model = config.defaultModel, messages, prompt, system, temperature = 0.7, provider } = req.body || {};
   const msgs = contextualMessages(req, messages || [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: prompt || "" }]);
@@ -64,7 +75,7 @@ r.post("/complete", async (req, res) => {
     if (prov === "anthropic") {
       const sys = msgs.filter((m) => m.role === "system").map((m) => m.content).join("\n") || undefined;
       const um = msgs.filter((m) => m.role !== "system");
-      const up = await fetch(config.anthropic.baseUrl + "/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model, max_tokens: 1024, system: sys, messages: um }) });
+      const up = await fetch(config.anthropic.baseUrl + "/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model, max_tokens: tokenBudget(req.body, um, sys), system: sys, messages: um }) });
       const j = await up.json();
       if (!up.ok) return res.status(502).json({ error: j.error?.message || "upstream error" });
       return res.json({ text: (j.content || []).map((c) => c.text).join(""), model });
@@ -99,7 +110,7 @@ r.post("/chat/completions", async (req, res) => {
       const up = await fetch(config.anthropic.baseUrl + "/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model, max_tokens: 1024, system, messages: msgs, stream: true }),
+        body: JSON.stringify({ model, max_tokens: tokenBudget(req.body, msgs, system), system, messages: msgs, stream: true }),
       });
       if (!up.ok) { send({ choices: [{ delta: { content: `[Anthropic error ${up.status}] ${await up.text()}` } }] }); return done(); }
       await forEachSSE(up, (json) => { if (json.type === "content_block_delta" && json.delta?.text) send({ choices: [{ delta: { content: json.delta.text } }] }); });
