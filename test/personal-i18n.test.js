@@ -30,9 +30,10 @@ test("the Personal page is fully translated in every supported locale", () => {
   assert.deepEqual(missing, [], `untranslated Personal page keys:\n${missing.join("\n")}`);
 });
 
-test("the Operational Home is fully translated in every supported locale", () => {
-  const keys = keysUsedBy("../assets/js/pages/dashboard.js");
-  assert.ok(keys.length > 50, `expected the dashboard to use many keys, found ${keys.length}`);
+test("the Command Center is fully translated in every supported locale", () => {
+  // The Operational Home dissolved into the Command Center (Ф4).
+  const keys = keysUsedBy("../assets/js/pages/command.js");
+  assert.ok(keys.length > 50, `expected the command center to use many keys, found ${keys.length}`);
 
   const missing = [];
   for (const [locale] of SUPPORTED_LOCALES) {
@@ -43,8 +44,8 @@ test("the Operational Home is fully translated in every supported locale", () =>
   assert.deepEqual(missing, [], `untranslated dashboard keys:\n${missing.join("\n")}`);
 });
 
-test("no English copy is left hardcoded on the Operational Home", () => {
-  const source = fs.readFileSync(new URL("../assets/js/pages/dashboard.js", import.meta.url), "utf8");
+test("no English copy is left hardcoded on the Command Center", () => {
+  const source = fs.readFileSync(new URL("../assets/js/pages/command.js", import.meta.url), "utf8");
   // Sentences that used to sit in the markup. Product names (Hermes, MILA,
   // Claude, Vault, Postgres, Four C) stay as they are in every language.
   for (const phrase of [

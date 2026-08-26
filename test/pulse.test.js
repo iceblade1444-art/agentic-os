@@ -61,8 +61,9 @@ test("approval decisions validate id and decision before touching the runtime", 
   await assert.rejects(() => decideApproval("apr_1", "destroy"), /approve or deny/);
 });
 
-test("dashboard uses the pulse API and fonts are self-hosted", () => {
-  const dashboard = fs.readFileSync(new URL("../assets/js/pages/dashboard.js", import.meta.url), "utf8");
+test("the home stage uses the pulse API and fonts are self-hosted", () => {
+  // The Operational Home dissolved into the Command Center (Ф4).
+  const dashboard = fs.readFileSync(new URL("../assets/js/pages/command.js", import.meta.url), "utf8");
   const apiClient = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
   const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
@@ -71,9 +72,11 @@ test("dashboard uses the pulse API and fonts are self-hosted", () => {
   assert.match(apiClient, /\/api\/pulse/);
   assert.match(apiClient, /EventSource/);
   assert.match(dashboard, /api\.pulse\.status/);
-  assert.match(dashboard, /t\("dash\.attention"\)/);
-  assert.match(dashboard, /data-approval/);
-  assert.match(dashboard, /oh-feed/);
+  // Approvals stay decidable from the home (the inbox sheet's buttons).
+  assert.match(dashboard, /data-decide/);
+  assert.match(dashboard, /api\.pulse\.decideApproval/);
+  // And the event stream stays visible (the stage ticker).
+  assert.match(dashboard, /cmd-ticker/);
 
   // Local-first: no font CDN anywhere in the shell or CSP.
   assert.doesNotMatch(indexHtml, /fonts\.googleapis|fonts\.gstatic/);
@@ -85,10 +88,12 @@ test("dashboard uses the pulse API and fonts are self-hosted", () => {
   }
 
   // Scout no longer rides the CVD-unsafe violet/blue pair.
-  assert.match(dashboard, /scout: \{[^}]*color: "teal"/);
+  assert.match(dashboard, /name: "scout"[^}]*color: "teal"/);
 
-  // GET /api/missions returns events as a count; the feed must guard the shape.
-  assert.match(dashboard, /Array\.isArray\(mission\.events\)/);
+  // GET /api/missions summarizes events as a count in the list and returns the
+  // array only on the detail — the surviving consumer must render both shapes.
+  const missionsPage = fs.readFileSync(new URL("../assets/js/pages/missions.js", import.meta.url), "utf8");
+  assert.match(missionsPage, /\(m\.events \|\| \[\]\)/);
 });
 
 test("mission list summary keeps events as a count and the dashboard tolerates it", () => {

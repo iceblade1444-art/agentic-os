@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { databaseHealth } from "../assets/js/pages/dashboard.js";
+import { databaseHealth } from "../assets/js/ops-health.js";
 
 // The shape /api/health actually serves while the migration runs, taken from a
 // live production response.

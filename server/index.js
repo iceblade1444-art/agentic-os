@@ -26,6 +26,7 @@ import routines from "./routes/routines.js";
 import sales from "./routes/sales.js";
 import meetings from "./routes/meetings.js";
 import governance from "./routes/governance.js";
+import brain from "./routes/brain.js";
 import memory from "./routes/memory.js";
 import studio from "./routes/studio.js";
 import erp from "./routes/erp.js";
@@ -298,6 +299,9 @@ app.use("/api/studio", requireStudio, studio);
 // ERP is readable by every signed-in role; the router keeps its write tools operator-only.
 app.use("/api/erp", erp);
 app.use("/api/governance", requireOperator, governance);
+// One query across everything the OS holds; sources it federates are
+// operator surfaces, so the door is operator-only too.
+app.use("/api/brain", requireOperator, brain);
 app.get("/api/hermes/control/status", requireOperator, async (req, res) => res.json(await hermesDashboardStatus()));
 app.use("/api", (req, res) => res.status(404).json({ error: "not found" }));
 

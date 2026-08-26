@@ -226,6 +226,9 @@ export const api = {
   memory: {
     snapshot: () => j("/api/memory"),
   },
+  brain: {
+    search: (query, limit = 30) => j(`/api/brain/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  },
   mcp: {
     list: () => j("/api/mcp/servers"),
     connect: (id) => j(`/api/mcp/servers/${id}/connect`, { method: "POST" }),

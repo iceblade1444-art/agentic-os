@@ -13,7 +13,6 @@ import test from "node:test";
 const read = (rel) => fs.readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
 const APP = read("assets/js/app.js");
 const STYLES = read("assets/css/styles.css");
-const CARD = read("assets/js/needs-you-card.js");
 const I18N = read("assets/js/i18n.js");
 
 // Pull a section list out of the source. Reading the literal keeps this honest
@@ -117,17 +116,19 @@ test("the bell reads the inbox instead of four hardcoded strings", () => {
 });
 
 test("the queue is a real request with a real empty state", () => {
+  // The needs-you card and the Operational Home it sat on dissolved into the
+  // Command Center (Ф4): the queue now lives in the stage's inbox panel and
+  // sheet, and the same invariants ride along.
   assert.match(read("assets/js/api.js"), /needsYou: \(\) => j\("\/api\/needs-you"\)/);
-  assert.match(CARD, /needs\.empty/, "nothing waiting has to look like an answer, not a failed load");
-  // Severity is carried by a glyph and a word as well as by colour.
-  assert.match(CARD, /glyph: "!"/);
-  assert.match(CARD, /t\(`needs\.kind\.\$\{item\.kind\}`\)/);
-  // A page that mounts it must be able to stop it, or the interval outlives
-  // the page.
-  assert.match(CARD, /return \(\) => \{ stopped = true; clearInterval\(timer\); host\.remove\(\); \};/);
-  const dashboard = read("assets/js/pages/dashboard.js");
-  assert.match(dashboard, /stopNeedsYou = mountNeedsYou\(root\)/);
-  assert.match(dashboard, /stopNeedsYou\?\.\(\)/, "unmount has to tear it down");
+  const command = read("assets/js/pages/command.js");
+  assert.match(command, /api\.needsYou\(\)/, "the home must ask the same queue the bell reads");
+  assert.match(command, /t\("needs\.empty"\)/, "nothing waiting has to look like an answer, not a failed load");
+  // Severity is carried by a word as well as by colour.
+  assert.match(command, /t\(`needs\.kind\.\$\{item\.kind\}`\)/);
+  // Approvals stay decidable from the home.
+  assert.match(command, /api\.pulse\.decideApproval/);
+  // A page that polls must be able to stop, or the interval outlives the page.
+  assert.match(command, /clearInterval\(cmdPoll\)/);
 });
 
 test("density is a preference that can finally be expressed", () => {

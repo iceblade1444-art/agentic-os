@@ -105,7 +105,7 @@ const BOUNDARY = ["--border-interactive", "--ring"];
 // Something white sits on top of these.
 const WHITE_ON = ["--primary", "--danger-fill"];
 
-for (const name of ["dark", "light"]) {
+for (const name of ["dark", "light", "command"]) {
   test(`${name} theme: every ink token is readable on every surface`, () => {
     const tokens = theme(TOKENS, name);
     for (const ink of INK) {
@@ -233,4 +233,28 @@ test("semantic text points at ink, not at the fill beside it", () => {
   ]);
   assert.deepEqual(strays.filter((s) => !allowed.has(s)), [],
     "use the -ink token for text and for borders against a different ground");
+});
+
+test("the command theme is the operator's dark, applied at render time", () => {
+  // Stored preference stays "dark"/"light"; the mapping happens where the
+  // attribute is written, so Member and Design keep the original dark.
+  const app = read("assets/js/app.js");
+  assert.match(app, /t === "dark" && api\.auth\.canAdmin \? "command" : t/);
+  // And the Flutter export deliberately ignores the third block: parseThemes
+  // reads only dark and light, so the phone's palette cannot drift from this.
+  assert.match(read("scripts/export-design-tokens.mjs"), /themes = \{ dark: \{\}, light: \{\} \}/);
+});
+
+test("the command stage's literal palette holds the same ink floors", () => {
+  // The stage is the one screen allowed to opt out of the token system, which
+  // means it is also the one screen the theme tests cannot see. Same rules,
+  // read from its own declarations in styles.css.
+  const stage = blocks(STYLES).find((block) => block.selector.startsWith(".cmd-stage") && block.body.includes("--cmd-bg"));
+  assert.ok(stage, "the stage palette block moved — re-point this test");
+  const decls = declarations(stage.body);
+  const ground = decls.get("--cmd-bg");
+  for (const ink of ["--cmd-text", "--cmd-dim", "--cmd-faint", "--ember", "--ember-2", "--ember-3"]) {
+    const ratio = contrast(decls.get(ink), ground);
+    assert.ok(ratio >= 4.5, `${ink} on the stage black is ${ratio}:1, needs 4.5`);
+  }
 });

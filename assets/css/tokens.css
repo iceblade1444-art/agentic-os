@@ -200,6 +200,65 @@
   --hero-glow: radial-gradient(55% 75% at 72% 28%, rgba(124, 58, 237, 0.28), transparent 70%);
 }
 
+/* ---------------- Command theme (the operator's dark) ----------------
+   The Command Center's language — warm near-black and one ember accent —
+   promoted from the stage to the whole operator surface (Ф5). Stored
+   preference stays "dark"; app.js maps it to this theme for operators, so
+   Member and Design keep the original dark untouched.
+
+   The fill/ink split matters doubly here: bright ember (#ff6a00) is 2.6:1
+   under white text, so the button fill is the deep burnt --primary below
+   (white clears 5.1:1) and the bright ember lives in ink, ring and glow. */
+:root[data-theme="command"] {
+  color-scheme: dark;
+
+  --bg: #070706;
+  --bg-1: #0b0a09;
+  --surface: #12110f;
+  --surface-2: #191713;
+  --surface-3: #201e1b;
+  --elevated: #161412;
+  --border: #262420;
+  --border-strong: #343029;
+  --border-interactive: #8a8478;
+  --ring: #ff9440;
+
+  --text: #f2f0ec;
+  --text-2: #b5b0a6;
+  --text-3: #9a958a;
+  --text-inv: #ffffff;
+
+  --primary: #b84d00;
+  --primary-hover: #a64500;
+  --primary-ink: #ff9440;
+  --primary-soft: rgba(255, 106, 0, 0.14);
+  --primary-text: #ffffff;
+  --accent-grad: linear-gradient(135deg, #ff8a2a 0%, #b84d00 100%);
+
+  --success-ink: #22c55e;
+  --warning-ink: #f59e0b;
+  --error-ink: #f87171;
+  --info-ink: #60a5fa;
+  --teal-ink: #2dd4bf;
+  --danger-fill: #dc2626;
+
+  --teal: #2dd4bf;
+  --teal-soft: rgba(45, 212, 191, 0.14);
+
+  --chart-grid: rgba(255, 250, 240, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 45px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 30px 70px rgba(0, 0, 0, 0.65);
+  --scrim: rgba(4, 3, 2, 0.68);
+
+  --card-shadow: 0 1px 0 rgba(255, 235, 200, 0.04) inset, 0 10px 30px -14px rgba(0, 0, 0, 0.65);
+  --card-hover-shadow: 0 1px 0 rgba(255, 235, 200, 0.07) inset, 0 20px 46px -16px rgba(0, 0, 0, 0.8);
+  --glow-primary: 0 10px 26px -8px rgba(255, 106, 0, 0.45);
+  --grad-text: linear-gradient(120deg, #ffc98f, #ff8a2a 45%, #b84d00);
+  --hero-glow: radial-gradient(55% 75% at 72% 28%, rgba(255, 106, 0, 0.22), transparent 70%);
+}
+
 /* ---------------- Light theme ---------------- */
 :root[data-theme="light"] {
   color-scheme: light;

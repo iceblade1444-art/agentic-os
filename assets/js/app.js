@@ -9,7 +9,7 @@ import { SUPPORTED_LOCALES, getLocale, setLocale, t as tr } from "./i18n.js";
 import { saveProfileLocale } from "./profile-locale.js";
 import { authenticate as telegramAuthenticate, inTelegram, mountTelegramBridge } from "./telegram-miniapp.js";
 
-import dashboard from "./pages/dashboard.js";
+import command from "./pages/command.js";
 import agents from "./pages/agents.js";
 import missions from "./pages/missions.js";
 import hermes from "./pages/hermes.js";
@@ -52,15 +52,16 @@ import * as misc from "./pages/misc.js";
    MILA is not one of the six. She is the orb at the foot of the rail: an
    assistant is not a destination you navigate to and leave. */
 const OPERATOR_SECTIONS = [
+  // The Command Center is the home. My tasks / my notes left the operator's
+  // rail for the stage's Today sheet — the routes stay for deep links and the
+  // Member surfaces keep their pages.
   { id: "today", icon: "home", bottom: true, children: [
-    { route: "", navKey: "sec.overview" },
+    { route: "", navKey: "command" },
     { route: "personal" },
   ]},
   { id: "work", icon: "workflow", bottom: true, children: [
     { route: "kanban" },
     { route: "missions" },
-    { route: "my-tasks" },
-    { route: "my-notes" },
     { route: "routines" },
   ]},
   { id: "agents", icon: "agents", children: [
@@ -125,7 +126,9 @@ const DESIGN_SECTIONS = [
 ];
 
 const OPERATOR_PAGES = {
-  "": dashboard, personal, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
+  // "" and "command" are the same stage: the old Operational Home dissolved
+  // into it (inbox sheet, systems sheet, stage panels) on the owner's call.
+  "": command, command, personal, agents, missions, hermes, claude, mila, speech, chat, kanban: workflows, workflows, routines, settings, components,
   "my-tasks": memberTasks, "my-notes": memberNotes,
   tools: misc.tools, knowledge: misc.knowledge, memory: misc.memory,
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
@@ -140,7 +143,7 @@ const DESIGN_PAGES = { ...MEMBER_PAGES, "": memberHome, mila: undefined, design,
 const sections = () => api.auth.canAdmin ? OPERATOR_SECTIONS : api.auth.canStudio ? DESIGN_SECTIONS : MEMBER_SECTIONS;
 const pages = () => api.auth.canAdmin ? OPERATOR_PAGES : api.auth.canStudio ? DESIGN_PAGES : MEMBER_PAGES;
 const NAV_KEYS = {
-  "": "home", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
+  "": "home", command: "command", personal: "personal", missions: "missions", hermes: "hermes", claude: "claude",
   mila: "mila", speech: "speech", agents: "agents", chat: "chat", kanban: "kanban",
   routines: "routines", tools: "tools", knowledge: "knowledge", memory: "memory", mcp: "mcp",
   integrations: "integrations", evaluations: "evaluations", observability: "observability",
@@ -156,9 +159,13 @@ const sectionLabel = (section) => tr(`nav.sec.${section.id}`);
 const navItems = () => sections().flatMap((section) => section.children.map((child) => ({ ...child, section })));
 const sectionForRoute = (route) => sections().find((section) => section.children.some((child) => child.route === route));
 
-/* ---------------- Theme ---------------- */
+/* ---------------- Theme ----------------
+   The operator's dark is the command theme (Ф5): same stored preference,
+   different rendering. Member and Design keep the original dark, per the
+   owner's call — so the mapping happens at apply time, never in the store. */
+const effectiveTheme = (t) => t === "dark" && api.auth.canAdmin ? "command" : t;
 export function applyTheme(t) {
-  document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.setAttribute("data-theme", effectiveTheme(t));
   store.set((s) => { s.settings.theme = t; });
 }
 function toggleTheme() {
@@ -522,6 +529,10 @@ function buildCommands() {
     });
   }
   if (api.auth.canAdmin) {
+    // My tasks / my notes left the operator rail for the stage's Today sheet
+    // (Ф4) — the palette is what keeps them findable by name.
+    cmds.push({ group: tr("shell.pages"), icon: "list", text: tr("nav.myTasks"), hint: "#/my-tasks", run: () => (location.hash = "#/my-tasks") });
+    cmds.push({ group: tr("shell.pages"), icon: "edit", text: tr("nav.myNotes"), hint: "#/my-notes", run: () => (location.hash = "#/my-notes") });
     cmds.push({ group: tr("shell.pages"), icon: "layers", text: tr("shell.componentLibrary"), hint: "#/components", run: () => (location.hash = "#/components") });
     [
       ["Hermes", "Primary orchestrator", "brain", "default"], ["Scout", "Research", "search", "scout"],
@@ -890,6 +901,6 @@ function renderLogin() {
     }).finally(clearAccountAction);
   }
 }
-function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", t); }
+function applyThemeSilent(t) { document.documentElement.setAttribute("data-theme", effectiveTheme(t)); }
 
 boot();

@@ -51,6 +51,10 @@ const first = (obj, keys, fallback = "-") => {
 
 const numeric = (obj, keys, fallback = 0) => {
   const value = first(obj, keys, null);
+  // Number(null) is 0, which read as "found a zero" and starved every
+  // fallback: the staged production sum and the finance fallback for revenue
+  // never fired. Missing is missing.
+  if (value === null) return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
@@ -63,6 +67,56 @@ const countish = (obj, keys, arrayFallback = []) => {
   }
   return arrayFallback.length;
 };
+
+
+// The one place the messy ERP shapes become numbers. The Command Center's
+// factory panel and sheet read this same digest, so the stage can never
+// disagree with this page.
+export function erpDigest(snapshot = {}) {
+  const cards = snapshot.cards || {};
+  const errors = snapshot.errors || {};
+  const summary = unwrap(cards.erp_gm_summary) || {};
+  const production = unwrap(cards.erp_active_production) || {};
+  const control = unwrap(cards.erp_business_control) || {};
+  const late = unwrap(cards.erp_late_orders);
+  const inventory = unwrap(cards.erp_inventory_status) || {};
+  const finishedGoods = unwrap(cards.erp_finished_goods_stock) || {};
+  const finance = unwrap(cards.erp_finance_summary) || {};
+  const tasks = unwrap(cards.erp_list_employee_tasks);
+  const me = unwrap(cards.erp_me) || {};
+
+  const invItems = asArray(inventory);
+  const readyModels = asArray(first(finishedGoods, ["top_models", "topModels"], []));
+  const lateItems = asArray(late);
+  const taskItems = asArray(tasks);
+  const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
+  const revenue = numeric(summary, ["revenue_total", "revenue", "sales", "totalSales"], numeric(finance, ["revenue_total", "revenue"]));
+  const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
+  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems) || numeric(production, ["active_work_orders", "activeWorkOrders"], 0);
+  const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
+  const cuttingOutput = numeric(production, ["cutting_output", "cuttingOutput"], 0);
+  const printingOutput = numeric(production, ["printing_output", "printingOutput"], 0);
+  const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"], 0);
+  const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"], 0);
+  const stagedProductionOutput = cuttingOutput + printingOutput + sewingOutput + packagingOutput;
+  const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput"], stagedProductionOutput);
+  const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
+  const totalTrackedOrders = numeric(control, ["total_orders", "totalOrders"], 0);
+  const blockedOrders = asArray(first(control, ["blocked_orders", "blockedOrders"], []));
+  const busiestFlow = first(first(control, ["answer_hints", "answerHints"], {}), ["busiest_sewing_flow", "busiestSewingFlow"], null);
+  const nextWarehouse = first(first(control, ["answer_hints", "answerHints"], {}), ["next_warehouse_order", "nextWarehouseOrder"], null);
+  const readyPieces = numeric(finishedGoods, ["total_pieces", "totalPieces"], 0);
+  const readyPackages = numeric(finishedGoods, ["total_packages", "totalPackages"], 0);
+  const readyModelsCount = numeric(finishedGoods, ["total_models", "totalModels"], readyModels.length);
+
+  return {
+    cards, errors, summary, production, control, late, inventory, finishedGoods, finance, tasks, me,
+    invItems, readyModels, lateItems, taskItems, productionItems, revenue, stockValue, activeOrders,
+    lateOrders, cuttingOutput, printingOutput, sewingOutput, packagingOutput, productionOutput,
+    reworkQty, totalTrackedOrders, blockedOrders, busiestFlow, nextWarehouse,
+    readyPieces, readyPackages, readyModelsCount,
+  };
+}
 
 function head() {
   return `<div class="page-head">
@@ -286,41 +340,13 @@ function erpHTML() {
   if (loading) return `<div class="page">${head()}<div class="card">${t("erp.loading")}</div></div>`;
   if (error) return `<div class="page">${head()}<div class="alert error"><div class="a-body"><div class="a-title">${t("erp.unavailable")}</div><div class="a-text">${esc(error)}</div></div></div></div>`;
 
-  const cards = snapshot.cards || {};
-  const errors = snapshot.errors || {};
-  const summary = unwrap(cards.erp_gm_summary) || {};
-  const production = unwrap(cards.erp_active_production) || {};
-  const control = unwrap(cards.erp_business_control) || {};
-  const late = unwrap(cards.erp_late_orders);
-  const inventory = unwrap(cards.erp_inventory_status) || {};
-  const finishedGoods = unwrap(cards.erp_finished_goods_stock) || {};
-  const finance = unwrap(cards.erp_finance_summary) || {};
-  const tasks = unwrap(cards.erp_list_employee_tasks);
-  const me = unwrap(cards.erp_me) || {};
-
-  const invItems = asArray(inventory);
-  const readyModels = asArray(first(finishedGoods, ["top_models", "topModels"], []));
-  const lateItems = asArray(late);
-  const taskItems = asArray(tasks);
-  const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
-  const revenue = numeric(summary, ["revenue_total", "revenue", "sales", "totalSales"], numeric(finance, ["revenue_total", "revenue"]));
-  const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
-  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems) || numeric(production, ["active_work_orders", "activeWorkOrders"], 0);
-  const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
-  const cuttingOutput = numeric(production, ["cutting_output", "cuttingOutput"], 0);
-  const printingOutput = numeric(production, ["printing_output", "printingOutput"], 0);
-  const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"], 0);
-  const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"], 0);
-  const stagedProductionOutput = cuttingOutput + printingOutput + sewingOutput + packagingOutput;
-  const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput"], stagedProductionOutput);
-  const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
-  const totalTrackedOrders = numeric(control, ["total_orders", "totalOrders"], 0);
-  const blockedOrders = asArray(first(control, ["blocked_orders", "blockedOrders"], []));
-  const busiestFlow = first(first(control, ["answer_hints", "answerHints"], {}), ["busiest_sewing_flow", "busiestSewingFlow"], null);
-  const nextWarehouse = first(first(control, ["answer_hints", "answerHints"], {}), ["next_warehouse_order", "nextWarehouseOrder"], null);
-  const readyPieces = numeric(finishedGoods, ["total_pieces", "totalPieces"], 0);
-  const readyPackages = numeric(finishedGoods, ["total_packages", "totalPackages"], 0);
-  const readyModelsCount = numeric(finishedGoods, ["total_models", "totalModels"], readyModels.length);
+  const {
+    cards, errors, summary, production, control, late, inventory, finishedGoods, finance, tasks, me,
+    invItems, readyModels, lateItems, taskItems, productionItems, revenue, stockValue, activeOrders,
+    lateOrders, cuttingOutput, printingOutput, sewingOutput, packagingOutput, productionOutput,
+    reworkQty, totalTrackedOrders, blockedOrders, busiestFlow, nextWarehouse,
+    readyPieces, readyPackages, readyModelsCount,
+  } = erpDigest(snapshot);
 
   return `<div class="page erp-page">
     ${head()}

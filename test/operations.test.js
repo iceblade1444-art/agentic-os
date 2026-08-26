@@ -56,7 +56,9 @@ test("missing operations state is explicit and operation requests contain no com
 test("operations UI and host installer use real API, timers and path activation", () => {
   const api = fs.readFileSync(new URL("../assets/js/api.js", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("../assets/js/pages/misc.js", import.meta.url), "utf8");
-  const dashboard = fs.readFileSync(new URL("../assets/js/pages/dashboard.js", import.meta.url), "utf8");
+  // The Operational Home dissolved into the Command Center (Ф4) — the stage
+  // and its Systems sheet are where the operations data lives now.
+  const dashboard = fs.readFileSync(new URL("../assets/js/pages/command.js", import.meta.url), "utf8");
   const installer = fs.readFileSync(new URL("../scripts/install-agentic-os-operations.sh", import.meta.url), "utf8");
   const operator = fs.readFileSync(new URL("../scripts/agentic-os-operations.py", import.meta.url), "utf8");
   const productionE2e = fs.readFileSync(new URL("../scripts/production-e2e.mjs", import.meta.url), "utf8");
@@ -79,12 +81,12 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.match(dashboard, /api\.operations\.status/);
   assert.match(dashboard, /api\.kanban\.board/);
   assert.match(dashboard, /api\.routines\.list/);
-  assert.match(dashboard, /api\.knowledge\.usage/);
+  assert.match(dashboard, /api\.knowledge\.graph/);
   assert.match(dashboard, /bounded\(api\.hermes\.status/);
   assert.match(dashboard, /timeoutValue/);
   // The page title comes from the dictionary now, so assert the key rather than
   // the English words it happens to resolve to.
-  assert.match(dashboard, /t\("dash\.title"\)/);
+  assert.match(dashboard, /t\("nav\.command"\)/);
   assert.doesNotMatch(dashboard, /randomSeries|Tokens Used|Success Rate.*82|All systems operational/);
   assert.match(installer, /OnUnitActiveSec=5min/);
   assert.match(installer, /OnCalendar=\*-\*-\* 03:15:00/);
