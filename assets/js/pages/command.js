@@ -429,13 +429,6 @@ function orbitHTML() {
   </div>`;
 }
 
-function tickerHTML(data) {
-  const events = (data?.pulse.events || []).slice(0, 3);
-  if (!events.length) return "";
-  return `<footer class="cmd-ticker">${events.map((event) =>
-    `<span>${esc(event.actor || "OS")} · ${esc(event.message || event.type || "")}</span>`).join("<i>▪</i>")}</footer>`;
-}
-
 function stageHTML(data) {
   const workspace = data?.onboarding?.workspace?.name || "Agentic OS";
   const now = new Date();
@@ -466,7 +459,6 @@ function stageHTML(data) {
       ${skillsPanel(data)}
       ${routinesPanel(data)}
     </div>
-    ${tickerHTML(data)}
     <a class="cmd-orb" href="#/mila" aria-label="${t("nav.mila")}"></a>
   </div>`;
 }
@@ -1440,6 +1432,22 @@ async function renderSystemsSheet(panel) {
     ${host.cpu ? meterRow(t("dash.cpu", { cores: host.cpu.cores }), `${host.cpu.loadPct}%`, host.cpu.loadPct) : ""}
     ${readiness.sections?.length ? `<span class="cmd-subhead">Four C · ${esc(String(readiness.score || 0))}%</span>
       ${readiness.sections.map((section) => meterRow(section.label, `${section.score}%`, section.score)).join("")}` : ""}
+    ${(() => {
+      // The event feed lives here now — off the stage, deduplicated: a sync
+      // job that fires every minute is one line, not a marquee.
+      const seen = new Set();
+      const events = (data.pulse?.events || []).filter((event) => {
+        const key = event.message || event.type || "";
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 5);
+      return events.length ? `<span class="cmd-subhead">${t("dash.activity")}</span>
+        ${events.map((event) => `<div class="cmd-sheet-row">
+          <div class="cmd-sheet-row-body"><strong>${esc(event.message || event.type || "")}</strong>
+          <small>${esc(event.actor || "OS")}${Number.isFinite(Number(event.at)) ? ` · ${esc(shortTime(Number(event.at)))}` : ""}</small></div>
+        </div>`).join("")}` : "";
+    })()}
     <div class="cmd-sheet-acts" style="margin-top:10px"><a class="cmd-mini-btn" href="#/observability">${t("nav.observability")}</a></div>`;
 }
 
@@ -1543,8 +1551,13 @@ export default {
         const fit = () => {
           const hud = window.matchMedia("(min-width: 1281px)").matches;
           const box = (hud ? stage : orbit).getBoundingClientRect();
+          // The ring must clear what actually renders above it — a long
+          // workspace name makes the brand taller, so measure it instead of
+          // assuming a height.
+          const brand = stage.querySelector(".cmd-brand");
+          const brandClear = brand ? brand.offsetTop + brand.offsetHeight + 44 : 100;
           const radius = hud
-            ? Math.max(170, Math.min((box.width - 700) / 2 - 34, box.height / 2 - 100, 430))
+            ? Math.max(150, Math.min((box.width - 700) / 2 - 34, box.height / 2 - brandClear, 430))
             : Math.max(96, Math.min(box.width, box.height) / 2 - 46);
           stage.style.setProperty("--cmd-r", `${Math.round(radius)}px`);
         };
@@ -1555,6 +1568,9 @@ export default {
         const watcher = new ResizeObserver(() => requestAnimationFrame(fit));
         watcher.observe(stage);
         watcher.observe(orbit);
+        // The brand grows when the webfonts land; the ring has to follow.
+        const brandEl = stage.querySelector(".cmd-brand");
+        if (brandEl) watcher.observe(brandEl);
         window.addEventListener("resize", fit);
         stageWatch = { disconnect() { watcher.disconnect(); window.removeEventListener("resize", fit); } };
       }

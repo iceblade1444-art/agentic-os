@@ -3697,7 +3697,10 @@ body.compact .card.pad-lg { padding: 16px; }
 .cmd-res-note { padding: 7px 4px; font: 500 12px/1.5 var(--font-mono); letter-spacing: 0.06em; color: var(--cmd-faint); }
 
 /* Brand */
-.cmd-brand { position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+/* Centred by margins, not transform: the entry animation owns `transform`
+   (its last keyframe is `none`, fill both), so a translateX(-50%) here is
+   silently erased and the brand sits half its width to the right. */
+.cmd-brand { position: absolute; top: 20px; left: 0; right: 0; margin: 0 auto; width: fit-content;
   text-align: center; z-index: 3; animation: cmdIn 0.5s var(--ease) both; padding: 2px 42px 10px; }
 /* The ring's top arc passes beneath the title; this halo keeps the words on
    top of the traffic without drawing a box around them. */
@@ -3705,6 +3708,7 @@ body.compact .card.pad-lg { padding: 16px; }
   background: radial-gradient(closest-side, rgba(6, 6, 5, 0.97), rgba(6, 6, 5, 0.72) 60%, transparent);
   filter: blur(6px); }
 .cmd-title { font-size: 21px; letter-spacing: 0.03em; white-space: nowrap; }
+@media (max-width: 1680px) { .cmd-brand .cmd-title { white-space: normal; text-wrap: balance; max-width: 46vw; margin: 0 auto; } }
 .cmd-title .cmd-hex { color: var(--ember); font-size: 17px; vertical-align: 1px; }
 .cmd-title strong { font-weight: 800; color: #ffffff; }
 .cmd-title em { font-style: normal; font-weight: 700; color: var(--ember-2); }
@@ -3715,7 +3719,7 @@ body.compact .card.pad-lg { padding: 16px; }
   border: 1px solid transparent; background: none; padding: 0; cursor: pointer; color: var(--cmd-dim); }
 .cmd-quick-btn svg { width: 14px; height: 14px; }
 .cmd-quick-btn:hover { color: #ffffff; border-color: var(--cmd-line); }
-.cmd-leds { display: flex; justify-content: center; gap: 14px; background: none; border: 1px solid transparent;
+.cmd-leds { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; background: none; border: 1px solid transparent;
   border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 .cmd-leds:hover, .cmd-leds:focus-visible { border-color: var(--cmd-line); }
 .cmd-meter { display: block; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.09); margin-top: 5px; overflow: hidden; }
@@ -3904,12 +3908,29 @@ a.cmd-subrow:hover { background: rgba(255, 255, 255, 0.05); }
   transition: box-shadow var(--dur) var(--ease); }
 .cmd-orb:hover, .cmd-orb:focus-visible { box-shadow: 0 0 30px rgba(168, 85, 247, 0.75), 0 0 0 2px rgba(255, 148, 64, 0.5); }
 
-/* Ticker */
-.cmd-ticker { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2;
-  display: flex; align-items: center; gap: 10px; max-width: min(720px, calc(100% - 740px));
-  font: 500 12px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--cmd-faint); white-space: nowrap; overflow: hidden; }
-.cmd-ticker span { overflow: hidden; text-overflow: ellipsis; }
-.cmd-ticker i { font-style: normal; color: var(--ember); font-size: 12px; }
+
+/* ---------- The shell in the command language (operator theme) ----------
+   Token values already made the shell black; these lines make it speak the
+   stage's dialect: hairlines, mono uppercase labels, ember bars, no pills. */
+[data-theme="command"] .sidebar { background: #0a0a09; }
+[data-theme="command"] .rail { background: #070706; border-right-color: rgba(255, 255, 255, 0.08); }
+[data-theme="command"] .rail-item { border-radius: 6px; }
+[data-theme="command"] .rail-item span { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; }
+[data-theme="command"] .rail-item:hover { background: rgba(255, 255, 255, 0.05); }
+[data-theme="command"] .rail-item.active { background: rgba(255, 106, 0, 0.1); color: #ff9440; }
+[data-theme="command"] .rail-item.active::before { background: #ff6a00; }
+[data-theme="command"] .rail-brand { background: #141210; box-shadow: inset 0 0 0 1px rgba(255, 106, 0, 0.55); }
+[data-theme="command"] .rail-brand::after { background-color: #ff9440; }
+[data-theme="command"] .sectionnav { background: #0a0a09; border-right: 1px solid rgba(255, 255, 255, 0.07); }
+[data-theme="command"] .sectionnav-title { font: 700 12px/1 var(--font-mono); letter-spacing: 0.22em; text-transform: uppercase; color: #7d7970; padding: 4px 8px 12px; }
+[data-theme="command"] .nav-item { border-radius: 6px; font-size: 13px; }
+[data-theme="command"] .nav-item:hover { background: rgba(255, 255, 255, 0.05); }
+[data-theme="command"] .nav-item.active { background: rgba(255, 106, 0, 0.1); color: #ffffff; box-shadow: none; }
+[data-theme="command"] .nav-item.active::before { background: #ff6a00; }
+[data-theme="command"] .topbar { background: rgba(7, 7, 6, 0.92); border-bottom: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+[data-theme="command"] .search { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.12); }
+[data-theme="command"] .tabbar { background: rgba(7, 7, 6, 0.95); border-top: 1px solid rgba(255, 255, 255, 0.08); }
+[data-theme="command"] .tab-item.active { color: #ff9440; }
 
 /* ---------- Second Brain map ---------- */
 .cmd-map-field { position: absolute; inset: 0; animation: cmdFade 0.9s var(--ease) both; }
@@ -4027,7 +4048,6 @@ a.cmd-subrow:hover { background: rgba(255, 255, 255, 0.05); }
   .cmd-col { position: static; width: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
   .cmd-col + .cmd-col { margin-top: 22px; }
   .cmd-col > :last-child { margin-top: 0; }
-  .cmd-ticker { position: static; transform: none; max-width: none; margin: 14px auto 0; justify-content: center; }
   .cmd-orb { position: fixed; right: 14px; bottom: calc(var(--tabbar-h) + 14px); }
   .cmd-map-field { position: relative; inset: auto; height: min(96vw, 560px); margin: 0 auto; }
   .cmd-map-head { position: static; margin-bottom: 4px; }

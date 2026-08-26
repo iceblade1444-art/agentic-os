@@ -75,8 +75,10 @@ test("the home stage uses the pulse API and fonts are self-hosted", () => {
   // Approvals stay decidable from the home (the inbox sheet's buttons).
   assert.match(dashboard, /data-decide/);
   assert.match(dashboard, /api\.pulse\.decideApproval/);
-  // And the event stream stays visible (the stage ticker).
-  assert.match(dashboard, /cmd-ticker/);
+  // And the event stream stays reachable from home — deduplicated in the
+  // Systems sheet, after the stage ticker turned out to be a marquee of
+  // identical sync lines and was removed on the owner's call.
+  assert.match(dashboard, /pulse\?\.events/);
 
   // Local-first: no font CDN anywhere in the shell or CSP.
   assert.doesNotMatch(indexHtml, /fonts\.googleapis|fonts\.gstatic/);
