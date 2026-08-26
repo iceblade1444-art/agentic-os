@@ -14,6 +14,7 @@ import shutil
 import socket
 import sqlite3
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.error
@@ -431,19 +432,92 @@ class Operations:
         if target.is_absolute() or ".." in target.parts:
             raise RuntimeError(f"unsafe archive path: {member.name}")
 
+    def fetch_offsite_backup(self, work_dir: Path) -> Path:
+        """Download, decrypt and unpack the newest off-site archive.
+
+        These are the first three steps of a real recovery, so any of them
+        failing is the finding: an archive that cannot make this trip is not a
+        backup, however faithfully it was uploaded.
+        """
+        if not self.backup_passphrase_file:
+            raise RuntimeError("no passphrase is configured, so the off-site archive cannot be opened")
+
+        rclone_style = ":" in self.backup_remote and not Path(self.backup_remote).is_absolute()
+        if rclone_style:
+            listing = self.run("rclone", "lsf", "--log-level", "ERROR", self.backup_remote, timeout=300)
+            if listing.returncode != 0:
+                raise RuntimeError((listing.stderr or "").strip()[:200] or "cannot list the off-site remote")
+            names = sorted(line.strip() for line in listing.stdout.splitlines()
+                           if line.strip().endswith(".tar.gz.gpg"))
+            if not names:
+                raise RuntimeError("the off-site remote holds no archive")
+            sealed = work_dir / names[-1]
+            fetched = self.run("rclone", "copyto", "--log-level", "ERROR",
+                               f"{self.backup_remote.rstrip('/')}/{names[-1]}",
+                               str(sealed), timeout=1800)
+            if fetched.returncode != 0:
+                raise RuntimeError((fetched.stderr or "").strip()[:200] or "cannot download the off-site archive")
+        else:
+            remote_dir = Path(self.backup_remote).expanduser()
+            names = sorted(item.name for item in remote_dir.glob("*.tar.gz.gpg"))
+            if not names:
+                raise RuntimeError("the off-site directory holds no archive")
+            sealed = work_dir / names[-1]
+            shutil.copy2(remote_dir / names[-1], sealed)
+
+        tarball = work_dir / "offsite.tar.gz"
+        with open(tarball, "wb") as plain:
+            opened = subprocess.run(
+                ["gpg", "--batch", "--quiet", "--yes", "--decrypt",
+                 "--passphrase-file", self.backup_passphrase_file, str(sealed)],
+                stdout=plain, stderr=subprocess.PIPE, timeout=900, check=False)
+        if opened.returncode != 0 or not tarball.stat().st_size:
+            detail = opened.stderr.decode("utf-8", "replace").strip()[:200]
+            raise RuntimeError(f"cannot decrypt the off-site archive: {detail}")
+
+        unpacked = work_dir / "unpacked"
+        unpacked.mkdir()
+        with tarfile.open(tarball, "r:gz") as bundle:
+            for member in bundle.getmembers():
+                self.assert_safe_tar_member(member)
+            bundle.extractall(unpacked)
+        directories = [item for item in unpacked.iterdir() if item.is_dir()]
+        if len(directories) != 1:
+            raise RuntimeError("the off-site archive does not hold exactly one backup")
+        return directories[0]
+
     def restore_drill(self, backup_path: Path | None = None) -> dict:
         with self.locked():
             self.restore_request_file.unlink(missing_ok=True)
+            fetched_dir = None
             state = self.load()
             state["restoreDrill"] = {**state.get("restoreDrill", {}), "status": "running", "startedAt": iso(), "error": None}
             self.save(state)
 
             try:
-                selected = backup_path or self.latest_backup()
+                # An explicitly named backup is always honoured; otherwise the
+                # copy worth rehearsing is the one that survives this server.
+                source, offsite_error, fetched_dir = "local", None, None
+                selected = backup_path
+                if selected is None and self.backup_remote:
+                    try:
+                        fetched_dir = Path(tempfile.mkdtemp(prefix="agentic-os-offsite-", dir=self.state_dir))
+                        selected = self.fetch_offsite_backup(fetched_dir)
+                        source = "off-site"
+                    except Exception as error:  # noqa: BLE001 - fall back, and say so
+                        offsite_error = str(error)[:300]
+                        selected = None
+                        shutil.rmtree(fetched_dir, ignore_errors=True)
+                        fetched_dir = None
+                if selected is None:
+                    selected = self.latest_backup()
                 if not selected:
                     raise RuntimeError("no backup is available for restore drill")
                 selected = selected.resolve()
-                if not selected.is_dir() or self.backup_root not in selected.parents:
+                # The containment rule guards against being pointed at an
+                # arbitrary path; the off-site copy is exempt because we just
+                # unpacked it ourselves, into our own temporary directory.
+                if source == "local" and (not selected.is_dir() or self.backup_root not in selected.parents):
                     raise RuntimeError("restore drill can only read backups inside OPS_BACKUP_DIR")
 
                 manifest_file = selected / "manifest.json"
@@ -504,6 +578,8 @@ class Operations:
                     "archives": checked_archives,
                     "databaseDumps": checked_database_dumps,
                     "filesChecked": checked_files,
+                    "source": source,
+                    "offsiteError": offsite_error,
                     "error": None,
                 }
                 self.save(state)
@@ -514,6 +590,9 @@ class Operations:
                 self.save(state)
                 self.notify("critical", f"Agentic OS restore drill failed: {error}")
                 raise
+            finally:
+                if fetched_dir:
+                    shutil.rmtree(fetched_dir, ignore_errors=True)
 
     def prune(self, current: Path) -> list[str]:
         entries = sorted((item for item in self.backup_root.iterdir() if item.is_dir() and item.name[:8].isdigit()), reverse=True)
@@ -532,7 +611,44 @@ class Operations:
                 sealed = self.backup_root / f"{item.name}.tar.gz.gpg"
                 with contextlib.suppress(FileNotFoundError):
                     sealed.unlink()
+        self.prune_offsite(removed)
         return removed
+
+    def prune_offsite(self, removed: list[str]) -> None:
+        """Let the remote forget what this disk has already forgotten.
+
+        Retention only ever applied locally, so the destination grew without
+        bound. On a free-tier quota that ends with the upload failing, which is
+        the worst way for a backup to stop: everything still succeeds locally
+        and the off-site copy simply stops arriving.
+
+        Never raises, and never alerts. A stale archive in the remote is a
+        smaller problem than a backup reported failed because its cleanup was.
+        """
+        if not removed or not self.backup_remote:
+            return
+        rclone_style = ":" in self.backup_remote and not Path(self.backup_remote).is_absolute()
+        for name in removed:
+            archive = f"{name}.tar.gz.gpg"
+            try:
+                if rclone_style:
+                    target = f"{self.backup_remote.rstrip('/')}/{archive}"
+                    # --log-level ERROR keeps rclone's standing advisories out of
+                    # stderr, so what is left there is the actual reason.
+                    result = self.run("rclone", "deletefile", "--log-level", "ERROR",
+                                      target, timeout=300)
+                    if result.returncode != 0:
+                        detail = (result.stderr or "").strip()
+                        # Nothing to delete is the normal case: every backup older
+                        # than the destination itself was never sent there.
+                        if "not found" in detail.lower():
+                            continue
+                        raise RuntimeError(detail[:200] or "rclone deletefile failed")
+                else:
+                    with contextlib.suppress(FileNotFoundError):
+                        (Path(self.backup_remote).expanduser() / archive).unlink()
+            except Exception as error:  # noqa: BLE001 - cleanup must not fail a backup
+                print(f"could not remove off-site copy {archive}: {error}", file=sys.stderr)
 
     def fetch_json(self, url: str, authenticated: bool = False) -> tuple[int, dict]:
         headers = {"Accept": "application/json"}
@@ -638,7 +754,16 @@ class Operations:
             return self.check("restore-drill", "Backup restore drill", "degraded", "no successful restore drill recorded")
         age = now() - last
         status = "healthy" if age < dt.timedelta(days=14) else "degraded"
-        return self.check("restore-drill", "Backup restore drill", status, f"last verified {round(age.total_seconds() / 86400, 1)} days ago")
+        source = drill.get("source", "local")
+        detail = f"last verified {round(age.total_seconds() / 86400, 1)} days ago, {source} copy"
+        # Rehearsing the archive that sits beside production is not what the
+        # off-site copy promises. Falling back to it is allowed — reporting a
+        # clean bill for the wrong archive is not.
+        if self.backup_remote and source != "off-site":
+            status = "degraded"
+            reason = drill.get("offsiteError") or "the off-site copy was not rehearsed"
+            detail = f"{detail} — {reason}"
+        return self.check("restore-drill", "Backup restore drill", status, detail)
 
     @staticmethod
     def check(check_id: str, name: str, status: str, detail: str, metrics: dict | None = None) -> dict:
@@ -646,6 +771,63 @@ class Operations:
         if metrics:
             value["metrics"] = metrics
         return value
+
+    def check_ssh_keys(self, state: dict) -> dict:
+        """Report junk lines and unrecognised keys in authorized_keys."""
+        name = "SSH authorized keys"
+        path = Path.home() / ".ssh/authorized_keys"
+        if not path.is_file():
+            return self.check("ssh-keys", name, "critical", "authorized_keys is missing")
+
+        listed = self.run("ssh-keygen", "-l", "-f", str(path), timeout=30)
+        if listed.returncode != 0:
+            detail = (listed.stderr or "").strip()[:150] or "authorized_keys could not be read"
+            return self.check("ssh-keys", name, "critical", detail)
+
+        entries = [line.split() for line in listed.stdout.splitlines() if line.strip()]
+        seen = {parts[1]: " ".join(parts[2:-1]) or "unnamed" for parts in entries}
+        self.ssh_keys_seen = seen
+
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        meaningful = [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
+        junk = len(meaningful) - len(entries)
+        mode = path.stat().st_mode & 0o777
+
+        expected = os.environ.get("OPS_SSH_KEYS_EXPECTED", "").strip()
+        known = {fp.strip() for fp in expected.split(",") if fp.strip()} or set(
+            (state.get("sshKeys") or {}).keys())
+
+        problems = []
+        status = "healthy"
+
+        if mode & 0o077:
+            # sshd refuses a group- or world-readable file, so this locks
+            # everyone out rather than letting anyone in — still critical.
+            status = "critical"
+            problems.append(f"permissions are {mode:o}, must be 600")
+
+        if not known:
+            # First run: record what is here rather than inventing an alert
+            # about a state nobody has declared wrong.
+            problems.append(f"{len(seen)} keys recorded as the baseline")
+        else:
+            appeared = {fp: who for fp, who in seen.items() if fp not in known}
+            vanished = [fp for fp in known if fp not in seen]
+            if appeared:
+                status = "critical"
+                problems.append("unrecognised key: " + ", ".join(
+                    f"{who} {fp[:24]}…" for fp, who in appeared.items()))
+            if vanished:
+                status = "degraded" if status == "healthy" else status
+                problems.append(f"{len(vanished)} recorded key(s) no longer present")
+
+        if junk > 0:
+            status = "degraded" if status == "healthy" else status
+            problems.append(f"{junk} line(s) sshd cannot parse")
+
+        detail = f"{len(seen)} keys" + ("; " + "; ".join(problems) if problems else "")
+        return self.check("ssh-keys", name, status, detail,
+                          metrics={"keys": len(seen), "unparsedLines": junk})
 
     def monitor(self) -> dict:
         if self.request_file.exists():
@@ -680,6 +862,7 @@ class Operations:
                 self.check_backup(previous),
                 self.check_offsite(previous),
                 self.check_restore_drill(previous),
+                self.check_ssh_keys(previous),
             ]
             if self.public_health_url:
                 checks.insert(1, self.check_http(self.public_health_url, "public-api", "Public HTTPS endpoint"))
@@ -688,6 +871,10 @@ class Operations:
             incidents = self.update_incidents(previous.get("incidents", []), checks)
             state = {
                 **previous,
+                # Written once. A key that appeared unexpectedly must not become
+                # the new normal on the next run — that turns an alarm into a
+                # single blink nobody was watching for.
+                "sshKeys": previous.get("sshKeys") or getattr(self, "ssh_keys_seen", None) or {},
                 "version": 1,
                 "status": overall,
                 "checkedAt": iso(),
