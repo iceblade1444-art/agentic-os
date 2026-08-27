@@ -229,7 +229,6 @@ export class MilaLiveSession {
     this.browserTextTimer = null;
     this.thinkingTimer = null;
     this.lastTextPrompt = "";
-    this.recentAssistantSpeech = "";
     this.heardSpeech = false;
     this.audioTurnEnded = false;
     this.lastVoiceAt = 0;
@@ -682,14 +681,7 @@ export class MilaLiveSession {
       }
       const userText = content.inputTranscription?.text;
       if (userText) {
-        // Over speakers the browser's echo canceller is best-effort: the model
-        // hears its own voice back and transcribes it as the user. Speech that
-        // arrives while MILA is audibly talking and repeats what she just said
-        // is her echo, not a person — a real interruption either says new
-        // words or arrives after `interrupted` has cleared the playback clock.
-        if (this._playbackActive() && this._looksLikeEcho(userText)) {
-          // dropped: the room heard MILA, not the operator
-        } else if (isTranscriptPlausible(userText, this.options.transcriptionLanguage)) {
+        if (isTranscriptPlausible(userText, this.options.transcriptionLanguage)) {
           this.currentUser = mergeTranscript(this.currentUser, userText);
           this.options.onPartial?.("user", this.currentUser);
           if (!this.currentAssistant) this._state("thinking");
@@ -704,7 +696,6 @@ export class MilaLiveSession {
       if (assistantText) {
         clearTimeout(this.thinkingTimer);
         this.currentAssistant += assistantText;
-        this.recentAssistantSpeech = `${this.recentAssistantSpeech} ${assistantText}`.slice(-800);
         this.options.onPartial?.("assistant", this.currentAssistant);
       }
       this._emitAudio(content.modelTurn);
@@ -767,25 +758,12 @@ export class MilaLiveSession {
     source.start(startAt);
   }
 
-  _playbackActive() {
-    if (this.playbackSources.size) return true;
-    // Scheduled audio counts too, with a small grace for the room's acoustics.
-    return !!this.audioContext && this.audioContext.currentTime < this.nextPlaybackTime + 0.4;
-  }
-
-  _looksLikeEcho(text) {
-    const normalize = (value) => String(value || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-    const recent = normalize(this.recentAssistantSpeech);
-    if (!recent) return false;
-    const words = normalize(text).split(" ").filter(Boolean);
-    if (!words.length) return false;
-    const spoken = new Set(recent.split(" "));
-    const overlap = words.filter((word) => spoken.has(word)).length / words.length;
-    // A short fragment during playback needs every word to match; longer ones
-    // are echo when nearly everything was just said by MILA herself.
-    return words.length <= 2 ? overlap === 1 : overlap >= 0.8;
-  }
-
+  // No word-overlap echo gate lives here, and none should: 1.10.1 tried one
+  // and ate real speech. In conversation people repeat what the assistant
+  // just said — "как дела", "приятного аппетита" — so overlap cannot tell an
+  // echo from a person, and every dropped fragment desynchronised the turns.
+  // Echo belongs to the audio layer (the browser's canceller, the output
+  // route, headphones), never to the transcript.
   _clearPlayback() {
     for (const source of this.playbackSources) {
       try { source.stop(); } catch { /* already stopped */ }
@@ -804,7 +782,6 @@ export class MilaLiveSession {
     this.recognitionFinal = "";
     this.transcriptWarningSent = false;
     this.lastTextPrompt = "";
-    this.recentAssistantSpeech = "";
     this.heardSpeech = false;
     this.audioTurnEnded = false;
     this.lastVoiceAt = 0;
