@@ -4,6 +4,7 @@ import { config } from "../config.js";
 
 const API_PREFIX = "/api/plugins/kanban";
 let cachedToken = "";
+let cachedCookies = "";
 
 function dashboardRequest(pathname, { method = "GET", headers = {}, body, timeoutMs = 8000 } = {}) {
   if (config.hermesDashboardSocket) {
@@ -50,11 +51,54 @@ function dashboardRequest(pathname, { method = "GET", headers = {}, body, timeou
   });
 }
 
+const TOKEN_IN_PAGE = /__HERMES_SESSION_TOKEN__\s*=\s*"([^"]+)"/;
+
+// The dashboard hands its session token to whoever loads its page. Since the
+// June-2026 hardening it only does that for a signed-in caller, so an
+// anonymous GET / comes back as a 302 to /login and the bridge is locked out
+// of Kanban, Routines and Skills. Logging in is the supported way through:
+// POST /auth/password-login mints the session cookies the page needs.
+//
+// Credentials are optional on purpose — a dashboard with no auth provider
+// still works exactly as before, and one with auth says plainly what is
+// missing instead of failing as "token unavailable".
+function loginCookies(response) {
+  const raw = response.headers?.["set-cookie"] || response.headers?.["Set-Cookie"] || [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list.map((entry) => String(entry).split(";")[0].trim()).filter(Boolean).join("; ");
+}
+
+async function logIn(requestImpl) {
+  const { hermesDashboardUsername: username, hermesDashboardPassword: password } = config;
+  if (!username || !password) {
+    throw new Error("Hermes Dashboard requires a sign-in; set HERMES_DASHBOARD_USERNAME and HERMES_DASHBOARD_PASSWORD");
+  }
+  const body = JSON.stringify({ provider: "basic", username, password });
+  const response = await requestImpl("/auth/password-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    body,
+  });
+  // The login route is rate limited, so a refusal is reported, never retried.
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`Hermes Dashboard sign-in failed (HTTP ${response.status})`);
+  }
+  const cookies = loginCookies(response);
+  if (!cookies) throw new Error("Hermes Dashboard sign-in returned no session cookie");
+  return cookies;
+}
+
 async function sessionToken(force = false, requestImpl = dashboardRequest) {
   if (cachedToken && !force) return cachedToken;
-  const response = await requestImpl("/");
-  if (response.status < 200 || response.status >= 400) throw new Error(`Hermes Dashboard HTTP ${response.status}`);
-  const token = response.text.match(/__HERMES_SESSION_TOKEN__\s*=\s*"([^"]+)"/)?.[1];
+  let response = await requestImpl("/", cachedCookies ? { headers: { Cookie: cachedCookies } } : {});
+  let token = response.status >= 200 && response.status < 400 ? response.text.match(TOKEN_IN_PAGE)?.[1] : null;
+  if (!token) {
+    // Either the page never had a token or this caller is not signed in.
+    cachedCookies = await logIn(requestImpl);
+    response = await requestImpl("/", { headers: { Cookie: cachedCookies } });
+    if (response.status < 200 || response.status >= 400) throw new Error(`Hermes Dashboard HTTP ${response.status}`);
+    token = response.text.match(TOKEN_IN_PAGE)?.[1];
+  }
   if (!token) throw new Error("Hermes Dashboard session token is unavailable");
   cachedToken = token;
   return token;
@@ -67,6 +111,7 @@ async function authorizedDashboardRequest(pathname, options = {}, requestImpl = 
       method: options.method || "GET",
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(cachedCookies ? { Cookie: cachedCookies } : {}),
         ...(options.headers || {}),
       },
       body: options.body,
@@ -74,7 +119,10 @@ async function authorizedDashboardRequest(pathname, options = {}, requestImpl = 
     });
   };
   let response = await run(false);
-  if (response.status === 401 || response.status === 403) response = await run(true);
+  if (response.status === 401 || response.status === 403) {
+    cachedCookies = "";
+    response = await run(true);
+  }
   if (response.status < 200 || response.status >= 300) {
     let data;
     try { data = response.text ? JSON.parse(response.text) : {}; }
@@ -152,3 +200,15 @@ export async function hermesCronRequest(pathname, options = {}, requestImpl = da
 export function resetHermesKanbanToken() {
   cachedToken = "";
 }
+
+// A seam for the tests: the module caches a session across calls and reads
+// its credentials from config, so a test needs to be able to clear the one
+// and stand in for the other.
+export const __testing = {
+  sessionToken,
+  reset() { cachedToken = ""; cachedCookies = ""; },
+  setCredentials({ username, password }) {
+    config.hermesDashboardUsername = username;
+    config.hermesDashboardPassword = password;
+  },
+};

@@ -52,6 +52,10 @@ export const config = {
   agentosRuntimeToken: env.AGENTOS_RUNTIME_TOKEN || "",
   hermesDashboardUrl: strip(env.HERMES_DASHBOARD_URL, "http://host.docker.internal:9119"),
   hermesDashboardSocket: env.HERMES_DASHBOARD_SOCKET || "",
+  // Only needed when the dashboard runs behind its basic-auth provider; an
+  // unauthenticated dashboard keeps working with these unset.
+  hermesDashboardUsername: env.HERMES_DASHBOARD_USERNAME || "",
+  hermesDashboardPassword: env.HERMES_DASHBOARD_PASSWORD || "",
   hermesChatSocket: env.HERMES_CHAT_SOCKET || "",
   livekitUrl: strip(env.LIVEKIT_URL, "http://host.docker.internal:7880"),
   // The room token the phone arrives with is signed with these. Without them
