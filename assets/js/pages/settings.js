@@ -42,11 +42,11 @@ export default {
 function section(s, llm) {
   if (tab === "appearance") return `
     <div class="card pad-lg">
-      <div class="section-title">${t("settings.theme")}</div>
+      ${api.auth.canAdmin ? "" : `<div class="section-title">${t("settings.theme")}</div>
       <div class="row gap-3 mb-4">
         <button class="btn ${s.settings.theme === "dark" ? "btn-primary" : "btn-secondary"}" data-theme="dark">${icon("moon")}${t("settings.dark")}</button>
         <button class="btn ${s.settings.theme === "light" ? "btn-primary" : "btn-secondary"}" data-theme="light">${icon("sun")}${t("settings.light")}</button>
-      </div>
+      </div>`}
       <div class="row between" style="padding:12px 0;border-top:1px solid var(--border)">
         <div><div class="fw-600">${t("settings.compact")}</div><div class="hint">${t("settings.compactText")}</div></div>
         <label class="switch"><input type="checkbox" id="compact" ${s.settings.compact ? "checked" : ""}/><span class="track"></span><span class="thumb"></span></label>

@@ -954,11 +954,22 @@ function brainResultsHTML(data) {
     groups.get(row.type).push(row);
   }
   const silent = data.sources.filter((source) => !source.ok).map((source) => source.name);
+  // A memory carries when and where it was made, so every hit shows both:
+  // the newest first inside its kind, dated in the reader's own words.
+  const stamp = (row) => {
+    const at = parseStamp(row.at);
+    if (!at) return "";
+    const day = localizedDate(at, { day: "numeric", month: "short" });
+    return `<time datetime="${new Date(at).toISOString()}">${esc(day)} · ${esc(timeAgo(at))}</time>`;
+  };
   return [...groups.entries()].map(([type, rows]) => `
     <div class="cmd-res-group">
-      <span class="cmd-res-head">${icon(RESULT_ICONS[type] || "dot")} ${t(`cmd.type.${type}`)}</span>
-      ${rows.map((row) => `<a class="cmd-res-row" href="#/${esc(row.route)}" data-type="${esc(row.type)}" data-id="${esc(row.id || "")}">
-        <b>${esc(row.title)}</b>${row.snippet ? `<small>${esc(row.snippet)}</small>` : ""}
+      <span class="cmd-res-head">${icon(RESULT_ICONS[type] || "dot")} ${t(`cmd.type.${type}`)} <b>${rows.length}</b></span>
+      ${rows.slice().sort((a, b) => (parseStamp(b.at) || 0) - (parseStamp(a.at) || 0)).map((row) => `
+      <a class="cmd-res-row" href="#/${esc(row.route)}" data-type="${esc(row.type)}" data-id="${esc(row.id || "")}">
+        <b>${esc(row.title)}</b>
+        ${row.snippet ? `<small>${esc(row.snippet)}</small>` : ""}
+        ${row.where || row.at ? `<span class="cmd-res-meta">${row.where ? `<i>${esc(row.where)}</i>` : ""}${stamp(row)}</span>` : ""}
       </a>`).join("")}
     </div>`).join("")
     + (data.partial ? `<div class="cmd-res-note">◇ ${t("cmd.brainPartial")}: ${esc(silent.join(", "))}</div>` : "");

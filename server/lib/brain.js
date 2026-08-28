@@ -19,6 +19,10 @@ const hit = (type, title, route, extra = {}) => ({
   title: clip(title, 160),
   snippet: clip(extra.snippet, 220),
   id: extra.id ? clip(extra.id, 200) : undefined,
+  // Where it lives and when it was last touched: a search over a second
+  // brain is a search over memories, and a memory without a date is a fact
+  // with no idea how stale it is.
+  where: extra.where ? clip(extra.where, 120) : undefined,
   at: extra.at || undefined,
 });
 const has = (needle) => (text) => String(text || "").toLowerCase().includes(needle);
@@ -70,7 +74,9 @@ export function defaultSources(user) {
       async run(needle, perSource) {
         const found = await knowledge.search(needle, { limit: perSource, actor, source: "brain-search" });
         return asArray(found, "matches").concat(asArray(found?.matches ? [] : found, "results"))
-          .map((note) => hit("note", note.title || note.path, "knowledge", { snippet: note.snippet, id: note.path }));
+          .map((note) => hit("note", note.title || note.path, "knowledge", {
+            snippet: note.snippet, id: note.path, at: note.updatedAt, where: note.folder,
+          }));
       },
     },
     {
@@ -82,7 +88,7 @@ export function defaultSources(user) {
           .filter((task) => match(task.title) || match(task.description))
           .map((task) => hit("task", task.title || task.id, "kanban", {
             snippet: `${task.status || column.name || ""}${task.assignee ? ` · ${task.assignee}` : ""}`,
-            id: task.id, at: task.updated_at || task.created_at,
+            id: task.id, at: task.updated_at || task.created_at, where: column.name,
           }))).slice(0, perSource);
       },
     },
@@ -92,7 +98,7 @@ export function defaultSources(user) {
         if (!user?.id) return [];
         return messenger.search(user.id, needle, { limit: perSource })
           .map((row) => hit("chat", row.conversationName || "Chat", "chat", {
-            snippet: row.message?.text, id: row.conversationId, at: row.message?.createdAt,
+            snippet: row.message?.text, id: row.conversationId, at: row.message?.createdAt, where: row.conversationName,
           }));
       },
     },

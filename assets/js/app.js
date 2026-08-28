@@ -163,7 +163,11 @@ const sectionForRoute = (route) => sections().find((section) => section.children
    The operator's dark is the command theme (Ф5): same stored preference,
    different rendering. Member and Design keep the original dark, per the
    owner's call — so the mapping happens at apply time, never in the store. */
-const effectiveTheme = (t) => t === "dark" && api.auth.canAdmin ? "command" : t;
+// An operator has one look, and it is the command centre's. Light mode was
+// dropped for them on the owner's call — a stored "light" from before must
+// not resurrect it, so the mapping ignores the value rather than trusting it.
+// Member and Design keep both themes and their toggle.
+const effectiveTheme = (t) => api.auth.canAdmin ? "command" : t;
 export function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", effectiveTheme(t));
   store.set((s) => { s.settings.theme = t; });
@@ -256,7 +260,7 @@ function topbarHTML() {
         </select>
       </label>
       ${api.on ? `<span class="badge success"><span class="dot"></span>${tr("shell.live")}</span>` : `<span class="badge neutral">${tr("shell.demo")}</span>`}
-      <button class="icon-btn" id="themeBtn" title="${tr("shell.theme")}">${icon(theme === "dark" ? "sun" : "moon")}</button>
+      ${api.auth.canAdmin ? "" : `<button class="icon-btn" id="themeBtn" title="${tr("shell.theme")}">${icon(theme === "dark" ? "sun" : "moon")}</button>`}
       <button class="icon-btn" id="helpBtn" title="${tr("shell.help")}">${icon("help")}</button>
       ${api.auth.canAdmin ? `<button class="icon-btn" id="bellBtn" title="${tr("shell.notifications")}" style="position:relative">${icon("bell")}<span class="dot"></span></button>` : ""}
       ${api.auth.canWrite ? `<a class="btn btn-primary" href="#/${member ? "my-tasks/new" : "kanban/new"}" id="newAgentTop">${icon("plus")}<span>${tr("shell.newTask")}</span></a>` : ""}
@@ -303,7 +307,8 @@ export function renderShell() {
 }
 
 function wireShell() {
-  qs("#themeBtn").onclick = toggleTheme;
+  const themeBtn = qs("#themeBtn");
+  if (themeBtn) themeBtn.onclick = toggleTheme;
   const language = qs("#interfaceLocale");
   if (language) language.onchange = async () => {
     const previous = getLocale();
@@ -541,7 +546,7 @@ function buildCommands() {
   }
   cmds.push({ group: tr("shell.actions"), icon: "plus", text: tr(api.auth.canAdmin ? "shell.newKanbanTask" : "shell.newPersonalTask"), run: () => (location.hash = api.auth.canAdmin ? "#/kanban/new" : "#/my-tasks/new") });
   cmds.push({ group: tr("shell.actions"), icon: "chat", text: tr("shell.newChat"), run: () => (location.hash = "#/chat") });
-  cmds.push({ group: tr("shell.actions"), icon: theme === "dark" ? "sun" : "moon", text: tr("shell.theme"), run: toggleTheme });
+  if (!api.auth.canAdmin) cmds.push({ group: tr("shell.actions"), icon: theme === "dark" ? "sun" : "moon", text: tr("shell.theme"), run: toggleTheme });
   cmds.push({ group: tr("shell.actions"), icon: "settings", text: tr("shell.openSettings"), run: () => (location.hash = "#/settings") });
   return cmds;
 }

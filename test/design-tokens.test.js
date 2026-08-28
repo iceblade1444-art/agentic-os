@@ -235,11 +235,18 @@ test("semantic text points at ink, not at the fill beside it", () => {
     "use the -ink token for text and for borders against a different ground");
 });
 
-test("the command theme is the operator's dark, applied at render time", () => {
-  // Stored preference stays "dark"/"light"; the mapping happens where the
-  // attribute is written, so Member and Design keep the original dark.
+test("an operator has one theme, and light mode cannot come back", () => {
+  // The owner dropped light mode for the operator surface. The mapping
+  // therefore ignores the stored value rather than trusting it — a "light"
+  // saved before the change must not resurrect the old look — and the
+  // toggles that could set it are not rendered for operators at all.
   const app = read("assets/js/app.js");
-  assert.match(app, /t === "dark" && api\.auth\.canAdmin \? "command" : t/);
+  assert.match(app, /const effectiveTheme = \(t\) => api\.auth\.canAdmin \? "command" : t/);
+  assert.match(app, /\$\{api\.auth\.canAdmin \? "" : `<button class="icon-btn" id="themeBtn"/);
+  assert.match(app, /if \(!api\.auth\.canAdmin\) cmds\.push\(\{ group: tr\("shell\.actions"\), icon: theme === "dark"/);
+  assert.match(read("assets/js/pages/settings.js"), /\$\{api\.auth\.canAdmin \? "" : `<div class="section-title">\$\{t\("settings\.theme"\)\}/);
+  // Member and Design still have both, so the light palette stays defined.
+  assert.ok(theme(TOKENS, "light").size > 20, "the light theme is still built for the other roles");
   // And the Flutter export deliberately ignores the third block: parseThemes
   // reads only dark and light, so the phone's palette cannot drift from this.
   assert.match(read("scripts/export-design-tokens.mjs"), /themes = \{ dark: \{\}, light: \{\} \}/);

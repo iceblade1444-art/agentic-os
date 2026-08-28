@@ -175,9 +175,16 @@ export class KnowledgeLibrary {
       const body = await readPrefix(file);
       const index = body.toLowerCase().indexOf(q.toLowerCase());
       if (index !== -1) {
+        const relativePath = slash(path.relative(this.rootReal, file));
+        // When a note was last touched is half of what makes a hit useful —
+        // a search over a memory has to say how old the memory is. One stat
+        // per match, and matches are already bounded by the limit.
+        const updatedAt = await fs.stat(file).then((stat) => stat.mtimeMs).catch(() => null);
         matches.push({
-          path: slash(path.relative(this.rootReal, file)),
+          path: relativePath,
           title: displayTitle(file, body),
+          folder: slash(path.dirname(relativePath)) === "." ? "Vault root" : slash(path.dirname(relativePath)),
+          updatedAt,
           snippet: body.slice(Math.max(0, index - 90), index + q.length + 150).replace(/\s+/g, " ").trim(),
         });
       }

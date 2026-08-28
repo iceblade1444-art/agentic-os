@@ -3682,7 +3682,7 @@ body.compact .card.pad-lg { padding: 16px; }
 .cmd-filter-count { font: 600 12px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ember-2); text-align: center; }
 
 /* Brain search results — everything the OS holds, grouped by kind. */
-.cmd-results { width: min(400px, 84vw); max-height: 46vh; max-height: 46dvh; overflow-y: auto; text-align: left;
+.cmd-results { width: min(440px, 88vw); max-height: 52vh; max-height: 52dvh; overflow-y: auto; text-align: left;
   background: rgba(9, 9, 8, 0.96); border: 1px solid var(--cmd-line); border-radius: 8px; padding: 8px 10px;
   backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
 .cmd-res-group { padding: 6px 0 4px; }
@@ -3690,10 +3690,16 @@ body.compact .card.pad-lg { padding: 16px; }
 .cmd-res-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px;
   font: 700 12px/1 var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--ember-2); }
 .cmd-res-head svg { width: 12px; height: 12px; }
+.cmd-res-head b { margin-left: auto; color: var(--cmd-faint); font-weight: 700; }
 .cmd-res-row { display: flex; flex-direction: column; gap: 1px; padding: 5px 8px; margin: 0 -8px; border-radius: 5px; min-width: 0; }
 .cmd-res-row:hover { background: rgba(255, 255, 255, 0.06); }
 .cmd-res-row b { font-size: 13px; font-weight: 700; color: var(--cmd-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cmd-res-row small { font-size: 12px; color: var(--cmd-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-res-row small { font-size: 12px; color: var(--cmd-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Where the memory lives and when it was last touched. */
+.cmd-res-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px;
+  font: 500 12px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--cmd-faint); }
+.cmd-res-meta i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-res-meta time { margin-left: auto; flex: none; color: var(--ember-2); opacity: 0.85; }
 .cmd-res-note { padding: 7px 4px; font: 500 12px/1.5 var(--font-mono); letter-spacing: 0.06em; color: var(--cmd-faint); }
 
 /* Brand */
@@ -3910,27 +3916,58 @@ a.cmd-subrow:hover { background: rgba(255, 255, 255, 0.05); }
 
 
 /* ---------- The shell in the command language (operator theme) ----------
-   Token values already made the shell black; these lines make it speak the
-   stage's dialect: hairlines, mono uppercase labels, ember bars, no pills. */
-[data-theme="command"] .sidebar { background: #0a0a09; }
-[data-theme="command"] .rail { background: #070706; border-right-color: rgba(255, 255, 255, 0.08); }
-[data-theme="command"] .rail-item { border-radius: 6px; }
-[data-theme="command"] .rail-item span { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; }
-[data-theme="command"] .rail-item:hover { background: rgba(255, 255, 255, 0.05); }
-[data-theme="command"] .rail-item.active { background: rgba(255, 106, 0, 0.1); color: #ff9440; }
-[data-theme="command"] .rail-item.active::before { background: #ff6a00; }
-[data-theme="command"] .rail-brand { background: #141210; box-shadow: inset 0 0 0 1px rgba(255, 106, 0, 0.55); }
-[data-theme="command"] .rail-brand::after { background-color: #ff9440; }
-[data-theme="command"] .sectionnav { background: #0a0a09; border-right: 1px solid rgba(255, 255, 255, 0.07); }
-[data-theme="command"] .sectionnav-title { font: 700 12px/1 var(--font-mono); letter-spacing: 0.22em; text-transform: uppercase; color: #7d7970; padding: 4px 8px 12px; }
-[data-theme="command"] .nav-item { border-radius: 6px; font-size: 13px; }
-[data-theme="command"] .nav-item:hover { background: rgba(255, 255, 255, 0.05); }
-[data-theme="command"] .nav-item.active { background: rgba(255, 106, 0, 0.1); color: #ffffff; box-shadow: none; }
-[data-theme="command"] .nav-item.active::before { background: #ff6a00; }
-[data-theme="command"] .topbar { background: rgba(7, 7, 6, 0.92); border-bottom: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-[data-theme="command"] .search { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.12); }
-[data-theme="command"] .tabbar { background: rgba(7, 7, 6, 0.95); border-top: 1px solid rgba(255, 255, 255, 0.08); }
+   The first pass only tinted the existing shapes and the owner rightly said
+   nothing had changed. This one takes the shapes away: the rail and its
+   column stand on the same honeycomb as the stage, an active row is an ember
+   bar and brighter type rather than a filled pill, and every boundary is a
+   hairline. */
+[data-theme="command"] .sidebar { background: #080807; }
+[data-theme="command"] .rail,
+[data-theme="command"] .sectionnav {
+  background-color: #080807;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'><path d='M14 8.8 28 17v16.3L14 41.5 0 33.3V17Z M14 41.5v7.5 M14 0v8.8' fill='none' stroke='rgba(255,250,240,0.035)' stroke-width='1'/></svg>");
+}
+[data-theme="command"] .rail { border-right: 1px solid rgba(255, 255, 255, 0.07); }
+[data-theme="command"] .sectionnav { border-right: 1px solid rgba(255, 255, 255, 0.07); }
+
+/* Rail: icon over a mono label, no pill — the active one lights up. */
+[data-theme="command"] .rail-item { border-radius: 0; color: #6f6a62; }
+[data-theme="command"] .rail-item span { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+[data-theme="command"] .rail-item:hover { background: rgba(255, 255, 255, 0.04); color: #cfcabf; }
+[data-theme="command"] .rail-item.active { background: none; color: #ff9440; }
+[data-theme="command"] .rail-item.active::before { left: 0; top: 8px; bottom: 8px; width: 2px; border-radius: 0; background: #ff6a00; box-shadow: 0 0 10px rgba(255, 106, 0, 0.7); }
+[data-theme="command"] .rail-brand { border-radius: 0; background: none; box-shadow: none; position: relative; }
+[data-theme="command"] .rail-brand::after { background-color: #ff6a00; }
+[data-theme="command"] .rail-foot { border-top: 1px solid rgba(255, 255, 255, 0.07); padding-top: 10px; margin-top: 6px; }
+
+/* Section column: a mono caption, rows that are lines rather than boxes. */
+[data-theme="command"] .sectionnav-head { border-bottom: 1px solid rgba(255, 255, 255, 0.07); margin-bottom: 10px; }
+[data-theme="command"] .sectionnav-title { font: 700 12px/1 var(--font-mono); letter-spacing: 0.24em; text-transform: uppercase; color: #7d7970; padding: 2px 10px 12px; }
+[data-theme="command"] .nav-item {
+  border-radius: 0; border-left: 2px solid transparent; padding: 9px 10px 9px 12px;
+  font-size: 13px; color: #a49f95; letter-spacing: 0.01em;
+}
+[data-theme="command"] .nav-item:hover { background: rgba(255, 255, 255, 0.04); color: #f2f0ec; }
+[data-theme="command"] .nav-item.active {
+  background: linear-gradient(90deg, rgba(255, 106, 0, 0.16), rgba(255, 106, 0, 0));
+  border-left-color: #ff6a00; color: #ffffff; font-weight: 700; box-shadow: none;
+}
+/* The stock rule paints a second bar outside the row; the border-left is ours. */
+[data-theme="command"] .nav-item.active::before { display: none; }
+[data-theme="command"] .nav-item .nav-tag { background: none; color: #ff9440; box-shadow: inset 0 0 0 1px rgba(255, 106, 0, 0.5); font-family: var(--font-mono); }
+[data-theme="command"] .brand-badge { background: none; box-shadow: inset 0 0 0 1px rgba(255, 106, 0, 0.45); color: #ff9440; font-family: var(--font-mono); }
+[data-theme="command"] .sidebar-foot { border-top: 1px solid rgba(255, 255, 255, 0.07); }
+[data-theme="command"] .user-chip .u-name { letter-spacing: 0.02em; }
+[data-theme="command"] .user-chip .u-mail { font-family: var(--font-mono); font-size: 12px; }
+
+/* Topbar and tabbar answer to the same rules. */
+[data-theme="command"] .topbar { background: rgba(8, 8, 7, 0.92); border-bottom: 1px solid rgba(255, 255, 255, 0.07); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+[data-theme="command"] .search { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; }
+[data-theme="command"] .search input::placeholder { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; }
+[data-theme="command"] .tabbar { background: rgba(8, 8, 7, 0.95); border-top: 1px solid rgba(255, 255, 255, 0.07); }
+[data-theme="command"] .tab-item { color: #6f6a62; }
 [data-theme="command"] .tab-item.active { color: #ff9440; }
+[data-theme="command"] .tab-item span { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* ---------- Second Brain map ---------- */
 .cmd-map-field { position: absolute; inset: 0; animation: cmdFade 0.9s var(--ease) both; }
