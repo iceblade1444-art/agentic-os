@@ -1,6 +1,6 @@
 {
   "name": "agentic-os",
-  "version": "1.10.4",
+  "version": "1.10.5",
   "private": true,
   "type": "module",
   "description": "Agentic OS — dashboard + backend (LLM proxy, MCP host, integrations)",

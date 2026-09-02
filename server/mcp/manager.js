@@ -105,6 +105,15 @@ export async function connect(server) {
   const res = await client.listTools();
   const tools = (res.tools || []).map((t) => ({ name: t.name, description: t.description || "", inputSchema: t.inputSchema || null }));
   const entry = { client, transport, tools };
+  // A child that dies has to take its entry with it. Without this the map
+  // keeps a corpse: isLive() stays true, so nothing ever reconnects, and every
+  // later call waits out its own timeout instead. That is exactly how the ERP
+  // panel filled with "-32001 Request timed out" on every tool while the ERP
+  // itself was answering normally — the bridge process was gone and the app
+  // had no way to notice.
+  const drop = () => { if (live.get(server.id) === entry) live.delete(server.id); };
+  client.onclose = drop;
+  client.onerror = drop;
   live.set(server.id, entry);
   return entry;
 }
