@@ -42,6 +42,11 @@ export function createCompanyBrief(options = {}) {
   const journalStore = options.journal || journal;
   const mfaStore = options.mfa || mfa;
   const now = options.now || (() => new Date());
+  // The house rule keeps a failed number out of the brief. It must not keep
+  // it out of the log: four mornings of briefs went out without a production
+  // block and nothing anywhere said why.
+  const warn = options.log || ((message) => console.warn(`[company-brief] ${message}`));
+  const reason = (result) => String(result?.error?.message || result?.message || result?.error || "ERP tool failed").slice(0, 160);
 
   async function production(timeZone) {
     const lines = [];
@@ -52,6 +57,7 @@ export function createCompanyBrief(options = {}) {
         bridge.call("erp_sewing_daily_report", { report_date: yesterday, factory_code: "MIL" }),
         bridge.call("erp_sewing_daily_report", { report_date: dayBefore, factory_code: "MIL" }).catch(() => null),
       ]);
+      if (current?.ok === false) warn(`erp_sewing_daily_report: ${reason(current)}`);
       if (current?.ok !== false) {
         const facts = sewingFacts(current?.data || {});
         const rawBefore = previous && previous.ok !== false ? sewingFacts(previous?.data || {}) : null;
@@ -62,7 +68,7 @@ export function createCompanyBrief(options = {}) {
           lines.push(`Швейка вчера: ${facts.total_sewn} шт по ${facts.lines_reported} линиям${delta(facts.total_sewn, before?.total_sewn)}${facts.total_defective ? `, брак ${facts.total_defective}` : ""}`);
         }
       }
-    } catch { /* ERP quiet — the block just loses this line */ }
+    } catch (error) { warn(`erp_sewing_daily_report: ${error.message}`); }
 
     // The process board answers the question the sewing total cannot: whether
     // the orders themselves are on time. An overdue order that has produced
@@ -70,6 +76,7 @@ export function createCompanyBrief(options = {}) {
     // today, not a nudge.
     try {
       const board = await bridge.call("erp_process_tracking", {});
+      if (board?.ok === false) warn(`erp_process_tracking: ${reason(board)}`);
       if (board?.ok !== false) {
         const facts = processFacts(board?.data || {});
         if (facts.total_in_work > 0) {
@@ -87,10 +94,11 @@ export function createCompanyBrief(options = {}) {
           }
         }
       }
-    } catch { /* the board is quiet — the block just loses these lines */ }
+    } catch (error) { warn(`erp_process_tracking: ${error.message}`); }
 
     try {
       const gate = await bridge.call("erp_attendance_overview", {});
+      if (gate?.ok === false) warn(`erp_attendance_overview: ${reason(gate)}`);
       if (gate?.ok !== false) {
         const facts = attendanceFacts(gate?.data || {});
         if (Number.isFinite(facts.present) && Number.isFinite(facts.total)) {
@@ -98,10 +106,11 @@ export function createCompanyBrief(options = {}) {
           lines.push(`Явка на ${at}: ${facts.present} из ${facts.total}`);
         }
       }
-    } catch { /* the turnstile is quiet — the block just loses this line */ }
+    } catch (error) { warn(`erp_attendance_overview: ${error.message}`); }
 
     try {
       const value = await digest.read();
+      if (!value.available) warn(`digest: ${value.reason || "unavailable"}`);
       if (value.available) {
         if (Number.isFinite(value.lateOrders)) {
           lines.push(`Просрочки по клиентским заказам: ${value.lateOrders}${value.lateOrders && value.lateOrdersDetail ? ` — ${value.lateOrdersDetail}` : ""}`);
@@ -109,7 +118,7 @@ export function createCompanyBrief(options = {}) {
         if (Number.isFinite(value.finishedGoodsPieces)) lines.push(`Склад готовой продукции: ${value.finishedGoodsPieces} шт`);
         if (value.financeFlag) lines.push(`Финансы: ${clean(value.financeFlag, 120)}`);
       }
-    } catch { /* same rule */ }
+    } catch (error) { warn(`digest: ${error.message}`); }
     return lines.length ? `Производство:\n${lines.map((line) => `• ${line}`).join("\n")}` : "";
   }
 

@@ -53,7 +53,9 @@ export function createErpBridge(options = {}) {
       // ERP answer, so drop the connection and try once on a fresh one. Real
       // errors (bad tool, ERP 403) come back identically on the retry and are
       // reported as themselves.
-      if (!/closed|not connected|EPIPE|terminated/i.test(error.message || "")) throw error;
+      // A request that timed out belongs here too: the manager has already
+      // evicted that bridge, and the ERP behind it was answering all along.
+      if (!/closed|not connected|EPIPE|terminated|timed out/i.test(error.message || "")) throw error;
       await mcp.disconnect(server.id).catch(() => {});
       return attempt(server, tool, args);
     }

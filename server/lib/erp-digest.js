@@ -29,6 +29,7 @@ function listValue(value) {
 export function createErpDigest(options = {}) {
   const bridge = options.bridge || erpBridge;
   const now = options.now || (() => Date.now());
+  const warn = options.log || ((message) => console.warn(`[erp-digest] ${message}`));
   let cache = null;
 
   async function read({ force = false } = {}) {
@@ -44,6 +45,10 @@ export function createErpDigest(options = {}) {
       bridge.safeCall("erp_finished_goods_stock", { limit: 1 }),
       bridge.safeCall("erp_finance_summary"),
     ]);
+
+    for (const result of [late, finished, finance]) {
+      if (result?.ok === false) warn(`${result.tool || "tool"}: ${String(result.error?.message || result.message || "failed").slice(0, 160)}`);
+    }
 
     const lateData = late?.data || late;
     const lateRows = listValue(lateData);

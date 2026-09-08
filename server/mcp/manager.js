@@ -13,6 +13,17 @@ const ERP = fileURLToPath(new URL("./erp-server.js", import.meta.url));
 
 // id -> { client, transport, tools }
 const live = new Map();
+// id -> Promise<entry>: the spawn in flight, shared by everyone who asks
+// while it runs. Without it, every caller that finds the map empty starts its
+// own bridge — the ERP digest fires three calls at once, the ERP page nine —
+// and all but the last one to finish become orphans that live for days,
+// while the one that "won" turned out deaf more than once.
+const pending = new Map();
+// A bridge that has not answered in this long has stopped listening. The
+// SDK's own default is a full minute, which is how a morning brief spent
+// sixty seconds per tool waiting on a corpse and shipped with no ERP at all.
+export const CALL_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT = -32001;
 
 function splitArgs(value) {
   if (Array.isArray(value)) return value;
@@ -92,6 +103,21 @@ export function getTools(id) { return live.get(id)?.tools || []; }
 
 export async function connect(server) {
   if (live.has(server.id)) return live.get(server.id);
+  if (pending.has(server.id)) return pending.get(server.id);
+  const attempt = spawn(server).finally(() => pending.delete(server.id));
+  pending.set(server.id, attempt);
+  return attempt;
+}
+
+// Forget a bridge and make sure its process goes with it: an entry that is
+// merely forgotten leaves a child behind, and the child keeps its ERP
+// session open for nobody.
+function evict(id, entry) {
+  if (live.get(id) === entry) live.delete(id);
+  Promise.resolve().then(() => entry.client.close()).catch(() => {});
+}
+
+async function spawn(server) {
   const spec = resolveSpawn(server);
   if (!spec.command) throw new Error("No command configured for this server");
   const transport = new StdioClientTransport({
@@ -111,7 +137,7 @@ export async function connect(server) {
   // panel filled with "-32001 Request timed out" on every tool while the ERP
   // itself was answering normally — the bridge process was gone and the app
   // had no way to notice.
-  const drop = () => { if (live.get(server.id) === entry) live.delete(server.id); };
+  const drop = () => evict(server.id, entry);
   client.onclose = drop;
   client.onerror = drop;
   live.set(server.id, entry);
@@ -125,12 +151,23 @@ export async function disconnect(id) {
   live.delete(id);
 }
 
-export async function callTool(id, name, args) {
+export async function callTool(id, name, args, { timeout = CALL_TIMEOUT_MS } = {}) {
   const e = live.get(id);
   if (!e) throw new Error("Server is not connected");
-  return e.client.callTool({ name, arguments: args || {} });
+  try {
+    return await e.client.callTool({ name, arguments: args || {} }, undefined, { timeout });
+  } catch (error) {
+    // A process that is alive but no longer answers looks exactly like a slow
+    // one, right up to the timeout. After it, treat the bridge as gone: drop
+    // it, kill it, and let the next call start a fresh one — a second of
+    // reconnect against a day of silence.
+    if (error?.code === REQUEST_TIMEOUT) evict(id, e);
+    throw error;
+  }
 }
 
 export async function shutdownAll() {
   for (const id of [...live.keys()]) await disconnect(id);
 }
+
+export const internals = { live, pending, evict };

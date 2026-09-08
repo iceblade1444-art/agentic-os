@@ -44,5 +44,5 @@ test("the manager wires the close and error handlers that make that possible", (
   assert.match(source, /client\.onclose = drop/);
   assert.match(source, /client\.onerror = drop/);
   // Guarded so a late close from an old bridge cannot evict a newer one.
-  assert.match(source, /if \(live\.get\(server\.id\) === entry\) live\.delete\(server\.id\)/);
+  assert.match(source, /if \(live\.get\(id\) === entry\) live\.delete\(id\)/);
 });
