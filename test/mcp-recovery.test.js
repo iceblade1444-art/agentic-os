@@ -46,3 +46,11 @@ test("the manager wires the close and error handlers that make that possible", (
   // Guarded so a late close from an old bridge cannot evict a newer one.
   assert.match(source, /if \(live\.get\(id\) === entry\) live\.delete\(id\)/);
 });
+
+test("concurrent callers share one connection attempt", async () => {
+  const one = { id: "mcp_sample_parallel", kind: "sample", name: "sample" };
+  const [left, right, third] = await Promise.all([connect(one), connect(one), connect(one)]);
+  assert.equal(left, right);
+  assert.equal(right, third);
+  await disconnect(one.id);
+});

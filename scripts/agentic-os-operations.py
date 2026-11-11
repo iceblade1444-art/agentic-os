@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import datetime as dt
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -160,6 +161,10 @@ class Operations:
                 hermes_archive = self.hermes_control_backup(destination)
                 if hermes_archive:
                     archives.append(hermes_archive.name)
+
+                mila_archive = self.mila_backup(destination)
+                if mila_archive:
+                    archives.append(mila_archive.name)
 
                 database_dumps = []
                 postgres_dump = self.postgres_dump(destination)
@@ -382,6 +387,45 @@ class Operations:
             archive = destination / "hermes-control.tgz"
             with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:
                 bundle.add(stage, arcname="hermes", recursive=True, filter=self._tar_filter)
+            os.chmod(archive, 0o600)
+            return archive
+
+    def mila_backup(self, destination: Path) -> Path | None:
+        """Back up MILA's SQLite state and deployment configuration consistently.
+
+        APK binaries stay in GitHub Releases; their hashes are recorded so a
+        restored deployment can prove which release it served without adding a
+        hundred megabytes to every daily backup.
+        """
+        mila_root = Path(os.environ.get("OPS_MILA_ROOT", "/opt/mila")).resolve()
+        if not mila_root.is_dir():
+            return None
+        with tempfile.TemporaryDirectory(prefix="mila-backup-", dir=self.state_dir) as temp_dir:
+            stage = Path(temp_dir) / "mila"
+            for relative in ("docker-compose.yml", "backend/.env", "livekit/livekit.yaml"):
+                self._copy_regular_file(mila_root / relative, stage / relative)
+            database = mila_root / "backend/data/mila.db"
+            if database.is_file() and not database.is_symlink():
+                self._sqlite_online_backup(database, stage / "backend/data/mila.db")
+            head = self.run("git", "-C", str(mila_root), "rev-parse", "HEAD")
+            (stage / "git-head").parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            (stage / "git-head").write_text((head.stdout.strip() or "unknown") + "\n", encoding="utf-8")
+            releases = []
+            for apk in sorted((mila_root / "downloads").glob("*.apk")) if (mila_root / "downloads").is_dir() else []:
+                if not apk.is_file() or apk.is_symlink():
+                    continue
+                with apk.open("rb") as source:
+                    digest = hashlib.file_digest(source, "sha256").hexdigest()
+                releases.append({"name": apk.name, "sizeBytes": apk.stat().st_size, "sha256": digest})
+            (stage / "release-manifest.json").write_text(json.dumps({"apk": releases}, indent=2) + "\n", encoding="utf-8")
+            for item in stage.rglob("*"):
+                if item.is_file():
+                    os.chmod(item, 0o600)
+            if not any(item.is_file() for item in stage.rglob("*")):
+                return None
+            archive = destination / "mila-state.tgz"
+            with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:
+                bundle.add(stage, arcname="mila", recursive=True, filter=self._tar_filter)
             os.chmod(archive, 0o600)
             return archive
 
@@ -829,6 +873,58 @@ class Operations:
         return self.check("ssh-keys", name, status, detail,
                           metrics={"keys": len(seen), "unparsedLines": junk})
 
+    def check_features(self, state: dict) -> dict:
+        """Confirm that work already done is still present in what is deployed.
+
+        A deploy from the wrong source reverts changes without failing anything:
+        the service still answers, every other check stays green, and the loss
+        shows up as a customer complaint weeks later. Marker strings are a crude
+        signal, but they are checked against the running container rather than
+        the source tree, so they answer the question that matters — is the fix
+        in the thing that is serving people right now.
+        """
+        name = "Deployed features"
+        manifest_path = self.state_dir / "expected-features.json"
+        if not manifest_path.is_file():
+            return self.check("features", name, "healthy", "no feature list configured")
+        try:
+            features = json.loads(manifest_path.read_text(encoding="utf-8")).get("features", [])
+        except (OSError, ValueError) as error:
+            return self.check("features", name, "degraded", f"feature list unreadable: {error}")
+        if not features:
+            return self.check("features", name, "healthy", "feature list is empty")
+
+        missing, skipped = [], 0
+        for feature in features:
+            container = str(feature.get("container", ""))
+            path = str(feature.get("path", ""))
+            marker = str(feature.get("marker", ""))
+            if not container or not path or not marker:
+                continue
+            result = self.run("docker", "exec", container, "grep", "-qF", marker, path,
+                              timeout=30)
+            if result.returncode == 0:
+                continue
+            # A container that is not running is already reported by its own
+            # check; blaming it twice buries the signal that matters here.
+            if result.returncode == 127 or "is not running" in (result.stderr or "") \
+                    or "No such container" in (result.stderr or ""):
+                skipped += 1
+                continue
+            missing.append(str(feature.get("name") or marker))
+
+        checked = len(features) - skipped
+        if missing:
+            return self.check(
+                "features", name, "degraded",
+                f"{len(missing)} of {checked} missing after a deploy: " + "; ".join(missing[:3]),
+                metrics={"checked": checked, "missing": len(missing)})
+        detail = f"{checked} present"
+        if skipped:
+            detail += f", {skipped} skipped (container not running)"
+        return self.check("features", name, "healthy", detail,
+                          metrics={"checked": checked, "missing": 0})
+
     def monitor(self) -> dict:
         if self.request_file.exists():
             self.backup()
@@ -863,6 +959,7 @@ class Operations:
                 self.check_offsite(previous),
                 self.check_restore_drill(previous),
                 self.check_ssh_keys(previous),
+                self.check_features(previous),
             ]
             if self.public_health_url:
                 checks.insert(1, self.check_http(self.public_health_url, "public-api", "Public HTTPS endpoint"))

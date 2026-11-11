@@ -26,12 +26,10 @@ const PY_SERVER = read("vendor/milana-erp-mcp/src/milana_erp_mcp/server.py");
 
 const MODEL_ACTIONS = ["get_models_overview", "find_models", "get_model_details"];
 
-test("the catalogue is readable by everyone who can ask", () => {
-  // No personal data and no money: which garments the factory makes is what a
-  // floor manager is asked all day.
+test("the catalogue follows the manager ERP boundary", () => {
   for (const name of MODEL_ACTIONS) {
-    assert.ok(READ_ONLY_ERP_ACTIONS.has(name), `${name} is not a read-only ERP action`);
-    assert.equal(OPERATOR_ERP_ACTIONS.has(name), false, `${name} must not be operator-only`);
+    assert.equal(READ_ONLY_ERP_ACTIONS.has(name), false, `${name} must not reach an employee account`);
+    assert.ok(OPERATOR_ERP_ACTIONS.has(name), `${name} must remain available to managers`);
   }
 });
 
@@ -41,7 +39,7 @@ test("every door carries them, including voice", () => {
   for (const name of MODEL_ACTIONS) {
     for (const channel of ["app", "voice", "chat", "telegram"]) {
       assert.ok(channelAllows(name, operator, channel), `${name} blocked for operator on ${channel}`);
-      assert.ok(channelAllows(name, member, channel), `${name} blocked for member on ${channel}`);
+      assert.equal(channelAllows(name, member, channel), false, `${name} leaked to member on ${channel}`);
     }
   }
 });
@@ -53,10 +51,7 @@ test("the model is told the tools exist, or it will never call them", () => {
     const tool = MILA_TOOLS.find((item) => item.name === name);
     assert.ok(tool, `${name} is missing from MILA_TOOLS`);
     assert.ok(tool.description.length > 60, `${name} needs a description that says when to use it`);
-    assert.ok(
-      MILA_MEMBER_TOOLS.some((item) => item.name === name),
-      `${name} is missing from the Member tool list`,
-    );
+    assert.equal(MILA_MEMBER_TOOLS.some((item) => item.name === name), false, `${name} leaked into the Member tool list`);
   }
 });
 
@@ -171,7 +166,7 @@ test("the baseline never promises a tool the agent cannot run", () => {
   // function for and the call dies mid-sentence. These two lists are one list
   // kept in two repositories, so they are compared rather than trusted.
   const agent = process.env.MILA_AGENT_PY
-    || "C:/AI Agent/mila/voice-agent/agent.py";
+    || new URL("../../mila-agent-hardening/voice-agent/agent.py", import.meta.url);
   if (!fs.existsSync(agent)) {
     // The sibling repository is not always checked out beside this one.
     return;
@@ -179,7 +174,7 @@ test("the baseline never promises a tool the agent cannot run", () => {
   const source = fs.readFileSync(agent, "utf8");
   const served = source.slice(source.indexOf("SERVED_PROMPT_TOOLS = ["));
   const declared = [...served.slice(0, served.indexOf("]")).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
-  assert.ok(declared.length >= 10, "SERVED_PROMPT_TOOLS moved or could not be read");
+  assert.ok(declared.length >= LIVEKIT_BASELINE_TOOLS.length, "SERVED_PROMPT_TOOLS moved or could not be read");
   for (const name of LIVEKIT_BASELINE_TOOLS) {
     assert.ok(
       declared.includes(name),

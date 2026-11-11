@@ -161,28 +161,26 @@ test("registration waits for owner approval end to end", () => {
   assert.match(settings, /api\.auth\.updateUser\(button\.dataset\.userId, \{ approved: approve \}\)/);
 });
 
-test("ERP is readable by every role but its write tools stay with operators", () => {
+test("company ERP stays with managers and employees land on their own production view", () => {
   const app = fs.readFileSync(new URL("../assets/js/app.js", import.meta.url), "utf8");
   const server = fs.readFileSync(new URL("../server/index.js", import.meta.url), "utf8");
   const erpRoutes = fs.readFileSync(new URL("../server/routes/erp.js", import.meta.url), "utf8");
   const erpPage = fs.readFileSync(new URL("../assets/js/pages/erp.js", import.meta.url), "utf8");
 
-  // Mounted without requireOperator — every signed-in role reaches the snapshot.
-  assert.match(server, /app\.use\("\/api\/erp", erp\)/);
+  assert.match(server, /app\.use\("\/api\/erp", requireOperator, erp\)/);
+  assert.match(server, /app\.use\("\/api\/production", production\)/);
   const memberNav = app.slice(app.indexOf("const MEMBER_SECTIONS"), app.indexOf("const DESIGN_SECTIONS"));
-  // ERP is Member's landing page: route "" renders it instead of a separate nav entry.
-  assert.match(memberNav, /route: "", navKey: "erp"/);
-  assert.match(app, /const MEMBER_PAGES = \{[^}]*erp[^}]*\}/);
-  // Design is unaffected: it keeps its own dashboard at "" plus a distinct ERP entry.
+  assert.match(memberNav, /route: "", navKey: "production"/);
+  assert.match(app, /const MEMBER_PAGES = \{[^}]*production[^}]*\}/);
   const designNav = app.slice(app.indexOf("const DESIGN_SECTIONS"), app.indexOf("const OPERATOR_PAGES"));
-  assert.match(designNav, /route: "erp"/);
+  assert.match(designNav, /route: "production"/);
   assert.match(app, /const DESIGN_PAGES = \{ \.\.\.MEMBER_PAGES, "": memberHome/);
 
   // erp_create_task and erp_send_notification are not read-only, so they 403.
   assert.match(erpRoutes, /READ_ONLY_TOOLS = new Set\(\[\.\.\.READ_TOOLS\.map\(\(\[tool\]\) => tool\), "erp_search"\]\)/);
   assert.match(erpRoutes, /!READ_ONLY_TOOLS\.has\(String\(tool\)\) && !isOperator\(req\)/);
   assert.match(erpRoutes, /r\.post\("\/wiki-sync", requireOperator/);
-  assert.match(erpPage, /api\.auth\.canAdmin \? `<button class="btn btn-secondary" id="erpWikiSync"/);
+  assert.match(erpPage, /api\.auth\.canAdmin && snapshot\?\.configured && !loading && !error \? `<button class="btn btn-secondary" id="erpWikiSync"/);
 });
 
 test("Member gets Mila Live for conversation only, not the operator tool actions", () => {
@@ -224,17 +222,11 @@ test("Member gets Mila Live for conversation only, not the operator tool actions
   // surfaces need the same answer, and the copies drifted. What matters to this
   // test is the contents of the gate, not where the words are typed.
   assert.match(milaActionsRoute, /import \{[^}]*READ_ONLY_ERP_ACTIONS[^}]*\} from "\.\.\/lib\/mila-actions\.js"/);
-  // Pinned exactly, so widening what a Member can read is a decision somebody
-  // writes down rather than a set that quietly grows. The three model tools
-  // joined deliberately: the product catalogue carries no personal data and no
-  // money — the materials list comes back without unit cost — and which
-  // garments the factory makes is what a floor manager is asked all day.
+  // Pinned exactly: employees have one ERP action and it applies the explicit
+  // Agentic OS account -> ERP employee link on the server.
   assert.deepEqual(
     [...READ_ONLY_ERP_ACTIONS].sort(),
-    [
-      "find_models", "get_erp_business_context", "get_finished_goods_stock",
-      "get_model_details", "get_models_overview", "get_sewing_daily_report",
-    ],
+    ["get_my_production_intelligence"],
   );
   // Company knowledge joins the everyone list: it is read-only and scoped to one
   // vault folder, so an employee looking up a price reaches nothing that was not

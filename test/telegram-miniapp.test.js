@@ -117,6 +117,8 @@ function handler(over = {}) {
   const { telegram: telegramOver, ...rest } = over;
   const fn = telegramAuthHandler({
     botToken: BOT_TOKEN,
+    commitAuthGroups: async () => {},
+    requireMfa: () => false,
     sessions: { create: (userId, opts) => { calls.sessions.push({ userId, ...opts }); return { id: "sess_1" }; } },
     users: { get: () => null },
     creatorUser: () => OWNER,
@@ -189,6 +191,39 @@ test("a disabled account cannot come in through Telegram either", async () => {
   assert.equal(calls.sessions.length, 0);
 });
 
+test("disabled and pending accounts cannot use a valid Telegram signature", async () => {
+  for (const flags of [{ disabled: true }, { approved: false }, { approvedAt: "" }]) {
+    const { fn, res, calls } = handler({
+      telegram: { accountForChat: () => "usr_2" },
+      users: { get: () => ({ id: "usr_2", role: "Member", ...flags }) },
+    });
+    await fn({ body: { initData: freshInitData() } }, res);
+    assert.equal(res.statusCode, 403);
+    assert.equal(calls.sessions.length, 0);
+    assert.equal(res.headers["Set-Cookie"], undefined);
+  }
+});
+
+test("Telegram cannot skip MFA or issue a cookie before persistence succeeds", async () => {
+  const challenge = handler({ requireMfa: (_user, kind, res) => {
+    assert.equal(kind, "web");
+    res.status(202).json({ mfaRequired: true });
+    return true;
+  } });
+  await challenge.fn({ body: { initData: freshInitData() } }, challenge.res);
+  assert.equal(challenge.res.statusCode, 202);
+  assert.equal(challenge.calls.sessions.length, 0);
+  let revoked = false;
+  const failed = handler({
+    sessions: { create: () => ({ id: "failed" }), revoke: (_user, id) => { revoked = id === "failed"; } },
+    commitAuthGroups: async () => { throw new Error("persistence unavailable"); },
+  });
+  await failed.fn({ body: { initData: freshInitData() } }, failed.res);
+  assert.equal(failed.res.statusCode, 503);
+  assert.equal(revoked, true);
+  assert.equal(failed.res.headers["Set-Cookie"], undefined);
+});
+
 test("a forged payload never reaches the link table", async () => {
   let asked = false;
   const { fn, res, calls } = handler({
@@ -234,7 +269,7 @@ test("the exchange is rate limited and outside the auth wall", () => {
   assert.match(server, /app\.post\("\/api\/auth\/telegram", rateLimit\(\{ windowMs: 10 \* 60000, max: 20 \}\), telegramAuthHandler\(\)\)/);
   // Before requireWriteAccess, or the thing that signs you in would need you
   // to be signed in.
-  assert.ok(server.indexOf("/api/auth/telegram") < server.indexOf('app.use("/api", requireWriteAccess)'));
+  assert.ok(server.indexOf("/api/auth/telegram") < server.indexOf('app.use("/api", requireAuth)'));
 });
 
 test("the bridge does nothing outside Telegram", () => {

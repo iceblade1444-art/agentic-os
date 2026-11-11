@@ -16,7 +16,8 @@ import path from "node:path";
 import { Router } from "express";
 
 import { config } from "../config.js";
-import { capabilities, creatorUser, sessionCookie, userFromSession } from "../lib/auth.js";
+import { capabilities, creatorUser, sessionCookie, userFromSession, requireMfa } from "../lib/auth.js";
+import { commitAuthGroups } from "../lib/auth-persistence.js";
 import { sessions } from "../lib/sessions.js";
 import { telegram } from "../lib/telegram.js";
 import { localeFromTelegram, verifyInitData } from "../lib/telegram-initdata.js";
@@ -94,6 +95,8 @@ export function telegramAuthHandler(deps = {}) {
   const sessionStore = deps.sessions || sessions;
   const userStore = deps.users || users;
   const creator = deps.creatorUser || creatorUser;
+  const commit = deps.commitAuthGroups || commitAuthGroups;
+  const mfaCheck = deps.requireMfa || requireMfa;
   // ?? not ||, so an explicit empty token means "no token" rather than
   // silently falling back to the bridge's.
   const token = deps.botToken ?? (() => bridge.token());
@@ -115,22 +118,32 @@ export function telegramAuthHandler(deps = {}) {
         code: "not_linked",
       });
     }
-    const user = accountId === "creator" ? creator() : userStore.get(accountId);
-    if (!user || user.disabledAt) {
+    let user = accountId === "creator" ? creator() : userStore.get(accountId);
+    if (!user || user.disabled || user.disabledAt) {
       // The link outlived the account. Drop it rather than leave a dead man's
       // chat half-alive, exactly as the message path does.
       bridge.unlink(accountId);
       return res.status(403).json({ error: "This account is no longer active", code: "not_linked" });
     }
+    if (user.approved === false || user.approvedAt === "") {
+      return res.status(403).json({ error: "Your account is waiting for approval", code: "approval_pending" });
+    }
+    if (config.emailVerificationRequired && user.id !== "creator" && !user.emailVerified) {
+      return res.status(403).json({ error: "Confirm your email before signing in", code: "email_unverified" });
+    }
+    if (user.id !== "creator" && userStore.sessionUser) user = userStore.sessionUser(user.id);
+    if (!user) return res.status(403).json({ error: "Account unavailable", code: "not_linked" });
+    if (mfaCheck(user, "web", res)) return;
 
     const session = sessionStore.create(user.id, {
       kind: "web",
       label: `Telegram${check.user.username ? ` @${check.user.username}` : ""}`,
       expiresAt: Date.now() + 7 * 864e5,
     });
-    if (deps.commitAuthGroups) {
-      try { await deps.commitAuthGroups("sessions"); } catch (error) {
+    {
+      try { await commit("sessions"); } catch (error) {
         sessionStore.revoke(user.id, session.id);
+        await commit("sessions").catch(() => {});
         return res.status(error.status || 503).json({ error: error.message });
       }
     }

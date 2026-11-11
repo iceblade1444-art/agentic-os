@@ -16,7 +16,9 @@ test("she is never told she can read something she has no tool for", () => {
   // her not to confuse personal tasks with Kanban ones, which is a different
   // thing entirely and has to survive.
   const canRead = (prompt) => prompt.match(/You can read live Agentic OS state through your tools: [^.]+\./)?.[0] || "";
-  assert.match(canRead(member), /Milana ERP business context/);
+  assert.match(member, /call get_my_production_intelligence first/);
+  assert.match(member, /only ERP source available for this account/);
+  assert.equal(canRead(member).includes("Milana ERP business context"), false);
   for (const claim of ["Kanban", "Obsidian", "Claude Workspace"]) {
     assert.equal(canRead(member).includes(claim), false, `a Member has no tool for ${claim}`);
   }
@@ -30,5 +32,5 @@ test("she is never told she can read something she has no tool for", () => {
   }
   // The list still reads as a sentence at both ends.
   assert.match(operator, /tools: Hermes and Kanban tasks, the Obsidian library, Claude Workspace sessions and Milana ERP business context\./);
-  assert.match(member, /tools: Milana ERP business context\./);
+  assert.doesNotMatch(member, /Use get_erp_business_context for production/);
 });

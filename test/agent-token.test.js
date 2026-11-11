@@ -34,7 +34,7 @@ test("the token names its person and its door", () => {
 
 test("an agent token reaches the personal desk and the ERP reads, and stops there", () => {
   const channel = "mobile";
-  for (const name of ["get_my_day_plan", "create_my_task", "remind_me", "search_company_knowledge", "get_sewing_daily_report"]) {
+  for (const name of ["get_my_day_plan", "create_my_task", "remind_me", "search_company_knowledge", "get_my_production_intelligence"]) {
     assert.ok(channelAllows(name, MEMBER, channel), `${name} is this person's own work and must travel`);
   }
   // The reach that made the master token dangerous, refused for the owner too.

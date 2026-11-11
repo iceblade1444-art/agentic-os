@@ -1346,7 +1346,47 @@ body.compact .card.pad-lg { padding: 16px; }
 .login-card [hidden] { display: none !important; }
 .login-card .brand-mark { box-shadow: var(--glow-primary); }
 .login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 18px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.login-tabs button { min-height: 34px; border: 0; border-radius: calc(var(--radius-md) - 3px); background: transparent; color: var(--text-2); font-weight: 650; }
+.login-tabs button { min-height: 44px; border: 0; border-radius: calc(var(--radius-md) - 3px); background: transparent; color: var(--text-2); font-weight: 650; }
+.login-card .btn, .login-card .input, .login-language select { min-height: 44px; }
+
+/* Production Intelligence: dense enough for operations, with a table fallback
+   for every visual status and no colour-only meaning. */
+.production-page { max-width: 1480px; }
+.production-meta { display:flex; align-items:center; gap:12px; color:var(--text-3); font-size:13px; margin:-8px 0 18px; }
+.production-kpis { display:grid; grid-template-columns:repeat(6,minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
+.production-kpi { min-height:122px; padding:16px; border:1px solid var(--border); border-top:3px solid var(--text-3); border-radius:var(--radius-md); background:var(--surface); display:flex; flex-direction:column; gap:8px; }
+.production-kpi.ok { border-top-color:var(--success-ink); }
+.production-kpi.risk { border-top-color:var(--error-ink); }
+.production-kpi > span { color:var(--text-2); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.production-kpi > strong { font-size:28px; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.production-kpi > small { color:var(--text-3); margin-top:auto; }
+.production-quality { display:grid; grid-template-columns:minmax(220px,.7fr) minmax(360px,1.3fr); gap:28px; margin-bottom:16px; }
+.production-quality p { color:var(--text-3); margin-top:6px; }
+.production-quality-row { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.production-quality-row > div { display:flex; flex-direction:column; gap:8px; }
+.production-quality-row span { color:var(--text-2); font-size:13px; }
+.production-quality-row strong { font-size:22px; font-variant-numeric:tabular-nums; }
+.production-quality progress { width:100%; height:7px; accent-color:var(--primary); }
+.production-quality details { grid-column:1/-1; }
+.production-quality li { margin:6px 0 0 20px; color:var(--text-2); }
+.production-findings { display:grid; gap:10px; }
+.production-findings article { border:1px solid var(--border); border-left:3px solid var(--warning); border-radius:var(--radius-md); padding:14px 16px; background:var(--surface-2); }
+.production-finding-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.production-findings dl { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+.production-findings dl div { display:grid; gap:3px; }
+.production-findings dt { color:var(--text-3); font-size:12px; }
+.production-findings dd { margin:0; color:var(--text-2); }
+.production-findings p { color:var(--text-3); font-size:12px; margin-top:10px; }
+@media (max-width:1280px) { .production-kpis { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:900px) {
+  .production-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .production-quality { grid-template-columns:1fr; gap:18px; }
+  .production-quality-row { grid-template-columns:1fr; }
+  .production-findings dl { grid-template-columns:1fr; }
+  .production-finding-head { flex-direction:column; }
+}
+@media (max-width:640px) { .production-kpis { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion:reduce) { .production-page *, .production-page *::before, .production-page *::after { scroll-behavior:auto!important; transition:none!important; animation:none!important; } }
 .login-tabs button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 .login-card[data-mode="login"] .auth-register-only { display: none; }
 .login-card[data-mode="register"] .auth-login-only { display: none; }

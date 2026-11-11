@@ -3,7 +3,10 @@ atlas-releases/
 data/
 .venv-erp-mcp/
 .tmp-erp-mcp-handoff/
-.env
+.env*
+**/.env*
+!.env.example
+!**/.env.example
 agentos-runtime/.env
 *.log
 .DS_Store

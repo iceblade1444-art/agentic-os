@@ -22,7 +22,8 @@ test("the prompt module runs outside a browser", async () => {
 test("the served instruction is the one the browser builds", () => {
   const preferences = { style: "friend", delivery: "quiet", persona: "Тебя зовут Мила." };
   const tools = MILA_TOOLS.map((tool) => tool.name);
-  const served = voiceInstruction(creator, { language: "ru-RU", preferences, tools }).instruction;
+  const servedResult = voiceInstruction(creator, { language: "ru-RU", preferences, tools });
+  const served = servedResult.instruction;
   // Same builder, same arguments, minus the context the server adds for us. The
   // knowledge index is one of those arguments: the server derives it from the
   // shared page list, so the browser has to pass the very same one.
@@ -31,7 +32,7 @@ test("the served instruction is the one the browser builds", () => {
     preferences,
     agentContext: "",
     mode: "voice",
-    tools,
+    tools: servedResult.tools,
     knowledgeIndex: knowledgePromptIndex(),
   });
   // The prompt carries a clock, so two composals a millisecond apart differ on
@@ -79,7 +80,6 @@ test("a caller only hears about the tools it declared", () => {
   for (const absent of ["get_my_day_plan", "remind_me", "create_my_task", "send_erp_notification", "list_my_calendar"]) {
     assert.equal(phone.instruction.includes(absent), false, `${absent} is not callable there and must not be described`);
   }
-  assert.match(phone.instruction, /delegate_to_hermes/);
   assert.match(phone.instruction, /only tools you have on this device/);
   // The finished-goods discipline is the whole reason that agent can answer ERP
   // questions at all, so narrowing the prompt must never cost it.

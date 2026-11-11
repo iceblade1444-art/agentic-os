@@ -22,4 +22,6 @@ ENV CLAUDE_CODE_WORKDIR=/app/work
 VOLUME ["/app/data"]
 
 EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8787/api/health >/dev/null || exit 1
 CMD ["node", "server/index.js"]

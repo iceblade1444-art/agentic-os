@@ -30,6 +30,7 @@ import brain from "./routes/brain.js";
 import memory from "./routes/memory.js";
 import studio from "./routes/studio.js";
 import erp from "./routes/erp.js";
+import production from "./routes/production.js";
 import {
   authEnabled, configureAuthReadAdapter, listSessionsHandler, listUsersHandler, loginHandler, logoutHandler, meHandler, rateLimit,
   mfaVerifyHandler, mobileLoginHandler, mobilePairExchangeHandler, mobileRegisterHandler, registerHandler, requireAuth, requireRoles,
@@ -76,6 +77,7 @@ import needsYouRoute from "./routes/needs-you.js";
 import activityRoute from "./routes/activity.js";
 import { mountMiniApp, telegramAuthHandler } from "./routes/telegram-miniapp.js";
 import { salesBot } from "./lib/sales-bot.js";
+import { productionIntelligence } from "./lib/production-intelligence.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 // Read once, from the one place that declares it. The literal "1.0.0" that
@@ -190,15 +192,6 @@ app.get("/api/health", (req, res) =>
       hermes: !!config.hermesChatSocket && fs.existsSync(config.hermesChatSocket),
     },
     auth: authEnabled(), registration: config.allowRegistration, accountRecovery: recoveryStatus(),
-    database: {
-      sourceOfTruth: postgresMemberWrites.primary && postgresAuthWrites.primary ? "postgres" : "hybrid",
-      jsonRole: postgresMemberWrites.primary && postgresAuthWrites.primary ? "write-ahead-rollback" : "primary-shadow",
-      ...postgresShadow.status(),
-      reads: postgresMemberReads.status(),
-      writes: postgresMemberWrites.status(),
-      authWrites: postgresAuthWrites.status(),
-      authReads: postgresAuthReads.status(),
-    },
   }));
 app.post("/api/auth/login", rateLimit({ windowMs: 60000, max: 10 }), loginHandler);
 app.post("/api/auth/register", rateLimit({ windowMs: 10 * 60000, max: 5 }), registerHandler);
@@ -207,6 +200,7 @@ app.post("/api/auth/mobile/register", rateLimit({ windowMs: 10 * 60000, max: 5 }
 app.post("/api/auth/mobile/exchange", rateLimit({ windowMs: 60000, max: 10 }), mobilePairExchangeHandler);
 app.post("/api/auth/mfa/verify", rateLimit({ windowMs: 5 * 60000, max: 10 }), mfaVerifyHandler);
 app.post("/api/auth/logout", logoutHandler);
+app.post("/api/auth/telegram", rateLimit({ windowMs: 10 * 60000, max: 20 }), telegramAuthHandler());
 app.get("/api/auth/me", meHandler);
 app.post("/api/auth/password/forgot", rateLimit({ windowMs: 10 * 60000, max: 5 }), forgotPasswordHandler);
 app.post("/api/auth/password/reset", rateLimit({ windowMs: 10 * 60000, max: 5 }), resetPasswordHandler);
@@ -255,13 +249,22 @@ app.delete("/api/auth/mfa", rateLimit({ windowMs: 10 * 60000, max: 5 }), mfaDisa
 app.post("/api/auth/account/password", rateLimit({ windowMs: 10 * 60000, max: 5 }), changeOwnPasswordHandler);
 app.get("/api/auth/account/export", exportOwnDataHandler);
 app.delete("/api/auth/account", rateLimit({ windowMs: 10 * 60000, max: 5 }), deleteOwnAccountHandler);
-// Not behind requireAuth: this is the thing that authenticates. Rate limited
-// like every other credential exchange on this server.
-app.post("/api/auth/telegram", rateLimit({ windowMs: 10 * 60000, max: 20 }), telegramAuthHandler());
 app.use("/api", requireWriteAccess);
 const requireOperator = requireRoles("Creator", "Admin", "CEO");
 // Design shares the studio surface with operators, nothing else.
 const requireStudio = requireRoles("Creator", "Admin", "CEO", "Design");
+app.get("/api/health/details", requireOperator, (_req, res) => res.json({
+  ok: true, name: "agentic-os", version: VERSION,
+  database: {
+    sourceOfTruth: postgresMemberWrites.primary && postgresAuthWrites.primary ? "postgres" : "hybrid",
+    jsonRole: postgresMemberWrites.primary && postgresAuthWrites.primary ? "write-ahead-rollback" : "primary-shadow",
+    ...postgresShadow.status(),
+    reads: postgresMemberReads.status(),
+    writes: postgresMemberWrites.status(),
+    authWrites: postgresAuthWrites.status(),
+    authReads: postgresAuthReads.status(),
+  },
+}));
 app.get("/api/auth/users", requireRoles("Creator", "Admin", "CEO"), listUsersHandler);
 app.patch("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), updateUserHandler);
 app.delete("/api/auth/users/:id", requireRoles("Creator", "Admin", "CEO"), deleteUserHandler);
@@ -296,8 +299,10 @@ app.use("/api/routines", requireOperator, routines);
 app.use("/api/sales", requireOperator, sales);
 app.use("/api/meetings", requireOperator, meetings);
 app.use("/api/studio", requireStudio, studio);
-// ERP is readable by every signed-in role; the router keeps its write tools operator-only.
-app.use("/api/erp", erp);
+// Company-wide ERP data belongs to executives. Employees use the Production
+// Intelligence route, which returns only rows linked to their own ERP identity.
+app.use("/api/erp", requireOperator, erp);
+app.use("/api/production", production);
 app.use("/api/governance", requireOperator, governance);
 // One query across everything the OS holds; sources it federates are
 // operator surfaces, so the door is operator-only too.
@@ -354,6 +359,7 @@ server.listen(config.port, async () => {
   erpWeekly.start();
   eveningSummary.start();
   erpAnomalies.start();
+  productionIntelligence.start();
   eventAlerts.start();
   console.log(`    PostgreSQL  : ${postgresShadow.enabled ? "shadow sync enabled" : "shadow sync disabled"}`);
   console.log("");
@@ -381,6 +387,7 @@ async function bye() {
   await postgresMemberWrites.stop();
   await postgresMemberReads.stop();
   await postgresShadow.stop();
+  await productionIntelligence.stop();
   await mcpManager.shutdownAll();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 12000);

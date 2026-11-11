@@ -127,8 +127,17 @@ async function spawn(server) {
     stderr: "pipe",
   });
   const client = new Client({ name: "agentic-os", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(transport);
-  const res = await client.listTools();
+  // A piped stderr must be drained. Otherwise enough diagnostics can fill the
+  // OS pipe and suspend an otherwise healthy MCP child.
+  transport.stderr?.resume();
+  let res;
+  try {
+    await client.connect(transport, { timeout: 8000 });
+    res = await client.listTools({}, { timeout: 8000 });
+  } catch (error) {
+    await client.close().catch(() => {});
+    throw error;
+  }
   const tools = (res.tools || []).map((t) => ({ name: t.name, description: t.description || "", inputSchema: t.inputSchema || null }));
   const entry = { client, transport, tools };
   // A child that dies has to take its entry with it. Without this the map

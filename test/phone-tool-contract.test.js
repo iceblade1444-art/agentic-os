@@ -23,11 +23,7 @@ const SHIPPED_PHONE_TOOLS = [
   "search_company_knowledge", "read_company_knowledge", "list_company_knowledge",
   "remember_about_me", "read_about_me", "forget_about_me",
   "send_telegram",
-  // Added in the app's 1.9.0. Before them the phone could not look anything up
-  // in the catalogue at all: its prompt carries a warehouse-and-orders snapshot
-  // and nothing else, so asked about a real model it answered that the model
-  // was not in the warehouse — true, and the wrong answer.
-  "get_models_overview", "find_models", "get_model_details",
+  "get_my_production_intelligence",
 ];
 
 // Imported rather than mirrored. The copy that used to sit here had already
@@ -44,6 +40,12 @@ test("every tool a shipped phone can call still passes the gate for a Member", (
       true,
       `${name} is declared by an installed APK; a Member calling it would now get 403`,
     );
+  }
+});
+
+test("legacy company ERP tools are refused to a Member", () => {
+  for (const name of ["get_models_overview", "find_models", "get_model_details", "get_sewing_daily_report", "get_erp_business_context"]) {
+    assert.equal(allowedForEveryone(name), false, `${name} must require a manager role`);
   }
 });
 
@@ -71,7 +73,7 @@ test("the phone's copy of the list has not drifted from this one", { skip: !phon
 function phoneList() {
   const source = process.env.MILA_APP_DIR
     ? `${process.env.MILA_APP_DIR}/lib/services/voice/mila_live_tools.dart`
-    : "C:/AI Agent/mila/lib/services/voice/mila_live_tools.dart";
+    : new URL("../../mila-agent-hardening/lib/services/voice/mila_live_tools.dart", import.meta.url);
   if (!fs.existsSync(source)) return null;
   const dart = fs.readFileSync(source, "utf8");
   const block = dart.slice(dart.indexOf("milaPersonalToolNames = ["));

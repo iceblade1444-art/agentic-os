@@ -189,7 +189,7 @@ test("chat tools follow the audience: company data in channels, the desk only in
       // First turn asks for a tool, second answers in prose — for every reply.
       let step = 0;
       const script = [
-        'TOOL_CALL {"name":"get_sewing_daily_report","args":{}}', "Сегодня сшили по плану.",
+        'TOOL_CALL {"name":"get_my_production_intelligence","args":{}}', "Ваши производственные задачи по плану.",
         'TOOL_CALL {"name":"remind_me","args":{"title":"тест","dueAt":"2027-01-01T09:00:00+05:00"}}', "В канале напоминания не ставлю — напишите мне в личку.",
         'TOOL_CALL {"name":"remind_me","args":{"title":"тест","dueAt":"2027-01-01T09:00:00+05:00"}}', "Готово, напомню.",
       ];
@@ -199,9 +199,9 @@ test("chat tools follow the audience: company data in channels, the desk only in
   const history = [{ authorId: COLLEAGUE.id, authorName: COLLEAGUE.name, text: "@mila швейный отчёт?", kind: "user", mentions: [] }];
   const channel = { id: "c1", kind: "channel", name: "производство", memberIds: [COLLEAGUE.id, "agent:mila"] };
 
-  // Channel: the ERP read runs, as the asker.
+  // Channel: only the asker's scoped production read runs.
   await responder.reply({ conversation: channel, history, asker: COLLEAGUE });
-  assert.deepEqual(executed, [{ name: "get_sewing_daily_report", user: COLLEAGUE.id }]);
+  assert.deepEqual(executed, [{ name: "get_my_production_intelligence", user: COLLEAGUE.id }]);
 
   // Channel: a personal action is refused before it can execute.
   await responder.reply({ conversation: channel, history, asker: COLLEAGUE });

@@ -26,8 +26,15 @@ TTS_TIMEOUT = float(os.getenv("GPU_TTS_TIMEOUT", "180"))
 # after a failure, stop trying for a while: a sleeping PC should cost one slow
 # request, not one per call
 COOLDOWN = float(os.getenv("GPU_COOLDOWN", "60"))
+# A sleeping PC does not refuse connections: sshd keeps the forwarded port
+# listening long after the machine behind it stops answering, so a real request
+# connects and then waits out the read timeout. Asking /healthz first costs
+# 20 ms when the card is up and fails in under two seconds when it is not.
+LIVENESS_TIMEOUT = float(os.getenv("GPU_LIVENESS_TIMEOUT", "1.5"))
+LIVENESS_TTL = float(os.getenv("GPU_LIVENESS_TTL", "15"))
 
 _unavailable_until = 0.0
+_alive_until = 0.0
 
 
 def enabled() -> bool:
@@ -39,8 +46,9 @@ def available() -> bool:
 
 
 def _mark_down(reason: str):
-    global _unavailable_until
+    global _unavailable_until, _alive_until
     _unavailable_until = time.time() + COOLDOWN
+    _alive_until = 0.0
     log.info("gpu worker unavailable (%s) — using local cpu for %.0fs",
              reason, COOLDOWN)
 
@@ -61,9 +69,25 @@ def status() -> dict:
         return {"configured": True, "reachable": False}
 
 
+def _alive() -> bool:
+    """Is the card actually there, or just a socket somebody forgot to close?"""
+    global _alive_until
+    now = time.time()
+    if now < _alive_until:
+        return True
+    try:
+        r = requests.get(f"{URL}/healthz", timeout=(CONNECT_TIMEOUT, LIVENESS_TIMEOUT))
+        r.raise_for_status()
+        _alive_until = now + LIVENESS_TTL
+        return True
+    except Exception as exc:
+        _mark_down(type(exc).__name__)
+        return False
+
+
 def transcribe(audio_path: str, language: str | None):
     """Returns the same shape as local stt.transcribe, or None to fall back."""
-    if not available():
+    if not available() or not _alive():
         return None
     try:
         with open(audio_path, "rb") as fh:
@@ -85,14 +109,17 @@ def transcribe(audio_path: str, language: str | None):
 
 def synthesize(text: str, language: str | None, engine: str):
     """Returns wav bytes, or None to fall back to local synthesis."""
-    if not available():
+    if not available() or not _alive():
         return None
     try:
         r = requests.post(
             f"{URL}/tts",
             data={"text": text, "language": language or "", "engine": engine},
             headers={"x-worker-secret": SECRET} if SECRET else {},
-            timeout=(CONNECT_TIMEOUT, TTS_TIMEOUT))
+            # Scaled to the work: ~0.15 s per character on the card, tripled
+            # for headroom, and never longer than the flat ceiling.
+            timeout=(CONNECT_TIMEOUT,
+                     min(TTS_TIMEOUT, 15.0 + len(text) * 0.45)))
         r.raise_for_status()
         if len(r.content) < 1000:
             raise ValueError("suspiciously small audio")
