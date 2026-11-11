@@ -112,6 +112,8 @@ test("operations UI and host installer use real API, timers and path activation"
   assert.equal(pkg.scripts["prod:member-e2e"], "node scripts/production-member-e2e.mjs");
   assert.equal(pkg.scripts["smtp:verify"], "node scripts/smtp-verify.mjs");
   assert.match(productionE2e, /AGENTIC_OS_PUBLIC_URL/);
+  assert.match(productionE2e, /\/api\/health\/details/);
+  assert.match(productionE2e, /E2E_REQUIRE_CLAUDE/);
   assert.match(productionE2e, /\/api\/operations\/status/);
   assert.match(productionE2e, /\/api\/kanban\/board/);
   assert.match(productionE2e, /\/api\/knowledge\/status/);

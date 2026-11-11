@@ -59,8 +59,8 @@ async function checkBase(base) {
     check("Health API", async () => {
       const health = await request(base, "/api/health");
       if (!health.ok) throw new Error("health payload is not ok");
-      if (health.database?.sourceOfTruth !== "postgres") throw new Error(`database source is ${health.database?.sourceOfTruth || "unknown"}`);
-      return `providers=${Object.entries(health.providers || {}).filter(([, ready]) => ready).map(([key]) => key).join(",") || "none"}`;
+      if ("database" in health) throw new Error("public health leaks protected database details");
+      return `version=${health.version || "unknown"}`;
     }),
   ];
 
@@ -72,6 +72,14 @@ async function checkBase(base) {
         const me = await request(base, "/api/auth/me", { auth: true });
         if (!me.authed) throw new Error("bearer token was not accepted");
         return me.user?.role || "authenticated";
+      }),
+      check("Health details", async () => {
+        const health = await request(base, "/api/health/details", { auth: true });
+        if (!health.ok) throw new Error("protected health payload is not ok");
+        if (health.database?.sourceOfTruth !== "postgres") {
+          throw new Error(`database source is ${health.database?.sourceOfTruth || "unknown"}`);
+        }
+        return "postgres source of truth";
       }),
       check("Operations status", async () => {
         const state = await request(base, "/api/operations/status", { auth: true });
@@ -107,8 +115,13 @@ async function checkBase(base) {
         const claude = await request(base, `/api/claude-code/status?probe=${internal}`, {
           auth: true, timeout: internal ? 60000 : timeoutMs,
         });
-        if (!claude.ready) throw new Error(claude.error || claude.authHealth?.warning || "Claude is unavailable");
-        return `${claude.model?.resolved || claude.defaultModel || "model"} authenticated`;
+        if (!claude.installed) throw new Error(claude.error || "Claude Code is not installed");
+        if (process.env.E2E_REQUIRE_CLAUDE === "true" && !claude.ready) {
+          throw new Error(claude.error || claude.authHealth?.warning || "Claude is unavailable");
+        }
+        return claude.ready
+          ? `${claude.model?.resolved || claude.defaultModel || "model"} authenticated`
+          : "installed; authentication optional because Hermes is the production provider";
       }),
     );
   }
