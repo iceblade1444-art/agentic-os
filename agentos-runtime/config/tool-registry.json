@@ -165,6 +165,116 @@
       "risk": "high",
       "requires_approval": true,
       "credentials": ["deployment_credentials"]
+    },
+    {
+      "name": "trading.status",
+      "surface": "api",
+      "endpoint": "/api/trading/status",
+      "description": "Read the XAU EA's account, mode, positions, sessions and today's news (read-only).",
+      "inputs": [],
+      "outputs": ["trading status", "summary_ru"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.events",
+      "surface": "api",
+      "endpoint": "/api/trading/events",
+      "description": "Read recent EA events: time machine decisions, fills, closes, skips (read-only).",
+      "inputs": ["n", "kinds"],
+      "outputs": ["events", "lines_ru"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.report",
+      "surface": "api",
+      "endpoint": "/api/trading/report",
+      "description": "Summarise closed trades and time machine decisions over N days (read-only).",
+      "inputs": ["days"],
+      "outputs": ["report"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.pause",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Stop new EA entries (action=pause). Open trades keep stop, target and flat time.",
+      "inputs": ["action=pause"],
+      "outputs": ["ea_state"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.signals",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Switch the EA to signals only (action=signals).",
+      "inputs": ["action=signals"],
+      "outputs": ["ea_state"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.risk_down",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Lower risk per trade (action=risk, value); the EA caps it at its own setting.",
+      "inputs": ["action=risk", "value"],
+      "outputs": ["ea_state"],
+      "risk": "low",
+      "requires_approval": false,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.resume",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Allow new EA entries again (action=resume).",
+      "inputs": ["action=resume"],
+      "outputs": ["approval record"],
+      "risk": "medium",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.auto",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Switch the EA back to automatic trading (action=auto).",
+      "inputs": ["action=auto"],
+      "outputs": ["approval record"],
+      "risk": "medium",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.session",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Choose the EA session (action=session, value=default|london|ny|asia|all).",
+      "inputs": ["action=session", "value"],
+      "outputs": ["approval record"],
+      "risk": "medium",
+      "requires_approval": true,
+      "credentials": []
+    },
+    {
+      "name": "trading.control.close_all",
+      "surface": "api",
+      "endpoint": "/api/trading/control",
+      "description": "Close every position the EA opened, at market (action=close_all).",
+      "inputs": ["action=close_all"],
+      "outputs": ["approval record"],
+      "risk": "high",
+      "requires_approval": true,
+      "credentials": []
     }
   ]
 }

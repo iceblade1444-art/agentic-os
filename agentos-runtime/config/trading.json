@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "bridge_dir": "",
+  "account": "",
+  "allow_real_account": false,
+  "approval_ttl_minutes": 30,
+  "ack_timeout_seconds": 15,
+  "stale_after_seconds": 180
+}

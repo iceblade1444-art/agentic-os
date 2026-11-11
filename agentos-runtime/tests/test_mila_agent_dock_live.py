@@ -35,14 +35,14 @@ def test_agent_dock_endpoint_is_live_read_only_and_secret_safe():
     assert data["worker"]["status"] in {"disabled", "enabled", "running", "idle", "blocked", "unknown"}
     assert data["latest_report"]["relpath"].startswith("logs/daily/")
     roles = {agent["role"] for agent in data["agents"]}
-    assert roles == {"hermes", "mila"}
-    assert {agent["display_name"] for agent in data["agents"]} == {"Hermes", "Mila"}
-    assert data["registry_counts"]["total"] == 2
-    assert data["registry_counts"]["real"] == 2
+    assert roles == {"hermes", "mila", "trading-agent"}
+    assert {agent["display_name"] for agent in data["agents"]} == {"Hermes", "Mila", "Trading Agent (XAUUSD)"}
+    assert data["registry_counts"]["total"] == 3
+    assert data["registry_counts"]["real"] == 3
     assert data["safety"]["single_agent_mode"] is False
     assert data["safety"]["hermes_primary_orchestrator"] is True
     matrix_ids = {agent["id"] for agent in data["agent_status_matrix"]}
-    assert matrix_ids == {"hermes", "mila"}
+    assert matrix_ids == {"hermes", "mila", "trading-agent"}
     assert all(agent["connected_to_live_dock"] for agent in data["agent_status_matrix"])
     for agent in data["agents"]:
         assert "display_name" in agent

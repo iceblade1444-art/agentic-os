@@ -47,6 +47,25 @@
         "Gemini Live handles speech-to-speech interaction.",
         "Mila passes planning and routing work to Hermes."
       ]
+    },
+    {
+      "id": "trading-agent",
+      "display_name": "Trading Agent (XAUUSD)",
+      "kind": "specialist",
+      "status": "real",
+      "spec_path": "agents/trading-agent.md",
+      "runner": "mt5_ea_file_bridge",
+      "queue_owner": "hermes",
+      "executor": "XAU_SessionBreakout MT5 Expert Advisor (makes every trading decision)",
+      "tools": ["trading.status", "trading.events", "trading.report", "trading.control", "approval.queue"],
+      "permissions": ["read_trading_status", "pause_trading", "lower_risk", "request_approval"],
+      "requires_approval_for_external_actions": true,
+      "notes": [
+        "Never opens, sizes or modifies trades: the EA decides by its own rules (time machine gate, news filter, risk limits).",
+        "Pause, signals-only and lower risk are auto-allowed because they only reduce exposure.",
+        "Resume, auto mode and session changes need approval; close-all is high risk.",
+        "Real-money accounts: everything except pause is refused unless config/trading.json allows it."
+      ]
     }
   ]
 }
