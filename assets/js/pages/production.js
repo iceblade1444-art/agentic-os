@@ -11,6 +11,9 @@ const number = new Intl.NumberFormat();
 const display = (metric, suffix = "") => metric === null || metric === undefined
   ? "—" : `${number.format(metric)}${suffix}`;
 const dateTime = (input) => {
+  if (input === null || input === undefined || input === "" || Number(input) === 0) {
+    return t("production.unknown");
+  }
   const date = new Date(input);
   return Number.isNaN(date.valueOf()) ? t("production.unknown")
     : new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
