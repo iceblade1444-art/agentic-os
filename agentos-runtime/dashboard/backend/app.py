@@ -627,6 +627,25 @@ def mila_agent_dock(workspace: Path):
             ],
         }
     ]
+    trading = trading_status(workspace)
+    if trading.get("status") == "ok":
+        trading_live = "paused" if (trading.get("ea") or {}).get("paused") else ("stale" if trading.get("stale") else "ready")
+    else:
+        trading_live = "not_connected"
+    agents.append({
+        "role": "trading-agent",
+        "display_name": "Trading Agent (XAUUSD)",
+        "status": trading_live,
+        "signals": [
+            "executor=mt5_ea",
+            f"bridge={trading.get('status')}",
+            f"account={trading.get('account') or 'none'}",
+            f"account_mode={trading.get('account_mode') or 'unknown'}",
+            f"mode={(trading.get('ea') or {}).get('mode') or 'unknown'}",
+            f"open_positions={len(trading.get('positions') or [])}",
+            "risky_controls=approval_required",
+        ],
+    })
     registry = load_agent_registry(workspace)
     registry_counts = agent_registry_counts(registry)
     status_matrix = agent_status_matrix(registry, agents)
@@ -2381,8 +2400,8 @@ def create_agentic_goal(workspace: Path, goal: str, context: str = ""):
     }
 
 
-HIGH_RISK_ACTIONS = {"send_email", "mass_email", "publish", "deploy", "delete_file", "payment", "change_credentials", "production_change", "enable_agent_worker_daemon", "agentic_human_gate", "agentic_workflow_gate", "create_real_kanban_tasks"}
-LOW_RISK_ACTIONS = {"read_file", "write_file", "create_draft", "summarize", "research", "create_task", "run_test"}
+HIGH_RISK_ACTIONS = {"trading_close_all", "send_email", "mass_email", "publish", "deploy", "delete_file", "payment", "change_credentials", "production_change", "enable_agent_worker_daemon", "agentic_human_gate", "agentic_workflow_gate", "create_real_kanban_tasks"}
+LOW_RISK_ACTIONS = {"trading_pause", "trading_mode_signals", "trading_risk_down", "read_file", "write_file", "create_draft", "summarize", "research", "create_task", "run_test"}
 
 
 def classify_risk(action: str):
@@ -2441,11 +2460,14 @@ def update_approval(workspace: Path, approval_id: str, status_value: str):
             write_json(workspace / "approvals" / "approvals.json", approvals)
             gate_result = advance_agentic_human_gate(workspace, approval, status_value)
             workflow_gate_result = continue_agentic_workflow_after_gate(workspace, approval, status_value)
+            trading_gate_result = continue_trading_after_gate(workspace, approval, status_value)
             append_event(workspace, f"approval_{status_value}", approval_id=approval_id, action=approval.get("action"), summary=approval.get("summary"))
             if gate_result:
                 approval["gate_result"] = gate_result
             if workflow_gate_result:
                 approval["workflow_gate_result"] = workflow_gate_result
+            if trading_gate_result:
+                approval["trading_gate_result"] = trading_gate_result
             return approval
     return {"error": "approval_not_found", "id": approval_id}
 
@@ -7441,6 +7463,67 @@ def run_command(workspace: Path, text: str):
     return {"intent": "unknown", "text": original, **command_help()}
 
 
+_TRADING_MODULES: dict = {}
+
+
+def trading_module(workspace: Path):
+    """trading/agentos_trading.py from the workspace, or from this checkout (tests use empty workspaces)."""
+    for base in (Path(workspace), AGENTOS_ROOT):
+        path = base / "trading" / "agentos_trading.py"
+        if path.exists():
+            key = str(path.resolve())
+            if key not in _TRADING_MODULES:
+                spec = importlib.util.spec_from_file_location(f"agentos_trading_{len(_TRADING_MODULES)}", path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                _TRADING_MODULES[key] = module
+            return _TRADING_MODULES[key]
+    return None
+
+
+def trading_unavailable():
+    return {"status": "unavailable", "error": "trading_module_missing", "secrets_included": False}
+
+
+def trading_status(workspace: Path):
+    module = trading_module(workspace)
+    return module.status(workspace) if module else trading_unavailable()
+
+
+def trading_events(workspace: Path, query: str = ""):
+    module = trading_module(workspace)
+    if not module:
+        return trading_unavailable()
+    params = parse_qs(query)
+    kinds = [k for k in ((params.get("kinds") or [""])[0]).split(",") if k]
+    return module.events(workspace, _bounded_int((params.get("n") or [50])[0], 50, minimum=1, maximum=500), kinds or None)
+
+
+def trading_report(workspace: Path, query: str = ""):
+    module = trading_module(workspace)
+    if not module:
+        return trading_unavailable()
+    params = parse_qs(query)
+    return module.report(workspace, _bounded_int((params.get("days") or [7])[0], 7, minimum=1, maximum=90))
+
+
+def trading_control(workspace: Path, payload: dict):
+    module = trading_module(workspace)
+    if not module:
+        return {"error": "trading_module_missing"}
+    return module.control_request(workspace, payload.get("action"), payload.get("value"),
+                                  request_approval=request_approval, append_event=append_event)
+
+
+def continue_trading_after_gate(workspace: Path, approval: dict, status_value: str):
+    if not str((approval or {}).get("action", "")).startswith("trading_"):
+        return None
+    module = trading_module(workspace)
+    if not module:
+        return {"executed": False, "reason": "trading_module_missing"}
+    return module.continue_after_gate(workspace, approval, status_value, append_event=append_event)
+
+
 def handle_api(workspace: str | Path, path: str, method: str = "GET", payload=None):
     workspace = Path(workspace)
     parsed = urlparse(path)
@@ -7453,6 +7536,14 @@ def handle_api(workspace: str | Path, path: str, method: str = "GET", payload=No
         if not goal:
             return {"error": "goal_required"}
         return create_goal(workspace, goal)
+    if method == "GET" and clean == "/api/trading/status":
+        return trading_status(workspace)
+    if method == "GET" and clean == "/api/trading/events":
+        return trading_events(workspace, parsed.query)
+    if method == "GET" and clean == "/api/trading/report":
+        return trading_report(workspace, parsed.query)
+    if method == "POST" and clean == "/api/trading/control":
+        return trading_control(workspace, payload)
     if method == "POST" and clean == "/api/approvals/request":
         action = str(payload.get("action", "")).strip()
         summary = str(payload.get("summary", "")).strip()

@@ -15,7 +15,7 @@ def test_agent_registry_has_hermes_primary_and_mila_voice():
     agents = {agent["id"]: agent for agent in registry["agents"]}
 
     assert registry["mode"] == "hermes_orchestrated"
-    assert set(agents) == {"hermes", "mila"}
+    assert set(agents) == {"hermes", "mila", "trading-agent"}
     assert agents["hermes"]["status"] == "real"
     assert agents["hermes"]["kind"] == "primary_orchestrator"
     assert agents["hermes"]["reasoning_provider"] == "openai-codex"
