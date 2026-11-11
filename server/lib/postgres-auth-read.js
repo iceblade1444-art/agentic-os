@@ -166,10 +166,24 @@ export class PostgresAuthReadAdapter {
   touchSession(id, userId) {
     const sessionId = String(id || "");
     const owner = String(userId || "");
-    const active = this.#read(
+    const localSession = this.sessionStore.active(sessionId, owner);
+    let active = this.#read(
       () => !!this.sessionStore.active(sessionId, owner),
       () => !!this.#activeSession(sessionId, owner),
     );
+    // The login handler commits a new session before returning, but the auth
+    // read cache refreshes on its own interval. During that short window a
+    // successful login used to be rejected by the very next /auth/me call and
+    // the UI returned to the sign-in form. Trust only a locally active session
+    // created after the last cache snapshot; an older local record cannot
+    // override a PostgreSQL revocation.
+    if (!active && localSession && this.metrics.lastRefreshAt
+      && new Date(localSession.createdAt).getTime() > new Date(this.metrics.lastRefreshAt).getTime()) {
+      active = true;
+      this.metrics.jsonFallbacks += 1;
+      this.metrics.consistencyFallbacks += 1;
+      this.metrics.lastFallbackReason = "session_cache_lag";
+    }
     if (active) this.sessionStore.touch(sessionId, owner);
     return active;
   }

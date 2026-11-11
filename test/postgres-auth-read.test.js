@@ -149,6 +149,51 @@ test("auth canary mismatch returns JSON and records parity fallback", async () =
   assert.equal(adapter.status().lastFallbackReason, "canary_mismatch");
 });
 
+test("a session created after the cache snapshot is valid immediately", async () => {
+  const freshSession = {
+    ...rawSession,
+    id: "ses_just_created",
+    createdAt: new Date(Date.now() + 1000).toISOString(),
+    lastSeenAt: new Date(Date.now() + 1000).toISOString(),
+  };
+  const fallback = stores({
+    sessionStore: {
+      active: (id, userId) => id === freshSession.id && userId === rawUser.id ? freshSession : null,
+    },
+  });
+  const adapter = new PostgresAuthReadAdapter({
+    mode: "postgres",
+    databaseUrl: "postgresql://private",
+    shadowStatus: ready(),
+    userStore: fallback.userStore,
+    sessionStore: fallback.sessionStore,
+    pool: fakePool({sessions: []}),
+  });
+  await adapter.refresh();
+
+  assert.equal(adapter.touchSession(freshSession.id, rawUser.id), true);
+  assert.equal(fallback.touches(), 1);
+  assert.equal(adapter.status().lastFallbackReason, "session_cache_lag");
+  assert.equal(adapter.status().consistencyFallbacks, 1);
+});
+
+test("an older local session cannot override a PostgreSQL rejection", async () => {
+  const fallback = stores();
+  const adapter = new PostgresAuthReadAdapter({
+    mode: "postgres",
+    databaseUrl: "postgresql://private",
+    shadowStatus: ready(),
+    userStore: fallback.userStore,
+    sessionStore: fallback.sessionStore,
+    pool: fakePool({sessions: []}),
+  });
+  await adapter.refresh();
+
+  assert.equal(adapter.touchSession(rawSession.id, rawUser.id), false);
+  assert.equal(fallback.touches(), 0);
+  assert.equal(adapter.status().jsonFallbacks, 0);
+});
+
 test("outbox and stale cache force JSON without consulting cached auth", async () => {
   const fallback = stores();
   const adapter = new PostgresAuthReadAdapter({
