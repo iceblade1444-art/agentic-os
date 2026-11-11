@@ -111,6 +111,27 @@ After the token is set, verify the bridge before deploying:
 npm run erp:verify
 ```
 
+### MILA Production Intelligence
+
+The `#/production` dashboard stores deterministic ERP snapshots in the
+`mila_production` PostgreSQL schema and calculates plan/fact, SAM efficiency,
+FPY, defects, rework, OTD, downtime, source freshness and data completeness.
+MILA explains those calculated values; it does not calculate KPIs from raw ERP
+rows. Each finding records its evidence, confidence, missing fields and source
+timestamp, and never assigns responsibility automatically.
+
+`Creator`, `Admin` and `CEO` receive the company scope. Every other account is
+deny-by-default and receives only ERP task rows whose numeric `assigned_to`
+matches an explicit account link:
+
+```bash
+ERP_ACCOUNT_LINKS='{"usr_abc":{"employeeId":"17"},"person@example.com":{"employeeId":"23"}}'
+PRODUCTION_SYNC_INTERVAL_MS=900000
+```
+
+Use the Agentic OS account id as the preferred key. The value is the ERP user
+id accepted by `/api/tasks`; names and email guesses do not grant access.
+
 **The operating system for AI agents.** A fully-functional, dependency-free web dashboard to
 build, run and orchestrate intelligent agents — agents, chat, a visual workflow builder,
 knowledge/memory, MCP servers, integrations, evaluations, observability, guardrails and secrets.

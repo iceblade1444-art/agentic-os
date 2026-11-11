@@ -24,7 +24,7 @@ export const api = {
   get health() { return state.health; },
   // The cached health above is from app boot. The dashboard polls, and the
   // database migration status only means something if it is current.
-  healthNow: () => j("/api/health"),
+  healthNow: () => j("/api/health/details"),
   // Everything blocked on the person asking, worst first. Which sources fill it
   // is decided by their role on the server, never here.
   needsYou: () => j("/api/needs-you"),
@@ -270,6 +270,10 @@ export const api = {
     snapshot: () => j("/api/erp"),
     tool: (tool, args = {}) => j("/api/erp/tool", { method: "POST", body: { tool, args } }),
     wikiSync: () => j("/api/erp/wiki-sync", { method: "POST" }),
+  },
+  production: {
+    dashboard: () => j("/api/production"),
+    sync: () => j("/api/production/sync", { method: "POST" }),
   },
   missions: {
     list: () => j("/api/missions"),

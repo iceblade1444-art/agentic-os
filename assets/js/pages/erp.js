@@ -49,7 +49,7 @@ const first = (obj, keys, fallback = "-") => {
   return fallback;
 };
 
-const numeric = (obj, keys, fallback = 0) => {
+const numeric = (obj, keys, fallback = null) => {
   const value = first(obj, keys, null);
   // Number(null) is 0, which read as "found a zero" and starved every
   // fallback: the staged production sum and the finance fallback for revenue
@@ -59,13 +59,23 @@ const numeric = (obj, keys, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const countish = (obj, keys, arrayFallback = []) => {
+const countish = (obj, keys, arrayFallback = null) => {
   const found = first(obj, keys, null);
   if (found !== null) {
     const n = Number(found);
     if (Number.isFinite(n)) return n;
   }
-  return arrayFallback.length;
+  return arrayFallback?.length ?? null;
+};
+
+const knownRows = (value, keys) => {
+  const data = unwrap(value);
+  if (Array.isArray(data)) return data;
+  for (const key of keys || ["items", "orders", "tasks", "rows", "results", "data"]) {
+    if (Array.isArray(data?.[key])) return data[key];
+    if (Array.isArray(data?.[key]?.items)) return data[key].items;
+  }
+  return null;
 };
 
 
@@ -73,8 +83,8 @@ const countish = (obj, keys, arrayFallback = []) => {
 // factory panel and sheet read this same digest, so the stage can never
 // disagree with this page.
 export function erpDigest(snapshot = {}) {
-  const cards = snapshot.cards || {};
   const errors = snapshot.errors || {};
+  const cards = Object.fromEntries(Object.entries(snapshot.cards || {}).filter(([key]) => !Object.hasOwn(errors, key)));
   const summary = unwrap(cards.erp_gm_summary) || {};
   const production = unwrap(cards.erp_active_production) || {};
   const control = unwrap(cards.erp_business_control) || {};
@@ -92,22 +102,23 @@ export function erpDigest(snapshot = {}) {
   const productionItems = asArray(production, ["items", "orders", "active_orders", "rows", "data"]);
   const revenue = numeric(summary, ["revenue_total", "revenue", "sales", "totalSales"], numeric(finance, ["revenue_total", "revenue"]));
   const stockValue = numeric(summary, ["branded_stock_value", "stock_value"], numeric(finance, ["branded_stock_value", "stock_value"]));
-  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], productionItems) || numeric(production, ["active_work_orders", "activeWorkOrders"], 0);
-  const lateOrders = countish(summary, ["late_orders", "lateOrders"], lateItems);
-  const cuttingOutput = numeric(production, ["cutting_output", "cuttingOutput"], 0);
-  const printingOutput = numeric(production, ["printing_output", "printingOutput"], 0);
-  const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"], 0);
-  const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"], 0);
-  const stagedProductionOutput = cuttingOutput + printingOutput + sewingOutput + packagingOutput;
+  const activeOrders = countish(summary, ["active_orders", "activeOrders", "orders"], knownRows(production, ["items", "orders", "active_orders", "rows", "data"])) ?? numeric(production, ["active_work_orders", "activeWorkOrders"]);
+  const lateOrders = countish(summary, ["late_orders", "lateOrders"], knownRows(late));
+  const cuttingOutput = numeric(production, ["cutting_output", "cuttingOutput"]);
+  const printingOutput = numeric(production, ["printing_output", "printingOutput"]);
+  const sewingOutput = numeric(production, ["sewing_output", "sewingOutput"]);
+  const packagingOutput = numeric(production, ["packaging_output", "packagingOutput"]);
+  const stages = [cuttingOutput, printingOutput, sewingOutput, packagingOutput].filter((value) => value !== null);
+  const stagedProductionOutput = stages.length ? stages.reduce((sum, value) => sum + value, 0) : null;
   const productionOutput = numeric(production, ["production_output", "productionOutput", "total_output", "totalOutput"], stagedProductionOutput);
-  const reworkQty = numeric(production, ["rework_qty", "reworkQty"], 0);
-  const totalTrackedOrders = numeric(control, ["total_orders", "totalOrders"], 0);
+  const reworkQty = numeric(production, ["rework_qty", "reworkQty"]);
+  const totalTrackedOrders = numeric(control, ["total_orders", "totalOrders"]);
   const blockedOrders = asArray(first(control, ["blocked_orders", "blockedOrders"], []));
   const busiestFlow = first(first(control, ["answer_hints", "answerHints"], {}), ["busiest_sewing_flow", "busiestSewingFlow"], null);
   const nextWarehouse = first(first(control, ["answer_hints", "answerHints"], {}), ["next_warehouse_order", "nextWarehouseOrder"], null);
-  const readyPieces = numeric(finishedGoods, ["total_pieces", "totalPieces"], 0);
-  const readyPackages = numeric(finishedGoods, ["total_packages", "totalPackages"], 0);
-  const readyModelsCount = numeric(finishedGoods, ["total_models", "totalModels"], readyModels.length);
+  const readyPieces = numeric(finishedGoods, ["total_pieces", "totalPieces"]);
+  const readyPackages = numeric(finishedGoods, ["total_packages", "totalPackages"]);
+  const readyModelsCount = numeric(finishedGoods, ["total_models", "totalModels"], knownRows(first(finishedGoods, ["top_models", "topModels"], null))?.length ?? null);
 
   return {
     cards, errors, summary, production, control, late, inventory, finishedGoods, finance, tasks, me,
@@ -122,12 +133,13 @@ function head() {
   return `<div class="page-head">
     <div><h1>${t("erp.title")}</h1><p>${t("erp.subtitle")}</p></div>
     <div class="spacer"></div>
-    ${api.auth.canAdmin ? `<button class="btn btn-secondary" id="erpWikiSync">${icon("knowledge")}Sync wiki</button>` : ""}
+    ${api.auth.canAdmin && snapshot?.configured && !loading && !error ? `<button class="btn btn-secondary" id="erpWikiSync">${icon("knowledge")}Sync wiki</button>` : ""}
     <button class="btn btn-secondary" id="erpRefresh">${icon("refresh")}${t("erp.refresh")}</button>
   </div>`;
 }
 
 function metric(label, value, hint = "", tone = "") {
+  if (value === null || value === undefined) tone = "";
   return `<div class="studio-metric erp-metric ${tone}"><span>${esc(label)}</span><strong>${esc(pretty(value))}</strong>${hint ? `<small>${esc(hint)}</small>` : ""}</div>`;
 }
 
@@ -170,7 +182,7 @@ function inventoryTable(inventory) {
     [t("erp.sku"), t("erp.item"), t("erp.category"), t("erp.available"), t("erp.reserved")],
     sorted.slice(0, 14).map((item) => {
       const available = numeric(item, ["available_quantity", "available", "quantity", "qty"]);
-      const reserved = numeric(item, ["reserved_quantity", "reserved"], 0);
+      const reserved = numeric(item, ["reserved_quantity", "reserved"], null);
       const low = available > 0 && available < 20;
       return `<tr class="${low ? "risk" : ""}">
         <td><strong>${esc(first(item, ["sku", "code", "item_id", "id"]))}</strong></td>
@@ -200,8 +212,8 @@ function finishedGoodsTable(finishedGoods) {
         <td><strong>${esc(first(item, ["model_name", "modelName"], "-"))}</strong></td>
         <td>${esc(first(item, ["order_no", "orderNo"], "-"))}</td>
         <td>${esc(first(item, ["color"], "-"))}</td>
-        <td><span class="badge success">${esc(pretty(first(item, ["total_pieces", "totalPieces"], 0)))}</span></td>
-        <td>${esc(pretty(first(item, ["packages"], 0)))}</td>
+        <td><span class="badge success">${esc(pretty(first(item, ["total_pieces", "totalPieces"], null)))}</span></td>
+        <td>${esc(pretty(first(item, ["packages"], null)))}</td>
         <td>${esc(location || "-")}</td>
         <td>${statusBadge(Object.keys(first(item, ["statuses"], {}))[0] || first(sample, ["status"], "-"))}</td>
       </tr>`;
@@ -214,11 +226,11 @@ function productionTable(production) {
   const data = unwrap(production) || {};
   if (!rows.length && data && typeof data === "object") {
     const stages = [
-      [t("erp.cutting"), first(data, ["cutting_output", "cuttingOutput"], 0)],
-      [t("erp.printing"), first(data, ["printing_output", "printingOutput"], 0)],
-      [t("erp.sewing"), first(data, ["sewing_output", "sewingOutput"], 0)],
-      [t("erp.packaging"), first(data, ["packaging_output", "packagingOutput"], 0)],
-      [t("erp.rework"), first(data, ["rework_qty", "reworkQty"], 0)],
+      [t("erp.cutting"), first(data, ["cutting_output", "cuttingOutput"], null)],
+      [t("erp.printing"), first(data, ["printing_output", "printingOutput"], null)],
+      [t("erp.sewing"), first(data, ["sewing_output", "sewingOutput"], null)],
+      [t("erp.packaging"), first(data, ["packaging_output", "packagingOutput"], null)],
+      [t("erp.rework"), first(data, ["rework_qty", "reworkQty"], null)],
     ].filter(([, value]) => Number(value) || value === 0);
     if (stages.length) {
       return table(
@@ -262,10 +274,10 @@ function flowLoadTable(control) {
     [t("erp.flow"), t("erp.orders"), t("erp.plannedQty"), t("erp.inProgress"), t("erp.blocked")],
     rows.slice(0, 10).map((item) => `<tr>
       <td><strong>${esc(first(item, ["flow", "name", "code"]))}</strong></td>
-      <td>${esc(pretty(first(item, ["orders"], 0)))}</td>
-      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
-      <td>${esc(pretty(first(item, ["in_progress", "inProgress"], 0)))}</td>
-      <td>${statusBadge(first(item, ["blocked"], 0))}</td>
+      <td>${esc(pretty(first(item, ["orders"], null)))}</td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], null)))}</td>
+      <td>${esc(pretty(first(item, ["in_progress", "inProgress"], null)))}</td>
+      <td>${statusBadge(first(item, ["blocked"], null))}</td>
     </tr>`)
   );
 }
@@ -277,7 +289,7 @@ function warehouseEtaTable(control) {
     rows.slice(0, 12).map((item) => `<tr class="${item.warehouse_overdue ? "risk" : ""}">
       <td><strong>${esc(first(item, ["production_no", "productionNo", "order_no", "orderNo"]))}</strong><small>${esc(first(item, ["order_no", "orderNo"], ""))}</small></td>
       <td>${esc(first(item, ["model_code", "modelCode"], "-"))}<small>${esc(first(item, ["model_name", "modelName"], ""))}</small></td>
-      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], null)))}</td>
       <td>${esc(first(item, ["warehouse_eta", "warehouseEta"], "-"))}</td>
       <td>${statusBadge(first(item, ["warehouse_status", "warehouseStatus"], "-"))}</td>
     </tr>`)
@@ -290,9 +302,9 @@ function stageLoadTable(control) {
     [t("erp.stage"), t("erp.orders"), t("erp.plannedQty"), t("erp.actualQty")],
     rows.slice(0, 10).map((item) => `<tr>
       <td><strong>${esc(first(item, ["stage"], "-"))}</strong></td>
-      <td>${esc(pretty(first(item, ["orders"], 0)))}</td>
-      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], 0)))}</td>
-      <td>${esc(pretty(first(item, ["actual_quantity", "actualQuantity"], 0)))}</td>
+      <td>${esc(pretty(first(item, ["orders"], null)))}</td>
+      <td>${esc(pretty(first(item, ["planned_quantity", "plannedQuantity"], null)))}</td>
+      <td>${esc(pretty(first(item, ["actual_quantity", "actualQuantity"], null)))}</td>
     </tr>`)
   );
 }
@@ -339,6 +351,7 @@ function erpHTML() {
   if (!api.on) return `<div class="page">${head()}<div class="card">${t("erp.demo")}</div></div>`;
   if (loading) return `<div class="page">${head()}<div class="card">${t("erp.loading")}</div></div>`;
   if (error) return `<div class="page">${head()}<div class="alert error"><div class="a-body"><div class="a-title">${t("erp.unavailable")}</div><div class="a-text">${esc(error)}</div></div></div></div>`;
+  if (!snapshot?.configured) return `<div class="page">${head()}<div class="alert warning"><div class="a-body"><div class="a-title">${t("erp.tokenMissing")}</div><div class="a-text">${t("erp.tokenMissingText")}</div></div></div></div>`;
 
   const {
     cards, errors, summary, production, control, late, inventory, finishedGoods, finance, tasks, me,
@@ -354,9 +367,9 @@ function erpHTML() {
     ${Object.keys(errors).length ? `<div class="alert warning mb-4"><span class="a-ico">${icon("warn")}</span><div class="a-body"><div class="a-title">${t("erp.partial")}</div><div class="a-text">${esc(Object.entries(errors).map(([key, value]) => `${key}: ${value}`).join(" | "))}</div></div></div>` : ""}
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.connection"), snapshot.server?.status || "stopped", snapshot.baseUrl, "ok")}
-      ${metric(t("erp.revenue"), revenue ? money.format(revenue) : 0, t("erp.sales"), revenue ? "ok" : "")}
+      ${metric(t("erp.revenue"), revenue === null ? null : money.format(revenue), t("erp.sales"), revenue ? "ok" : "")}
       ${metric(t("erp.productionOutput"), productionOutput, t("erp.production"), productionOutput ? "ok" : "")}
-      ${metric(t("erp.lateOrders"), lateOrders, t("erp.needsAttention"), lateOrders ? "risk" : "ok")}
+      ${metric(t("erp.lateOrders"), lateOrders, t("erp.needsAttention"), lateOrders === null ? "" : lateOrders ? "risk" : "ok")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.finishedGoodsPieces"), readyPieces, t("erp.finishedGoods"), readyPieces ? "ok" : "")}
@@ -365,22 +378,22 @@ function erpHTML() {
       ${metric(t("erp.packaging"), packagingOutput, t("erp.production"), packagingOutput ? "ok" : "")}
     </div>
     <div class="grid cols-4 mb-4">
-      ${metric(t("erp.stockValue"), stockValue ? money.format(stockValue) : 0, t("erp.finance"), stockValue ? "ok" : "")}
-      ${metric(t("erp.employeeTasks"), taskItems.length, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
+      ${metric(t("erp.stockValue"), stockValue === null ? null : money.format(stockValue), t("erp.finance"), stockValue ? "ok" : "")}
+      ${metric(t("erp.employeeTasks"), knownRows(tasks)?.length ?? null, t("erp.tasks"), taskItems.length ? "warning" : "ok")}
       ${metric(t("erp.rework"), reworkQty, t("erp.needsAttention"), reworkQty ? "risk" : "ok")}
       ${metric(t("erp.tools"), snapshot.server?.tools?.length || 0, "MCP", "ok")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.finishedGoodsPackages"), readyPackages, t("erp.finishedGoods"), readyPackages ? "ok" : "")}
       ${metric(t("erp.finishedGoodsModels"), readyModelsCount, t("erp.finishedGoods"), readyModelsCount ? "ok" : "")}
-      ${metric(t("erp.materialInventory"), invItems.length, t("erp.inventory"), invItems.length ? "ok" : "")}
+      ${metric(t("erp.materialInventory"), knownRows(inventory)?.length ?? null, t("erp.inventory"), invItems.length ? "ok" : "")}
       ${metric(t("erp.source"), finishedGoods.source_page || finishedGoods.source || "-", "/warehouse-stock + /warehouse-map", finishedGoods.source ? "ok" : "")}
     </div>
     <div class="grid cols-4 mb-4">
       ${metric(t("erp.trackedOrders"), totalTrackedOrders, t("erp.processTracking"), totalTrackedOrders ? "ok" : "")}
-      ${metric(t("erp.busiestFlow"), busiestFlow ? first(busiestFlow, ["flow"]) : "-", busiestFlow ? `${pretty(first(busiestFlow, ["planned_quantity"], 0))} ${t("erp.qtyShort")}` : t("erp.noData"), busiestFlow ? "warning" : "")}
+      ${metric(t("erp.busiestFlow"), busiestFlow ? first(busiestFlow, ["flow"]) : "-", busiestFlow ? `${pretty(first(busiestFlow, ["planned_quantity"], null))} ${t("erp.qtyShort")}` : t("erp.noData"), busiestFlow ? "warning" : "")}
       ${metric(t("erp.nextWarehouse"), nextWarehouse ? first(nextWarehouse, ["production_no", "order_no"], "-") : "-", nextWarehouse ? first(nextWarehouse, ["warehouse_eta"], "-") : t("erp.noData"), nextWarehouse ? "ok" : "")}
-      ${metric(t("erp.blockedOrders"), blockedOrders.length, t("erp.needsAttention"), blockedOrders.length ? "risk" : "ok")}
+      ${metric(t("erp.blockedOrders"), knownRows(first(control, ["blocked_orders", "blockedOrders"], null))?.length ?? null, t("erp.needsAttention"), blockedOrders.length ? "risk" : "ok")}
     </div>
     ${card(t("erp.quickActions"), t("erp.quickActionsHint"), quickActions(), "zap", "mb-4")}
     <div class="grid cols-2 mb-4">
@@ -390,18 +403,18 @@ function erpHTML() {
         [t("erp.sewing"), sewingOutput],
         [t("erp.packaging"), packagingOutput],
         [t("erp.lateOrders"), lateOrders],
-        [t("erp.defects"), first(summary, ["todays_defects", "defects"], 0)],
-        [t("erp.waste"), first(summary, ["todays_waste", "waste"], 0)],
+        [t("erp.defects"), first(summary, ["todays_defects", "defects"], null)],
+        [t("erp.waste"), first(summary, ["todays_waste", "waste"], null)],
         [t("erp.stockValue"), stockValue],
         [t("erp.revenue"), revenue],
       ]), "activity")}
       ${card(t("erp.finance"), t("erp.financeHint"), kv(finance, [
-        [t("erp.revenue"), first(finance, ["revenue_total", "revenue"], 0)],
-        [t("erp.payments"), first(finance, ["payments_received", "payments"], 0)],
-        [t("erp.stockValue"), first(finance, ["branded_stock_value", "stock_value"], 0)],
-        [t("erp.wasteCost"), first(finance, ["waste_cost", "waste"], 0)],
-        [t("erp.wasteIncome"), first(finance, ["waste_income"], 0)],
-        [t("erp.profit"), first(finance, ["profit"], 0)],
+        [t("erp.revenue"), first(finance, ["revenue_total", "revenue"], null)],
+        [t("erp.payments"), first(finance, ["payments_received", "payments"], null)],
+        [t("erp.stockValue"), first(finance, ["branded_stock_value", "stock_value"], null)],
+        [t("erp.wasteCost"), first(finance, ["waste_cost", "waste"], null)],
+        [t("erp.wasteIncome"), first(finance, ["waste_income"], null)],
+        [t("erp.profit"), first(finance, ["profit"], null)],
       ]), "database")}
       ${card(t("erp.productionStatus"), t("erp.productionHint"), productionTable(production), "workflow")}
       ${card(t("erp.lateOrders"), t("erp.lateOrdersHint"), lateOrdersTable(late), "warn")}

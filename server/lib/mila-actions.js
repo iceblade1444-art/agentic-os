@@ -19,6 +19,7 @@ import { telegram } from "./telegram.js";
 import { skillLearner } from "./skill-learner.js";
 import { createErpBridge } from "./erp-bridge.js";
 import * as mcpManager from "../mcp/manager.js";
+import { productionIntelligence } from "./production-intelligence.js";
 
 const CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const WRITE_ACTIONS = new Set([
@@ -69,16 +70,15 @@ export const KNOWLEDGE_ACTIONS = new Set([
 // messenger. Each used to keep its own copy, which is why tools added this week
 // reached some channels and not others.
 export const READ_ONLY_ERP_ACTIONS = new Set([
-  "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
-  // The product catalogue: which garments the factory makes, their sizes,
-  // colours and fibre composition. No personal data and no money — the
-  // materials list comes back without unit cost, which stays with finance.
-  "get_models_overview", "find_models", "get_model_details",
+  "get_my_production_intelligence",
 ]);
-// Staff and order data: real names of people and customers, so it follows the
-// person's role rather than the channel they happen to be using.
+// Company production, staff, models, warehouse and finance are executive data.
+// Employees use get_my_production_intelligence, which is filtered through the
+// server-side Agentic OS -> ERP identity link.
 export const OPERATOR_ERP_ACTIONS = new Set([
   "get_attendance_today", "get_staff_summary", "get_order_stages",
+  "get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
+  "get_models_overview", "find_models", "get_model_details",
 ]);
 
 // The personal actions that change something. Reads are deliberately absent: a
@@ -527,6 +527,7 @@ export function createMilaActions(options = {}) {
   const now = options.now || Date.now;
   const journalStore = options.journal || journal;
   const onboardingStore = options.onboarding || onboarding;
+  const production = options.productionIntelligence || productionIntelligence;
   const makeToken = options.makeToken || (() => crypto.randomBytes(24).toString("base64url"));
   const pending = new Map();
 
@@ -875,6 +876,10 @@ export function createMilaActions(options = {}) {
       const query = bounded(args.query, 200);
       if (!query) throw Object.assign(new Error("Search query is required"), { status: 400 });
       return { query, matches: await base.search(query, scope), source_policy: policy };
+    }
+
+    if (name === "get_my_production_intelligence") {
+      return production.dashboard(requireUser(context));
     }
 
     if (name === "get_attendance_today") {

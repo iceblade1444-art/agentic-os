@@ -18,7 +18,7 @@ import { buildMilaSystemInstruction, normalizeMilaPreferences } from "../../asse
 import { MILA_TOOLS } from "../../assets/js/mila-tools.js";
 import { knowledgePromptIndex } from "../../assets/js/knowledge-pages.js";
 
-import { channelToolNames } from "./mila-audience.js";
+import { channelAllows, channelToolNames } from "./mila-audience.js";
 import { sharedAgentContext } from "./onboarding.js";
 
 const LANGUAGES = new Set(["ru-RU", "uz-UZ", "en-US", "auto"]);
@@ -31,14 +31,12 @@ const KNOWN_TOOLS = new Set(MILA_TOOLS.map((tool) => tool.name));
 // Keep it in step with that file. Too narrow strips the agent of ERP rules it
 // genuinely needs; too wide puts back the promises this gating exists to stop.
 export const LIVEKIT_BASELINE_TOOLS = [
+  "get_my_production_intelligence",
   "get_finished_goods_stock", "get_erp_business_context",
   // The model catalogue. Added here and in voice-agent/agent.py together:
   // announcing a tool the agent has no function for is the failure this list
   // exists to prevent.
   "get_models_overview", "find_models", "get_model_details",
-  "get_system_status",
-  "list_kanban_tasks", "create_kanban_task", "delegate_to_hermes",
-  "search_obsidian_notes", "read_obsidian_note", "write_obsidian_note", "ask_claude_code",
 ];
 
 // Channels whose tool list the server owns. The phone used to keep its own
@@ -49,12 +47,14 @@ const SERVER_OWNED_CHANNELS = new Set(["mobile", "telegram", "messenger"]);
 function requestedTools(value, user, channel) {
   if (SERVER_OWNED_CHANNELS.has(channel)) return channelToolNames(user, channel);
   if (!Array.isArray(value)) return LIVEKIT_BASELINE_TOOLS;
+  const effectiveChannel = channel || "voice";
   const names = value
     .map((item) => (typeof item === "string" ? item : item?.name))
-    .filter((name) => KNOWN_TOOLS.has(name));
+    .filter((name) => KNOWN_TOOLS.has(name) && channelAllows(name, user, effectiveChannel));
   // An empty or entirely unrecognised list means the caller told us nothing
   // usable, which is not the same as "no tools at all".
-  return names.length ? [...new Set(names)] : LIVEKIT_BASELINE_TOOLS;
+  if (names.length) return [...new Set(names)];
+  return LIVEKIT_BASELINE_TOOLS.filter((name) => channelAllows(name, user, effectiveChannel));
 }
 
 // A service credential is not a person, but the master token resolves to the

@@ -5,6 +5,12 @@ try { process.loadEnvFile(); } catch { /* no .env file — use process env / def
 
 const env = process.env;
 const strip = (u, d) => (u || d).replace(/\/$/, "");
+const jsonObject = (value) => {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch { return {}; }
+};
 
 export const config = {
   port: Number(env.PORT) || 8787,
@@ -38,6 +44,13 @@ export const config = {
     command: env.ERP_MCP_COMMAND || "",
     args: env.ERP_MCP_ARGS || "",
     pythonModule: env.ERP_MCP_PYTHON_MODULE || "",
+    // Agentic OS account id/email -> ERP employee identity. Without an explicit
+    // link, a non-executive receives no production data rather than somebody
+    // else's rows from the shared ERP service account.
+    accountLinks: jsonObject(env.ERP_ACCOUNT_LINKS),
+  },
+  production: {
+    syncIntervalMs: Math.max(5 * 60 * 1000, Number(env.PRODUCTION_SYNC_INTERVAL_MS) || 15 * 60 * 1000),
   },
   higgsfield: {
     apiKey: env.HIGGSFIELD_API_KEY || "",

@@ -26,11 +26,22 @@ test("the digest turns a real-shaped snapshot into the numbers both surfaces sho
   assert.equal(digest.activeOrders, 2, "active orders fall back to counting production items");
 });
 
-test("an empty snapshot digests to zeros, not crashes", () => {
+test("an empty snapshot keeps unknown metrics distinct from zero", () => {
   const digest = erpDigest({});
-  assert.equal(digest.productionOutput, 0);
-  assert.equal(digest.readyPieces, 0);
+  assert.equal(digest.productionOutput, null);
+  assert.equal(digest.readyPieces, null);
+  assert.equal(digest.revenue, null);
+  assert.equal(digest.activeOrders, null);
   assert.deepEqual(digest.lateItems, []);
+});
+
+test("explicit zero is preserved and failed ERP cards cannot supply metrics", () => {
+  const snapshot = { cards: { erp_gm_summary: { active_orders: 0, revenue: 0 }, erp_active_production: { active_work_orders: 9 } } };
+  assert.equal(erpDigest(snapshot).activeOrders, 0);
+  assert.equal(erpDigest(snapshot).revenue, 0);
+  snapshot.errors = { erp_gm_summary: "timeout" };
+  assert.equal(erpDigest(snapshot).revenue, null);
+  assert.equal(erpDigest(snapshot).activeOrders, 9);
 });
 
 test("the stage reads the same digest as the ERP page", () => {

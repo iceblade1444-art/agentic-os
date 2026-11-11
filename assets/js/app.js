@@ -23,6 +23,7 @@ import routines from "./pages/routines.js";
 import components from "./pages/components.js";
 import personal from "./pages/personal.js";
 import erp from "./pages/erp.js";
+import production from "./pages/production.js";
 import { analytics, design, media } from "./pages/studio.js";
 import { memberHome, memberNotes, memberTasks } from "./pages/member.js";
 import memberInbox from "./pages/member-inbox.js";
@@ -76,6 +77,7 @@ const OPERATOR_SECTIONS = [
     { route: "test-apps" },
   ]},
   { id: "business", icon: "activity", bottom: true, children: [
+    { route: "production" },
     { route: "erp" },
     { route: "analytics" },
     { route: "design" },
@@ -91,10 +93,10 @@ const OPERATOR_SECTIONS = [
   { id: "chat", icon: "chat", bottom: true, children: [{ route: "chat" }] },
 ];
 
-// ERP is the landing page for Member: it opens straight to the live business
-// snapshot instead of a personal dashboard that only duplicates Personal's brief.
+// A Member lands on their own ERP-linked production view. Company-wide ERP
+// figures remain an executive surface.
 const MEMBER_SECTIONS = [
-  { id: "business", icon: "activity", bottom: true, children: [{ route: "", navKey: "erp" }] },
+  { id: "business", icon: "activity", bottom: true, children: [{ route: "", navKey: "production" }] },
   { id: "today", icon: "home", bottom: true, children: [{ route: "personal" }] },
   { id: "work", icon: "workflow", children: [
     { route: "my-tasks" },
@@ -120,7 +122,7 @@ const DESIGN_SECTIONS = [
     { route: "media" },
     { route: "knowledge" },
   ]},
-  { id: "business", icon: "activity", children: [{ route: "erp" }] },
+  { id: "business", icon: "activity", children: [{ route: "production" }] },
   { id: "inbox", icon: "inbox", navKey: "inbox", children: [{ route: "inbox" }] },
   { id: "chat", icon: "chat", bottom: true, children: [{ route: "chat" }] },
 ];
@@ -134,9 +136,9 @@ const OPERATOR_PAGES = {
   mcp: misc.mcp, integrations: misc.integrations, observability: misc.observability,
   guardrails: misc.guardrails, secrets: misc.secrets, evaluations: misc.evaluations,
   design, media, analytics,
-  erp, "test-apps": testApps,
+  erp, production, "test-apps": testApps,
 };
-const MEMBER_PAGES = { "": erp, personal, chat, mila, inbox: memberInbox, "my-tasks": memberTasks, "my-notes": memberNotes, settings, erp };
+const MEMBER_PAGES = { "": production, production, personal, chat, mila, inbox: memberInbox, "my-tasks": memberTasks, "my-notes": memberNotes, settings };
 // Design keeps the original personal dashboard as its landing page and has no Mila
 // Live nav entry — both stay scoped to Member only, undoing what the spread inherits.
 const DESIGN_PAGES = { ...MEMBER_PAGES, "": memberHome, mila: undefined, design, media, knowledge: misc.knowledge };
@@ -150,7 +152,7 @@ const NAV_KEYS = {
   guardrails: "guardrails", secrets: "secrets", settings: "settings", "my-tasks": "myTasks",
   "my-notes": "myNotes",
   inbox: "inbox", "test-apps": "testApps",
-  design: "design", media: "media", analytics: "analytics", erp: "erp",
+  design: "design", media: "media", analytics: "analytics", erp: "erp", production: "production",
 };
 const navLabel = (item) => tr(`nav.${item.navKey || NAV_KEYS[item.route] || item.route}`);
 const sectionLabel = (section) => tr(`nav.sec.${section.id}`);
@@ -710,8 +712,10 @@ async function boot() {
   // Inside Telegram, sign in with what the container already proved before the
   // app has a chance to decide it needs a login form. Outside it this returns
   // null and nothing changes.
+  let telegramChallenge = "";
   if (inTelegram()) {
     const signedIn = await telegramAuthenticate();
+    if (signedIn?.mfaRequired) telegramChallenge = signedIn.challenge || "";
     if (signedIn?.error) console.warn("[telegram]", signedIn.code || signedIn.error);
   }
   await api.detect();
@@ -733,7 +737,7 @@ async function boot() {
   });
   const accountAction = new URLSearchParams(location.search);
   if (accountAction.has("verify") || accountAction.has("reset")) return renderLogin();
-  if (api.needsAuth) return renderLogin();
+  if (api.needsAuth) return renderLogin(telegramChallenge ? { mode: "mfa", mfaChallenge: telegramChallenge } : {});
   syncAuthenticatedProfile();
   if (api.on) {
     try {
@@ -770,7 +774,7 @@ function syncAuthenticatedProfile() {
   });
 }
 
-function renderLogin() {
+function renderLogin(saved = {}) {
   const app = qs("#app");
   app.removeAttribute("aria-busy");
   const canRegister = api.auth.registration;
@@ -783,7 +787,8 @@ function renderLogin() {
     url.searchParams.delete("reset");
     history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
-  let mfaChallenge = "";
+  let mfaChallenge = saved.mfaChallenge || "";
+  let busy = false;
   app.innerHTML = `<div class="login-wrap"><form class="login-card" id="loginForm" data-mode="login">
     <label class="login-language" aria-label="${tr("login.language")}">${icon("chat")}<select id="loginLocale">
       ${SUPPORTED_LOCALES.map(([code, label]) => `<option value="${code}" ${getLocale() === code ? "selected" : ""}>${label}</option>`).join("")}
@@ -797,15 +802,19 @@ function renderLogin() {
     <div class="field" id="authEmailField"><label class="label" for="loginEmail">${tr("login.email")} <span class="muted" id="creatorHint">${tr("login.creatorHint")}</span></label><input class="input" id="loginEmail" type="email" autocomplete="email"/></div>
     <div class="field" id="authPasswordField"><label class="label" for="loginPw" id="passwordLabel">${tr("login.password")}</label><input class="input" id="loginPw" type="password" autocomplete="current-password" minlength="10"/></div>
     <div class="field" id="authMfaField"><label class="label" for="loginMfa">${tr("login.mfaCode")}</label><input class="input mono" id="loginMfa" autocomplete="one-time-code" maxlength="16"/><span class="hint">${tr("login.mfaHint")}</span></div>
-    <div id="loginErr"></div>
+    <div id="loginErr" role="alert" tabindex="-1"></div>
     <button class="btn btn-primary block" id="authSubmit" type="submit">${icon("lock")}<span>${tr("login.signIn")}</span></button>
     <button class="btn btn-ghost block" id="forgotPassword" type="button">${tr("login.forgot")}</button>
     <button class="btn btn-ghost block" id="authBack" type="button" hidden>${tr("login.back")}</button>
   </form></div>`;
   const form = qs("#loginForm");
+  for (const id of ["loginName", "loginEmail", "loginPw", "loginMfa"]) qs(`#${id}`).value = saved[id] || "";
   qs("#loginLocale").onchange = (event) => {
+    if (busy) return;
+    const state = { mode: form.dataset.mode, mfaChallenge };
+    for (const id of ["loginName", "loginEmail", "loginPw", "loginMfa"]) state[id] = qs(`#${id}`).value;
     setLocale(event.target.value);
-    renderLogin();
+    renderLogin(state);
   };
   const setMode = (mode) => {
     form.dataset.mode = mode;
@@ -829,17 +838,26 @@ function renderLogin() {
     qs("#authSubmit span").textContent = tr(register ? "login.create" : forgot ? "login.sendReset" : reset ? "login.resetPassword" : mfa ? "login.verifyMfa" : "login.signIn");
     qs("#passwordLabel").textContent = tr(reset ? "login.newPassword" : "login.password");
     qs("#loginPw").autocomplete = register || reset ? "new-password" : "current-password";
+    qs("#loginPw").minLength = register || reset ? 10 : 0;
+    for (const [id, active] of [["loginName", register], ["loginEmail", login || register || forgot], ["loginPw", login || register || reset], ["loginMfa", mfa]]) {
+      qs(`#${id}`).disabled = !active;
+      qs(`#${id}`).required = active && !(id === "loginEmail" && login);
+    }
     qs("#loginErr").innerHTML = "";
     if (!terminal) (register ? qs("#loginName") : reset ? qs("#loginPw") : mfa ? qs("#loginMfa") : qs("#loginEmail")).focus();
   };
-  form.querySelectorAll("[data-auth-mode]").forEach((button) => button.onclick = () => setMode(button.dataset.authMode));
-  qs("#forgotPassword").onclick = () => setMode("forgot");
-  qs("#authBack").onclick = () => { mfaChallenge = ""; setMode("login"); };
-  setMode("login");
-  qs("#loginEmail").focus();
+  form.querySelectorAll("[data-auth-mode]").forEach((button) => button.onclick = () => { if (!busy) setMode(button.dataset.authMode); });
+  qs("#forgotPassword").onclick = () => { if (!busy) setMode("forgot"); };
+  qs("#authBack").onclick = () => { if (!busy) { mfaChallenge = ""; setMode("login"); } };
+  setMode(saved.mode || "login");
   form.onsubmit = async (e) => {
     e.preventDefault();
+    if (busy) return;
+    busy = true;
+    form.setAttribute("aria-busy", "true");
+    qs("#loginLocale").disabled = true;
     const btn = qs("#authSubmit"); btn.classList.add("loading");
+    btn.disabled = true;
     const body = { email: qs("#loginEmail").value.trim(), password: qs("#loginPw").value };
     try {
       if (form.dataset.mode === "mfa") {
@@ -890,8 +908,13 @@ function renderLogin() {
       const resend = qs("#resendVerification");
       if (resend) resend.onclick = async () => { await api.auth.resendVerification(body.email); setMode("sent"); qs("#loginLead").textContent = tr("login.verificationSent"); };
       btn.classList.remove("loading");
-      if (!qs("#loginMfa").hidden) qs("#loginMfa").focus();
-      else if (!qs("#loginPw").hidden) qs("#loginPw").focus();
+      qs("#loginErr").focus();
+    } finally {
+      busy = false;
+      btn.disabled = false;
+      btn.classList.remove("loading");
+      qs("#loginLocale").disabled = false;
+      form.removeAttribute("aria-busy");
     }
   };
   if (resetToken) setMode("reset");

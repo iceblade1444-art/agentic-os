@@ -120,6 +120,7 @@ export function isAuthed(req) {
 }
 
 export function requireAuth(req, res, next) {
+  if (!enforceAgentScope(req, res)) return;
   if (isAuthed(req)) return next();
   res.status(401).json({ error: "unauthorized" });
 }
@@ -127,12 +128,31 @@ export function requireAuth(req, res, next) {
 export function requireRoles(...allowed) {
   const roles = new Set(allowed);
   return (req, res, next) => {
+    if (!enforceAgentScope(req, res)) return;
     const user = authenticatedUser(req);
     if (!user) return res.status(401).json({ error: "unauthorized" });
     if (!roles.has(user.role)) return res.status(403).json({ error: "forbidden", requiredRoles: [...roles] });
     req.user = user;
     next();
   };
+}
+
+// An agent credential represents a person but is not their browser session.
+// Enforce its reduced surface here, including direct API and proxy routes.
+const AGENT_ROUTES = new Set([
+  "GET /api/erp", "GET /api/production", "GET /api/onboarding", "GET /api/mila/pending",
+  "POST /api/mila/voice-instruction", "POST /api/mila/actions", "POST /api/mila/confirm",
+]);
+export const AGENT_CHANNELS = new Set(["mobile", "telegram", "messenger"]);
+export function enforceAgentScope(req, res) {
+  const auth = req.headers?.authorization || "";
+  if (!auth.startsWith("Bearer ")) return true;
+  const payload = verify(auth.slice(7));
+  if (payload?.kind !== "agent") return true;
+  const pathname = String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "");
+  if (AGENT_CHANNELS.has(payload.channel) && AGENT_ROUTES.has(`${req.method} ${pathname}`)) return true;
+  res.status(403).json({ error: "This credential cannot access this endpoint", code: "agent_scope_denied" });
+  return false;
 }
 
 export function requireWriteAccess(req, res, next) {
@@ -239,7 +259,7 @@ function challengeUser(payload) {
   return user;
 }
 
-function requireMfa(user, channel, res) {
+export function requireMfa(user, channel, res) {
   try {
     if (!mfa.enabled(user)) return false;
   } catch (error) {

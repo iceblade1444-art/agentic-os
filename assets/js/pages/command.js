@@ -259,11 +259,11 @@ function erpPanel(data) {
     ${!snapshot ? `<div class="cmd-empty">${t("dash.svc.unreachable")}</div>`
     : !snapshot.configured ? `<div class="cmd-empty">${t("erp.tokenMissing")}</div>`
     : erpSilent(snapshot, digest) ? `<div class="cmd-empty">${t("dash.svc.unreachable")}</div>`
-    : `<div class="cmd-big">${esc(num.format(digest.productionOutput || digest.readyPieces))}</div>
+    : `<div class="cmd-big">${esc(((digest.productionOutput ?? digest.readyPieces) == null ? "—" : num.format(digest.productionOutput ?? digest.readyPieces)))}</div>
       <div class="cmd-big-label">${t(digest.productionOutput ? "erp.productionOutput" : "erp.finishedGoodsPieces")}</div>
       <div class="cmd-erp-rows">
-        <span>${t("erp.finishedGoodsPieces")} <b>${esc(num.format(digest.readyPieces))}</b></span>
-        <span>${t("erp.lateOrders")} <b class="${digest.lateOrders ? "risk" : ""}">${esc(num.format(digest.lateOrders))}</b></span>
+        <span>${t("erp.finishedGoodsPieces")} <b>${esc((digest.readyPieces == null ? "—" : num.format(digest.readyPieces)))}</b></span>
+        <span>${t("erp.lateOrders")} <b class="${digest.lateOrders ? "risk" : ""}">${esc((digest.lateOrders == null ? "—" : num.format(digest.lateOrders)))}</b></span>
       </div>`}
   </section>`;
 }
@@ -1490,19 +1490,19 @@ async function renderErpSheet(panel) {
   </div>`;
   body.innerHTML = `
     <span class="cmd-subhead">${t("erp.production")}</span>
-    ${row(t("erp.productionOutput"), num.format(digest.productionOutput))}
-    ${digest.cuttingOutput ? row(t("erp.cutting"), num.format(digest.cuttingOutput)) : ""}
-    ${digest.printingOutput ? row(t("erp.printing"), num.format(digest.printingOutput)) : ""}
-    ${digest.sewingOutput ? row(t("erp.sewing"), num.format(digest.sewingOutput)) : ""}
-    ${digest.packagingOutput ? row(t("erp.packaging"), num.format(digest.packagingOutput)) : ""}
-    ${row(t("erp.activeOrders"), num.format(digest.activeOrders))}
-    ${digest.reworkQty ? row(t("erp.rework"), num.format(digest.reworkQty), "risk") : ""}
-    ${row(t("erp.lateOrders"), num.format(digest.lateOrders), digest.lateOrders ? "risk" : "")}
+    ${row(t("erp.productionOutput"), (digest.productionOutput == null ? "—" : num.format(digest.productionOutput)))}
+    ${digest.cuttingOutput ? row(t("erp.cutting"), (digest.cuttingOutput == null ? "—" : num.format(digest.cuttingOutput))) : ""}
+    ${digest.printingOutput ? row(t("erp.printing"), (digest.printingOutput == null ? "—" : num.format(digest.printingOutput))) : ""}
+    ${digest.sewingOutput ? row(t("erp.sewing"), (digest.sewingOutput == null ? "—" : num.format(digest.sewingOutput))) : ""}
+    ${digest.packagingOutput ? row(t("erp.packaging"), (digest.packagingOutput == null ? "—" : num.format(digest.packagingOutput))) : ""}
+    ${row(t("erp.activeOrders"), (digest.activeOrders == null ? "—" : num.format(digest.activeOrders)))}
+    ${digest.reworkQty ? row(t("erp.rework"), (digest.reworkQty == null ? "—" : num.format(digest.reworkQty)), "risk") : ""}
+    ${row(t("erp.lateOrders"), (digest.lateOrders == null ? "—" : num.format(digest.lateOrders)), digest.lateOrders ? "risk" : "")}
     <span class="cmd-subhead">${t("erp.finishedGoods")}</span>
-    ${row(t("erp.finishedGoodsPieces"), num.format(digest.readyPieces))}
+    ${row(t("erp.finishedGoodsPieces"), (digest.readyPieces == null ? "—" : num.format(digest.readyPieces)))}
     ${digest.revenue || digest.stockValue ? `<span class="cmd-subhead">${t("erp.finance")}</span>
-      ${digest.revenue ? row(t("erp.revenue"), num.format(digest.revenue)) : ""}
-      ${digest.stockValue ? row(t("erp.stockValue"), num.format(digest.stockValue)) : ""}` : ""}
+      ${digest.revenue ? row(t("erp.revenue"), (digest.revenue == null ? "—" : num.format(digest.revenue))) : ""}
+      ${digest.stockValue ? row(t("erp.stockValue"), (digest.stockValue == null ? "—" : num.format(digest.stockValue))) : ""}` : ""}
     <div class="cmd-sheet-acts" style="margin-top:10px"><a class="cmd-mini-btn" href="#/erp">${t("nav.erp")}</a></div>`;
 }
 

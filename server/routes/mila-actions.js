@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { agentSessionToken, AGENT_TOKEN_TTL_MS, authenticatedUser, requestChannel, serviceCaller } from "../lib/auth.js";
+import { agentSessionToken, AGENT_TOKEN_TTL_MS, AGENT_CHANNELS, authenticatedUser, requestChannel, serviceCaller } from "../lib/auth.js";
 import { milaActions, READ_ONLY_ERP_ACTIONS } from "../lib/mila-actions.js";
 import { channelAllows } from "../lib/mila-audience.js";
 import { users } from "../lib/users.js";
@@ -52,6 +52,7 @@ r.post("/agent-token", (req, res) => {
     return res.status(403).json({ error: "forbidden", code: "service_token_required" });
   }
   const channel = String(req.body?.channel || "mobile").slice(0, 20);
+  if (!AGENT_CHANNELS.has(channel)) return res.status(400).json({ error: "Unsupported agent channel" });
   const userId = String(req.body?.userId || "").slice(0, 64);
   if (!userId) return res.status(400).json({ error: "userId is required" });
   const user = userId === "creator" ? creatorUser() : users.sessionUser(userId);

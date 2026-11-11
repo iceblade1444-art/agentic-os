@@ -281,6 +281,11 @@ export const MILA_TOOLS = [
     } },
   },
   {
+    name: "get_my_production_intelligence",
+    description: "Read only the signed-in employee's own ERP-linked production tasks and metrics. If the account is not linked, explain that a manager must connect the ERP identity. Never return another employee's data.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "get_sewing_daily_report",
     description: "The daily sewing report for one date and factory: per-line output plus flow capacity — the same data as the ERP page /sewing/daily-report. Use it for questions about сегодняшняя/вчерашняя выработка швейных цехов. If ok is false, read error.message aloud (usually a missing ERP permission) and never invent output numbers.",
     parameters: { type: "object", properties: {
@@ -385,15 +390,12 @@ export const MILA_TOOLS = [
   },
 ];
 
-// Everything a Member's Mila Live call is allowed to do: their own desk, plus the
-// same live ERP data the ERP panel already shows them. No Kanban, Hermes, Obsidian,
+// Everything a Member's Mila Live call is allowed to do: their own desk and
+// their own ERP-linked production data. No Kanban, Hermes, Obsidian,
 // Claude Code or MCP tool — the server enforces this too (server/routes/mila-actions.js),
 // this list only keeps the model from offering actions it cannot actually perform.
 export const MILA_MEMBER_TOOLS = MILA_TOOLS.filter((tool) =>
-  // The product catalogue too: which garments the factory makes is what a floor
-  // manager is asked all day, and the record carries no personal data and no money.
-  ["get_erp_business_context", "get_finished_goods_stock", "get_sewing_daily_report",
-   "get_models_overview", "find_models", "get_model_details"].includes(tool.name)
+  ["get_my_production_intelligence"].includes(tool.name)
   || MILA_PERSONAL_TOOLS.some((personal) => personal.name === tool.name)
   // Reading company knowledge, but not writing it: an employee looking up the
   // minimum order is the point, an employee rewriting it is not.
